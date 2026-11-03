@@ -1,0 +1,152 @@
+# Toontown Controller Module
+
+**Problem:** The popular Toontown games, namely Toontown Rewritten and Toontown Corporate Clash, have no native in-game controller support.
+
+**Solution:** This controller module will detect and use your selected controller to control your toon in game. This will first focus on support for Toontown Rewritten with future support of Toontown Corporate Clash (since Corporate Clash is more complicated). This will only support Xbox controllers for now, with planned expansions for more controller support. This will only work on Windows for now, with planned expansions for Mac support.
+
+## Game States
+
+There are many "game states" that this will need to support.
+
+- **Not in-battle:** When not in a battle, it is a simple controller for the character. This will support lateral movement forward and back, turning left and right, moving forward or backward while turning left or right, jumping, and sprinting. When not in a battle, the ability to open the shticker book, which is kind of like a menu and needs UI support similar to the in-battle support below. It needs a back button to close the book as well. There are also two hot keys to quickly show your gags or show your tasks, these will need hotkeys on the controller as well. A hotkey to select the toon standing closest to you and see their profile in the top right (defaulted to left bumper).
+- **In-battle:** When in a battle, it will work as a selector moving throughout your gag selection that you can control by moving it up down left or right one at a time. It will highlight the selected gag only to know which one would be selected. "Run" or opening up your trunk will each have their own hotkeys and shouldn't be selectable. Once a gag is selected, the highlight dies with the UI, and you have the ability to go back to change your choice reviving the highlight. Using the D-pad allows the game to think you are hovering the gag choice of your fellow toons in battle showing you the damages of their gag. Once a new round starts in the same battle, the highlighted choice that your highlight will be on is whatever you picked last round and the same goes for in between battles. You cannot highlight gags you have 0 of or have not yet unlocked.
+- **Buying gags:** When buying gags, there is a similar layout to that of the battle UI where you can see all your gags, I should be able to move around and highlight each gag and purchase them one by one or by pressing another key I can buy "max" which buys as many as I can of that gag I'm hovering. There should also be save preset and load preset hotkeys on the controller since those exist as clickable buttons.
+- **Dialogue:** Dialogue is simple, pressing a key continues the dialog by a single step, same as clicking the dialogue bubble.
+- **Choosing a task (to turn in or to get a new task):** When choosing a task to get or to turn in there will always be no more than 4 options. Assign each one a D-pad key by default starting from the top one as Up, then Left, then Right, then Down. Show a small icon of each of those by the "choose" option to make it easy to read and simple.
+- **Anytime:** At almost anytime, there needs to be a hotkey to open up speedchat which needs its own UI support similar to that of gag choice. It needs a back button to go back if the player changes their mind. At almost anytime, there needs to be a hotkey to open up the friends list which needs its own UI support similar to that of gag choice. It needs a back button to go back if the player changes their mind. At truly anytime, there needs to be a hotkey to open up the game settings which needs its own UI support similar to that of gag choice. It needs a back button to go back if the player changes their mind.
+- **VP and CJ boss fights:** These boss fights both feature a part where you are throwing something. During these there will need to be a button to throw that item and it can be held to change the force at which you throw which is how it works with a keyboard. CJ features a cannon round which can use the same controller support as the trolley cannon game.
+- **CFO boss fight:** This boss fight features controlling a magnet laterally with the movement keys, and turning the magnet on by holding down a button and turning the magnet off by releasing it. It also needs a "back" button to back out of the magnet since with keyboard and mouse, you have to click a button on the screen. It should be linked to a hotkey.
+- **CEO boss fight:** This boss fight features two separate options where you are charging something up by holding down a button and can turn left or right while charging or not while charging with the left and right movement keys. Releasing the button discharges the weapon. It also needs a back button to back out of both of them since with keyboard and mouse, you have to click a button on the screen. It should be linked to a hotkey.
+- **Trolley:** There are several trolley games that might need special support for them. A lot use movement keys for stuff so that should stay consistent. The tug of war game requires button mashing the left and right movement keys, this can be translated easily into controller support.
+
+## Elements
+
+- Key re-mapping for controller button mapping and what key it maps to in game.
+- A dropdown selection of what Toontown game you're playing (only Toontown Rewritten to start), a second one opens up to pick the Toontown Rewritten window for your game.
+- A dropdown selection of what controller you'll be using with a button to open the Windows settings to connect a new controller.
+- This module itself while open should be very small and should work even when unfocused.
+- The module should not block keyboard and mouse functionality whatsoever.
+- Optional on-screen hints showing you which buttons can do what.
+- Default controller keybinds: joystick for movement, A for jump, L3 for sprint (in Toontown Rewritten sprint is a double tap of the forward movement, L3 should mock that), B for back, A for select, Pause for "escape" opening the shticker book, D-pad for hovering toons' gag choices in battle, D-pad for selecting gags, D-pad up to save loadout, D-pad down to load loadout, Y to buy max gags of the selected one, right trigger to throw the objects in VP or CJ which can be held then released to change force of throw, hold X to activate magnet in CFO, hold X to charge the attack if attached to one in the CEO, B to run from a battle, Y to open the trunk. *(Updated: see "Default Bindings by State" below.)*
+
+## Planning Additions
+
+Added during a planning session on November 3, 2026. Items marked [VERIFY] need checking in game.
+
+### 1. Decisions
+
+- **Language:** Python.
+- **Repo:** `toontown-controller-module`, public on GitHub.
+- **License:** none for now (all rights reserved). Can add one later.
+- **Run from battle:** tap B = undo gag choice, hold B (1 sec) = run.
+- **Teammate gag hover (battle):** LB / RB cycle through teammates. The D-pad and left stick both move the gag highlight.
+- **Gag shop presets:** LB = save preset, RB = load preset. The D-pad and left stick both move the highlight.
+- **On-screen hints:** when turned on, they're always visible. Which hints show depends on the game state, and they can move around on screen to sit next to what they control (e.g., during task choice, each D-pad icon sits on that task's "Choose" button).
+- **Window mode:** windowed only for the first version.
+- **Multi-toon:** later, not now.
+- **Sprint:** double-tapping forward is built into TTR. L3 sends that double-tap.
+- **Buy max:** the TTR gag shop has no max button, so Y clicks buy repeatedly until the gag is full or you run out of jellybeans.
+- **Terms of service:** not a concern for this project. Sprint double-tap and buy max give no unfair advantage.
+
+### 2. How It Works (Architecture)
+
+- **Input layer:** Read the controller through SDL2 (via pygame-ce). SDL supports Xbox controllers now and gives PlayStation, Switch and Mac support later with little extra work.
+- **Mapper:** Turns controller input into in-game actions based on the current game state. Each state has its own binding table, so the same button can do different things in different states.
+- **Output layer:** Sends keyboard and mouse events with Windows SendInput. Mouse clicks are needed because most TTR menus (gag picker, shticker book, speedchat) only respond to the mouse. The module never captures or blocks the real keyboard and mouse.
+- **Window tracking:** Finds the TTR window and follows its position and size. Input is only sent while TTR is the active window, so the controller never types into other apps. This is how the module works while unfocused.
+- **Overlay:** A transparent, click-through, always-on-top window over the TTR window that draws the selection highlight and the button hints. Hint positions come from the current screen's layout so they can sit next to the button they control. TTR runs windowed (exclusive fullscreen hides overlays); if TTR is fullscreen, the module shows a message asking you to switch to windowed.
+- **Config:** Profiles are JSON files holding bindings per state, deadzones and the hints setting. They are edited through the settings window.
+- **TTR keybinds:** Players who changed TTR's own keybinds (for example WASD instead of arrow keys) need the module to know. Add a setting that mirrors TTR's Controls page.
+
+### 3. Game State Detection (Hardest Problem)
+
+The module has to know which state the game is in to know what each button means. There are three options:
+
+- **A. Manual:** The player switches state with a button. Simple and reliable, but clunky.
+- **B. Screen detection:** Capture the TTR window a few times a second and look for known UI: the battle gag panel, shticker book, dialogue bubble, task choice panel and gag shop. It uses small template images or pixel color checks. Automatic, but has to cope with different window sizes.
+- **C. TTR Local API:** TTR's official local API for companion apps. After the player approves it in game, it shares toon info such as location, laff, gags and tasks. It can tell you which zone or boss HQ you are in and which gags you own, but probably does not report "in battle" or "menu open." [VERIFY what it exposes]
+- Plan: build A first so every feature can be tested. Add B for automatic switching and use C for extra detail (which gags are unlocked or at 0, which boss). Keep a manual override at all times.
+
+### 4. Menu Navigation Model (the Selector)
+
+Most states share one pattern: a grid of clickable buttons. Build it once and reuse it everywhere.
+
+- Each screen gets a layout file listing its buttons. Positions are stored as a fraction of the window so they scale, along with each button's up/down/left/right neighbor and whether it can be disabled. The layout also says where each hint icon goes.
+- D-pad or left stick moves the highlight, A clicks the highlighted button, and B backs out.
+- Screens that use it: battle gag picker, gag shop, shticker book, speedchat, friends list, settings, task choice and popups.
+- The last selection is saved per screen. This gives the "last gag picked carries over between rounds and battles" behavior.
+- Skipping gags you have 0 of or have not unlocked needs data, either from the Local API or from spotting a grayed-out button on screen.
+- TTR's UI scales with window size and aspect ratio, so layouts have to be measured at several window sizes. [VERIFY]
+- **Virtual cursor fallback:** A mode where the right stick moves the real mouse cursor and a button clicks. It covers any screen without a custom layout (Ice Slide, Photo Fun, fishing, catalog, estate, Make-a-Toon). Build it early because it fills every gap.
+
+### 5. Default Bindings by State
+
+- **Overworld:** Left stick moves (with a deadzone; diagonals = forward + turn). A = jump, L3 = sprint (double-tap forward), LB = select closest toon, RB = friends list, D-pad left = show gags, D-pad right = show tasks, Start = shticker book, View = speedchat, hold Start = game settings (works in every state).
+- **Battle:** Left stick or D-pad moves the gag highlight, A = select, B = undo choice, hold B (1 sec) = run, Y = trunk, LB / RB = cycle teammate hover. After a gag is picked, the highlight moves to choosing a cog (or a toon for Toon-Up): left/right to move, A to confirm.
+- **Gag shop:** Left stick or D-pad moves the highlight, A = buy one, Y = buy max (repeat buy until full or out of jellybeans), LB = save preset, RB = load preset, B = done/exit.
+- **Menus (shticker book, speedchat, friends, settings):** Left stick or D-pad moves, A = select, B = back or close.
+- **Dialogue:** A = continue.
+- **Task choice:** D-pad up/left/right/down picks options 1 to 4 (top to bottom), B = cancel. Hint icons sit on each option's "Choose" button.
+- **Popups and confirm dialogs:** A = OK / Yes, B = Cancel / No.
+- **VP / CJ throwing:** Left stick moves, hold RT to charge the throw, release to throw.
+- **CFO crane:** Left stick moves the crane, hold X = magnet on, B = leave the crane.
+- **CEO:** Left stick turns, hold X = charge, release to fire, B = leave.
+- **Virtual cursor:** Right stick moves the cursor, RT or A = click, B = exit cursor mode.
+
+### 6. Game States Not Yet Covered
+
+- Picking a cog target after choosing a gag, and picking a toon for Toon-Up.
+- Battle sub-menus: SOS cards, Fires/Pink Slips and Unites.
+- Popups and confirmations (task complete, gag track upgrade, "Are you sure you want to leave?").
+- Fishing: click-and-drag casting, the bucket, selling fish. Use virtual cursor, or a custom mode where you hold A and aim with the stick.
+- List what each trolley game needs [VERIFY the list in game]:
+  - Movement only: Ring, Catching, Maze, Treasure Dive, Jungle Vines.
+  - Movement + action button: Cog Thief (throw), Cannon (aim + fire, reused in CJ).
+  - Pick an option: Race (cards 1–4), Match Minnie (arrow pattern).
+  - Special: Tug of War (alternate left/right).
+  - Mouse aiming (virtual cursor): Ice Slide, Photo Fun.
+- Cog HQ facilities (factories, mints, DA offices, golf courses) and Field Offices: mostly movement and battles. Check each for unique interactions. [VERIFY]
+- Elevators and boarding groups: the "Leave" / "Exit" buttons.
+- Out of scope at first (keyboard/mouse or virtual cursor): login and toon picker, Make-a-Toon, typed chat, catalog, closet, estate furniture. An on-screen keyboard for typed chat could come later.
+
+### 7. Settings Window (Expanding "Elements")
+
+- Game dropdown, TTR window picker, controller dropdown, and a button that opens Windows Bluetooth settings.
+- Remap screen: click an action, then press the controller button to bind it. One tab per game state.
+- Sliders for stick deadzone, trigger threshold and virtual cursor speed.
+- Toggle for on-screen hints.
+- Indicator showing the detected game state, with a manual override.
+- A pause hotkey (e.g., hold View + Start) that turns the module off without closing it.
+- Minimize to tray, optional start with Windows, and profile import/export.
+- Handle the controller disconnecting and reconnecting without a restart.
+
+### 8. Tech Stack
+
+- **Python 3.12+**
+- **pygame-ce:** controller input (SDL2).
+- **pywin32 / ctypes:** SendInput, window finding and tracking.
+- **PySide6 (Qt):** settings window and overlay.
+- **mss + OpenCV:** screen capture and state detection.
+- **pytest:** tests.
+- **PyInstaller:** builds the Windows .exe.
+
+### 9. Roadmap
+
+- **M0 Setup:** Repo, README, project skeleton.
+- **M1 Proof of concept:** Read the Xbox controller, find the TTR window, and get movement, jump and sprint working in the overworld.
+- **M2 Overworld hotkeys:** Shticker book open/close, show gags and tasks, closest toon, open speedchat, friends and settings, pause toggle and config file.
+- **M3 Overlay:** Overlay window, state-aware hints and virtual cursor mode.
+- **M4 Battle:** Selector framework and the battle gag picker (targets, teammate hover, run, saved selection), with manual state switching.
+- **M5 Other menus:** Gag shop, dialogue, task choice, popups, shticker book, speedchat, friends list and settings.
+- **M6 Settings window:** Remapping, controller and window pickers, hints toggle.
+- **M7 Auto-detection:** Automatic game state detection.
+- **M8 Boss fights:** VP, CFO, CJ and CEO.
+- **M9 Minigames:** Trolley games and fishing.
+- **M10 Release:** .exe build and first public release.
+- **Future:** Corporate Clash, PlayStation/Switch/generic controllers, Mac, borderless fullscreen, multi-toon.
+
+### 10. Testing Plan
+
+- Unit tests for the mapper that feed in fake controller input and check which actions come out.
+- Saved screenshots of each screen at several window sizes to test layouts and state detection.
+- A manual playtest checklist for each milestone.
