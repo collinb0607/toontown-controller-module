@@ -37,17 +37,20 @@ def controls_to_keys(controls: set[str], settings: ttr_settings.TTRSettings) -> 
     return keys
 
 
-def run(ttr_dir: Path | None = None, dry_run: bool = False) -> None:
+def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False) -> None:
     watcher = ttr_settings.SettingsWatcher(ttr_dir or ttr_settings.DEFAULT_TTR_DIR)
     log(f"Reading TTR settings from {watcher.path}")
     describe_settings(watcher.settings)
 
-    def dry_send(name: str, down: bool) -> None:
-        log(f"{'DOWN' if down else 'up  '} {name}")
+    def logged_send(name: str, down: bool) -> None:
+        log(f"{'DOWN' if down else 'up  '} {name}" + ("" if dry_run else " (sent)"))
+        if not dry_run:
+            send_key(name, down)
 
     reader = ControllerReader()
     mapper = OverworldMapper()
-    output = KeyboardOutput(dry_send if dry_run else send_key)
+    output = KeyboardOutput(logged_send if dry_run or debug else send_key)
+    last_buttons = frozenset()
     foreground = ForegroundWatcher()
 
     controller_name = ""  # differs from None so the first poll logs either way
@@ -62,7 +65,12 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False) -> None:
             state = reader.poll()
             if reader.name != controller_name:
                 controller_name = reader.name
-                log(f"Controller connected: {controller_name}" if controller_name else "No controller connected.")
+                log(f"Controller connected: {controller_name}" if controller_name else
+                    "No controller connected. Waiting for one (press the Xbox button to wake it).")
+
+            if debug and state is not None and state.buttons != last_buttons:
+                last_buttons = state.buttons
+                log(f"Buttons held: {', '.join(sorted(state.buttons)) or 'none'}")
 
             ttr_path = foreground.ttr_foreground()
             focused = dry_run or ttr_path is not None
