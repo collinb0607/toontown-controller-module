@@ -57,7 +57,23 @@ Toontown Rewritten and Toontown Corporate Clash have no built-in controller supp
 
 ## Development
 
-Built with Python 3.12+, pygame-ce (controller input), pywin32 (keyboard/mouse output), PySide6 (settings window and overlay) and OpenCV (game state detection). Setup instructions will be added once there's code to run.
+Built with Python 3.12+ and pygame-ce (controller input). Keyboard output and window tracking use the Windows API directly. PySide6 (settings window and overlay) and OpenCV (game state detection) come in later milestones.
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+
+# Run it (controls only work while the TTR window is focused)
+.\.venv\Scripts\python.exe -m ttcontroller
+
+# Print the keys it would send instead of sending them
+.\.venv\Scripts\python.exe -m ttcontroller --dry-run
+
+# Run the tests
+.\.venv\Scripts\python.exe -m pytest
+```
+
+The module reads your keybinds from TTR's `settings.json`, so rebinding keys in TTR's Options works automatically. Turn off TTR's built-in controller support (Options > Controls) while using this module, or each button will act twice.
 
 ## Disclaimer
 
