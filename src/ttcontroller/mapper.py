@@ -23,8 +23,10 @@ HOLD_BINDINGS = {
 PULSE_SECONDS = 0.06
 # Holding Start this long opens game settings instead of the shticker book.
 START_HOLD_SECONDS = 0.5
-# Sprint is a double-tap of forward: press, release, press. Each step lasts this long.
-SPRINT_TAP_SECONDS = 0.05
+# Sprint is a fresh double-tap of forward, even if forward is already held:
+# release, tap, release, then hold. Each of the first three steps lasts this long.
+SPRINT_STEP_SECONDS = 0.06
+_SPRINT_STEPS = (False, True, False)
 # Clicking L3 while standing still arms sprint for this long.
 SPRINT_ARM_SECONDS = 1.0
 # Right stick vertical tilt needed to look up/down.
@@ -42,8 +44,7 @@ class OverworldMapper:
         self._start_down_at: float | None = None
         self._start_hold_fired = False
         self._sprint_armed_until: float | None = None
-        self._forward_since: float | None = None
-        self._sprint_gap: tuple[float, float] | None = None
+        self._sprint_started_at: float | None = None
 
     def update(self, state: ControllerState, now: float) -> set[str]:
         buttons = state.buttons
@@ -87,28 +88,20 @@ class OverworldMapper:
         if "l3" in pressed:
             self._sprint_armed_until = now + SPRINT_ARM_SECONDS
 
-        moving_forward = "forward" in controls
-        if not moving_forward:
-            self._forward_since = None
-            self._sprint_gap = None
-        elif self._forward_since is None:
-            self._forward_since = now
+        if "forward" not in controls:
+            self._sprint_started_at = None
+            if self._sprint_armed_until is not None and now > self._sprint_armed_until:
+                self._sprint_armed_until = None
+            return
 
-        if self._sprint_armed_until is not None and now > self._sprint_armed_until and self._sprint_gap is None:
+        if self._sprint_armed_until is not None and self._sprint_started_at is None:
+            self._sprint_started_at = now
             self._sprint_armed_until = None
 
-        # Forward must be down for one tap before the gap, so the game sees down-up-down.
-        if (
-            self._sprint_armed_until is not None
-            and self._sprint_gap is None
-            and moving_forward
-            and now - self._forward_since >= SPRINT_TAP_SECONDS
-        ):
-            self._sprint_gap = (now, now + SPRINT_TAP_SECONDS)
-            self._sprint_armed_until = None
-
-        if self._sprint_gap is not None:
-            if now < self._sprint_gap[1]:
-                controls.discard("forward")
+        if self._sprint_started_at is not None:
+            step = int((now - self._sprint_started_at) / SPRINT_STEP_SECONDS)
+            if step < len(_SPRINT_STEPS):
+                if not _SPRINT_STEPS[step]:
+                    controls.discard("forward")
             else:
-                self._sprint_gap = None
+                self._sprint_started_at = None

@@ -45,22 +45,25 @@ def test_start_hold_opens_options_only():
     assert not any("stickerBook" in f for f in frames)
 
 
-def test_sprint_double_taps_forward():
+def presses(flags):
+    """Count how many times forward goes from released to held."""
+    return sum(1 for prev, cur in zip([False, *flags], flags) if cur and not prev)
+
+
+def test_sprint_while_running_sends_fresh_double_tap():
     m = OverworldMapper()
-    frames = run_frames(m, [(state("l3", left=FORWARD), 1), (state(left=FORWARD), 30)])
-    forward = ["forward" in f for f in frames]
-    # down ... up ... down again
-    first_up = forward.index(False)
-    assert first_up > 0
-    assert forward[first_up:].index(True) > 0
-    assert all(forward[first_up + forward[first_up:].index(True):])
+    frames = run_frames(m, [(state(left=FORWARD), 50), (state("l3", left=FORWARD), 1), (state(left=FORWARD), 40)])
+    forward = ["forward" in f for f in frames[50:]]
+    assert not forward[0]  # released first, so the old long press doesn't count
+    assert presses(forward) == 2
+    assert forward[-1]
 
 
 def test_sprint_armed_while_standing_then_push():
     m = OverworldMapper()
-    frames = run_frames(m, [(state("l3"), 1), (state(), 20), (state(left=FORWARD), 30)])
+    frames = run_frames(m, [(state("l3"), 1), (state(), 20), (state(left=FORWARD), 40)])
     forward = ["forward" in f for f in frames[21:]]
-    assert forward[0] and False in forward and forward[-1]
+    assert presses(forward) == 2 and forward[-1]
 
 
 def test_sprint_arm_expires():
