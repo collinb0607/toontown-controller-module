@@ -7,9 +7,10 @@ from . import config as module_config
 from . import ttr_settings
 from .battle import BattleMapper, BattleScreen, read_screen
 from .controller import NEUTRAL, ControllerReader
+from .cursor import CursorHider
 from .friends import FriendsMapper, FriendsScreen, read_friends
 from .mapper import OverworldMapper, controller_buttons
-from .output import KeyboardOutput, MouseClicker, send_key
+from .output import KeyboardOutput, MouseClicker, cursor_pos, send_key
 from .npc import NpcMapper, NpcScreen, read_npc
 from .shop import ShopMapper, ShopScreen, read_shop
 from .speedchat import SpeedchatMapper, SpeedchatScreen, read_speedchat
@@ -22,6 +23,8 @@ BATTLE_CHECK_SECONDS = 0.1
 # A battle panel can vanish for a moment (a dialog fading in); stay in battle mode
 # until none has shown for this long.
 BATTLE_GRACE_SECONDS = 0.5
+# Stick or trigger input past this counts as using the controller (to hide the cursor).
+CONTROLLER_USE_THRESHOLD = 0.3
 
 
 def log(message: str) -> None:
@@ -36,6 +39,9 @@ def describe_settings(settings: ttr_settings.TTRSettings) -> None:
     if settings.native_controller_enabled:
         log("WARNING: TTR's built-in controller support is on. Turn it off in TTR Options > Controls, "
             "or every button will act twice.")
+    if settings.custom_cursor:
+        log("Note: TTR's custom cursor is on, so the module can't hide the cursor while you use the "
+            "controller. Turn it off in TTR's Options to hide it.")
     if settings.display_mode != "window":
         log(f"Note: TTR display mode is '{settings.display_mode}'. Windowed mode is recommended.")
 
@@ -43,6 +49,13 @@ def describe_settings(settings: ttr_settings.TTRSettings) -> None:
 def describe_config(watcher: module_config.ConfigWatcher, settings: ttr_settings.TTRSettings) -> None:
     for problem in watcher.warnings + module_config.unknown_actions(watcher.config, settings.controls):
         log(f"Config problem: {problem}")
+
+
+def controller_used(state) -> bool:
+    if state is None:
+        return False
+    axes = (*state.left_stick, *state.right_stick, state.left_trigger, state.right_trigger)
+    return bool(state.buttons) or any(abs(a) > CONTROLLER_USE_THRESHOLD for a in axes)
 
 
 def make_mapper(config: module_config.Config) -> OverworldMapper:
@@ -86,6 +99,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     friends_screen = FriendsScreen()
     output = KeyboardOutput(logged_send if dry_run or debug else send_key)
     clicker = MouseClicker()
+    hider = CursorHider()
     last_buttons = frozenset()
     foreground = ForegroundWatcher()
 
@@ -274,10 +288,13 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     speedchat_mapper.go_to_unite(now)
             # Runs even when unfocused, so a click in progress always puts the cursor back.
             clicker.update(now)
+            if not dry_run:
+                hider.update(focused, controller_used(state), cursor_pos(), clicker.busy, clicker.moved_to)
 
             time.sleep(max(0.0, FRAME_SECONDS - (time.monotonic() - now)))
     except KeyboardInterrupt:
         log("Quitting.")
     finally:
+        hider.show()
         output.release_all()
         reader.close()

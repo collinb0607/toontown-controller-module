@@ -38,6 +38,7 @@ class TTRSettings:
     controls: dict[str, KeyCombo]
     native_controller_enabled: bool = False
     display_mode: str = "window"
+    custom_cursor: bool = False
 
     def combo(self, control: str) -> KeyCombo:
         return self.controls[control]
@@ -60,6 +61,7 @@ def parse(data: dict) -> TTRSettings:
         controls=controls,
         native_controller_enabled=bool(data.get("controller", {}).get("controller-enabled", False)),
         display_mode=data.get("video", {}).get("display-mode", "window"),
+        custom_cursor=bool(data.get("video", {}).get("enable-cursor", False)),
     )
 
 

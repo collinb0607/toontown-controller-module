@@ -133,6 +133,7 @@ class MouseClicker:
         self._next_at = 0.0
         self._job: tuple[int, int, bool, bool, int, float] | None = None
         self._restore_to: tuple[int, int] | None = None
+        self.moved_to: tuple[int, int] | None = None  # where the module last put the cursor
 
     def click(self, x: int, y: int, restore: bool = True, delay: float = 0.0) -> None:
         """delay waits after the previous step, e.g. for a menu the last click opens."""
@@ -165,6 +166,7 @@ class MouseClicker:
         x, y, click, _, notches, _ = self._job
         if self._step == 0:
             self._move(x, y)
+            self.moved_to = (x, y)
             if not click and not notches:
                 self._job = None
                 return
@@ -181,6 +183,7 @@ class MouseClicker:
                 return
         else:
             self._move(*self._restore_to)
+            self.moved_to = self._restore_to
             self._job = None
             return
         self._step += 1
