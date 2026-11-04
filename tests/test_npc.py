@@ -50,6 +50,15 @@ def test_speech_bubble_button(name, last, at):
     assert abs(x - at[0]) <= 3 and abs(y - at[1]) <= 3
 
 
+def test_close_circle_under_the_last_line_of_text():
+    # "Come back later if you need a ToonTask! Bye!": the "!" ends right over the circle.
+    w, h, rgb = bubble_frame("dialogue_last_1920x1009")
+    rgb[218:240, 1144:1158] = 20
+    found = find_bubble_button(rgb)
+    assert found is not None and found[0]
+    assert abs(found[1] - 1148) <= 3 and abs(found[2] - 252) <= 3
+
+
 def test_no_bubble():
     assert find_bubble_button(np.full((400, 600, 3), 255, dtype=np.uint8)) is None  # all white
     assert find_bubble_button(np.full((400, 600, 3), (120, 90, 60), dtype=np.uint8)) is None

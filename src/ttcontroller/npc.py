@@ -102,10 +102,11 @@ def find_bubble_button(rgb: np.ndarray) -> tuple[bool, float, float] | None:
     small = rgb[::stride, ::stride]
     r, g, b = (small[..., i].astype(np.int16) for i in range(3))
     white = (r > 245) & (g > 245) & (b > 245)
-    # The bubble's white is left of and above the button (its outline is right and below).
+    # The bubble's white is left of the button (its outline is right and below). Not
+    # necessarily above: the last line of text can end right over it.
     d = max(2, round(0.02 * unit / stride))
     around = np.zeros_like(white)
-    around[d:, d:] = white[d:, :-d] & white[:-d, d:]
+    around[:, 2 * d:] = white[:, d:-d] & white[:, :-2 * d]
     arrow = ((b > 200) & (r < 90) & (g > 110) & (g < 180)) | ((b > 220) & (g > 190) & (r < 110))
     # Red, or gold while hovered.
     close = ((r > 190) & (g < 110) & (b < 110) & (r - g > 100)) | ((r > 220) & (g > 170) & (b < 100))
