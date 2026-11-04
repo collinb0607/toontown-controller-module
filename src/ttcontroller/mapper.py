@@ -25,7 +25,8 @@ class ScreenView(Protocol):
 SPECIAL_ACTIONS = {
     "sprint": "double-tap forward to sprint",
     "friendsList": "open the friends list, or close it if it's open",
-    "back": "close whatever is open (the friends list for now)",
+    "back": "close whatever is open (speedchat, then the friends list)",
+    "speedchat": "open speedchat, or close it if it's open",
 }
 
 # Right stick directions act like extra buttons so they can be bound too.
@@ -46,6 +47,7 @@ class Bindings:
         "dpad_right": "showTasks",
         "dpad_up": "showMap",
         "start": "stickerBook",
+        "view": "speedchat",
         "rs_up": "lookUp",
         "rs_down": "lookDown",
     })
@@ -138,6 +140,8 @@ class OverworldMapper:
         """Do a one-shot action: a special action, or a quick tap of a TTR control."""
         if action == "sprint":
             self._sprint_armed_until = now + self.timing.sprint_arm_seconds
+        elif action == "back" and screen is not None and screen.is_visible(ui.SPEEDCHAT_MENU):
+            self._clicks.append(ui.SPEEDCHAT)
         elif action in ("friendsList", "back"):
             # The friends list key only opens it; closing takes a click on its X.
             # The screen is only checked on a press, since reading pixels is slow.
@@ -145,6 +149,8 @@ class OverworldMapper:
                 self._clicks.append(ui.FRIENDS_CLOSE)
             elif action == "friendsList":
                 self._pulse("friendsList", now)
+        elif action == "speedchat":
+            self._clicks.append(ui.SPEEDCHAT)
         else:
             self._pulse(action, now)
 

@@ -60,6 +60,18 @@ def test_b_closes_friends_list_only_when_open():
     assert m.take_clicks() == [ui.FRIENDS_CLOSE]
 
 
+def test_view_clicks_speedchat_button():
+    m = OverworldMapper()
+    m.update(state("view"), 0.0, FakeScreen())
+    assert m.take_clicks() == [ui.SPEEDCHAT]
+
+
+def test_b_closes_speedchat_before_friends_list():
+    m = OverworldMapper()
+    m.update(state("b"), 0.0, FakeScreen(ui.SPEEDCHAT_MENU, ui.FRIENDS_CLOSE))
+    assert m.take_clicks() == [ui.SPEEDCHAT]
+
+
 def test_holding_rb_clicks_once():
     m = OverworldMapper()
     screen = FakeScreen(ui.FRIENDS_CLOSE)
