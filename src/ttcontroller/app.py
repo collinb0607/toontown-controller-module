@@ -7,10 +7,12 @@ from . import config as module_config
 from . import ttr_settings
 from .battle import BattleMapper, BattleScreen, read_screen
 from .controller import NEUTRAL, ControllerReader
+from .friends import FriendsMapper, FriendsScreen, read_friends
 from .mapper import OverworldMapper, controller_buttons
 from .output import KeyboardOutput, MouseClicker, send_key
 from .npc import NpcMapper, NpcScreen, read_npc
 from .shop import ShopMapper, ShopScreen, read_shop
+from .speedchat import SpeedchatMapper, SpeedchatScreen, read_speedchat
 from .window import ForegroundWatcher, TTRView, make_dpi_aware
 
 FRAME_SECONDS = 1 / 120
@@ -78,6 +80,10 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     shop_screen = ShopScreen()
     npc_mapper = NpcMapper(config.npc)
     npc_screen = NpcScreen()
+    speedchat_mapper = SpeedchatMapper(config.speedchat)
+    speedchat_screen = SpeedchatScreen()
+    friends_mapper = FriendsMapper(config.friends)
+    friends_screen = FriendsScreen()
     output = KeyboardOutput(logged_send if dry_run or debug else send_key)
     clicker = MouseClicker()
     last_buttons = frozenset()
@@ -147,15 +153,21 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     battle_mapper.set_bindings(config.battle)
                     shop_mapper.set_bindings(config.shop)
                     npc_mapper.set_bindings(config.npc)
+                    speedchat_mapper.set_bindings(config.speedchat)
+                    friends_mapper.set_bindings(config.friends)
 
             if not focused:
                 mapper.reset()
                 battle_mapper.reset_buttons()
                 shop_mapper.reset_buttons()
                 npc_mapper.reset_buttons()
+                speedchat_mapper.reset_buttons()
+                friends_mapper.reset_buttons()
                 battle_screen = BattleScreen()
                 shop_screen = ShopScreen()
                 npc_screen = NpcScreen()
+                speedchat_screen = SpeedchatScreen()
+                friends_screen = FriendsScreen()
                 output.release_all()
             else:
                 view = TTRView(foreground.ttr_hwnd) if foreground.ttr_hwnd else None
@@ -175,6 +187,15 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     if npc.kind != npc_screen.kind and (dry_run or debug):
                         log(f"NPC screen: {npc.kind or 'none'}")
                     npc_screen = npc
+                    menus = screen.kind is None and shop.kind is None and npc.kind != "tasks"
+                    speedchat = read_speedchat(frame.width, frame.height, frame.get_pixel) if menus else SpeedchatScreen()
+                    if speedchat.is_open != speedchat_screen.is_open and (dry_run or debug):
+                        log(f"Speedchat menu: {'open' if speedchat.is_open else 'closed'}")
+                    speedchat_screen = speedchat
+                    friends = read_friends(frame.width, frame.height, frame.get_pixel) if menus else FriendsScreen()
+                    if friends.kind != friends_screen.kind and (dry_run or debug):
+                        log(f"Friends screen: {friends.kind or 'none'}")
+                    friends_screen = friends
 
                 state = state or NEUTRAL
                 if battle_screen.kind is not None:
@@ -197,6 +218,17 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                         point(command.kind, command.point, command.name, view, restore=False)
                 else:
                     npc_mapper.reset_buttons()
+                # Speedchat first when both are open: it closes as soon as a phrase is said.
+                in_speedchat = not (in_battle or in_shop or in_npc) and speedchat_screen.is_open
+                in_friends = not (in_battle or in_shop or in_npc or in_speedchat) and friends_screen.kind is not None
+                for active, menu_mapper, menu_screen in ((in_speedchat, speedchat_mapper, speedchat_screen),
+                                                         (in_friends, friends_mapper, friends_screen)):
+                    if active:
+                        buttons = controller_buttons(state, config.timing.stick_button_threshold)
+                        for command in menu_mapper.update(buttons, now, menu_screen):
+                            point(command.kind, command.point, command.name, view, restore=False)
+                    else:
+                        menu_mapper.reset_buttons()
                 if in_battle:
                     buttons = controller_buttons(state, config.timing.stick_button_threshold)
                     for command in battle_mapper.update(buttons, now, battle_screen):
@@ -212,10 +244,15 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     blocked = frozenset(shop_mapper.buttons)
                 elif in_npc:
                     blocked = frozenset(npc_mapper.buttons(npc_screen))
+                elif in_speedchat:
+                    blocked = frozenset(speedchat_mapper.buttons)
+                elif in_friends:
+                    blocked = frozenset(friends_mapper.buttons)
                 else:
                     blocked = frozenset()
                 # Walking still works mid-conversation (it walks away); not while choosing a task.
-                walk = not (in_battle or in_shop or npc_screen.kind == "tasks")
+                # Nor in a menu, where the stick moves the highlight.
+                walk = not (in_battle or in_shop or npc_screen.kind == "tasks" or in_speedchat or in_friends)
                 controls = mapper.update(state, now, view, blocked=blocked, movement=walk)
                 output.sync(controls_to_keys(controls, watcher.settings))
                 for button in mapper.take_clicks():

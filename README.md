@@ -4,7 +4,7 @@ Play **Toontown Rewritten** with a controller.
 
 Toontown Rewritten's own controller support is experimental: it covers movement and a virtual mouse, but has no menu navigation and no remapping. This module runs alongside the game, reads your controller, and turns its input into the keyboard and mouse actions the game expects. Controller buttons press on-screen buttons for you directly, so you never have to steer a mouse cursor around. Every button can be remapped.
 
-> **Status:** early development. Overworld controls, the friends list, speedchat (open/close) and battles work. Menus are next. See [plan.md](plan.md) for the full design.
+> **Status:** early development. Overworld controls, battles, the gag shop, NPCs, speedchat menus and the friends list work. The shticker book is next. See [plan.md](plan.md) for the full design.
 
 ## Features
 
@@ -16,14 +16,14 @@ Working now:
 - **Battles:** move a highlight across your gags with the D-pad or stick, pick a cog or toon, hover teammates' gags (LB, then left/right), pass, and hold B to run (A/B answer the "are you sure" prompt). Your last gag stays highlighted between rounds and battles.
 - **Gag shop:** move across the gags, buy one or as many as fit, delete mode, and save/load your usual set.
 - **Talking to NPCs:** A clicks through speech bubbles; pick a ToonTask with the D-pad.
+- **Speedchat menus:** move through the menus and submenus with the D-pad or stick and say a phrase with A. Works with any speedchat color.
+- **Friends list:** move down the list (it scrolls for you), switch pages, open a toon, teleport to them (X) or whisper (Y). Nearby toons work too.
 - **Trunk:** SOS cards (scrolling the list as you go, and filtering them from the dropdown or with L3), pink slips, remotes and doodle tricks, all with the D-pad or stick.
 - **Remapping:** a config file lets you rebind any button.
 - Uses your TTR keybinds automatically, works at any window size, and never blocks your keyboard or mouse.
 
 Planned:
 
-- **Speedchat menus:** pick phrases with the D-pad.
-- **Friends list:** scroll it, pick a friend, and teleport to them.
 - **Shticker book:** controller navigation for every page.
 - **Boss fights:** VP and CJ throwing, CFO crane, CEO charge attacks.
 - **Trolley games:** support for each minigame.
@@ -67,11 +67,17 @@ Working now:
 | Speech bubble | A continue (or close the last one) |
 | Choosing a ToonTask | Stick/D-pad up/down choose · A pick · B cancel |
 
+| Menus | Controls |
+|---|---|
+| Speedchat | Stick/D-pad up/down move · right or A open a submenu · left or B go back · A say the phrase · B in the top menu closes speedchat |
+| Friends list | Stick/D-pad up/down move (scrolls at the ends) · left/right change page · A open the toon · B close |
+| A toon's panel | Stick/D-pad up/down move between its buttons · A press · X Go To (teleport) · Y Whisper · B close Toon Details, then the panel |
+
 Planned:
 
 | State | Controls |
 |---|---|
-| Menus | Stick/D-pad move · A select · B back |
+| Shticker book | Stick/D-pad move · A select · B back |
 | VP / CJ | Hold RT to charge a throw, release to throw |
 | CFO | Left stick move crane · hold X magnet · B leave |
 | CEO | Left stick turn · hold X charge, release to fire · B leave |

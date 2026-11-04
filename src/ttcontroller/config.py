@@ -15,8 +15,10 @@ from .bindings import STICK_BUTTONS, Bindings
 from .controller import BUTTONS
 from .mapper import SPECIAL_ACTIONS, Timing, default_bindings
 from .movement import MovementTuning
+from .friends import FRIENDS_ACTIONS, default_friends_bindings
 from .npc import NPC_ACTIONS, default_npc_bindings
 from .shop import SHOP_ACTIONS, default_shop_bindings
+from .speedchat import SPEEDCHAT_ACTIONS, default_speedchat_bindings
 
 CONFIG_DIR = Path(os.environ.get("APPDATA", Path.home())) / "ToontownControllerModule"
 CONFIG_FILE = CONFIG_DIR / "config.json"
@@ -38,6 +40,10 @@ HELP = {
             "Actions: " + "; ".join(f"{name} = {desc}" for name, desc in SHOP_ACTIONS.items()),
     "npc": "Bindings used while talking to an NPC (only the select button) and choosing a task. "
            "Actions: " + "; ".join(f"{name} = {desc}" for name, desc in NPC_ACTIONS.items()),
+    "speedchat": "Bindings used while the speedchat menu is open. "
+                 "Actions: " + "; ".join(f"{name} = {desc}" for name, desc in SPEEDCHAT_ACTIONS.items()),
+    "friends": "Bindings used while the friends list or a toon's panel is open. "
+               "Actions: " + "; ".join(f"{name} = {desc}" for name, desc in FRIENDS_ACTIONS.items()),
 }
 
 
@@ -47,6 +53,8 @@ class Config:
     battle: Bindings = field(default_factory=default_battle_bindings)
     shop: Bindings = field(default_factory=default_shop_bindings)
     npc: Bindings = field(default_factory=default_npc_bindings)
+    speedchat: Bindings = field(default_factory=default_speedchat_bindings)
+    friends: Bindings = field(default_factory=default_friends_bindings)
     movement: MovementTuning = field(default_factory=MovementTuning)
     timing: Timing = field(default_factory=Timing)
 
@@ -60,6 +68,8 @@ def to_json(config: Config) -> dict:
             "battle": {"press": config.battle.press, "hold": config.battle.hold},
             "shop": {"press": config.shop.press, "hold": config.shop.hold},
             "npc": {"press": config.npc.press, "hold": config.npc.hold},
+            "speedchat": {"press": config.speedchat.press, "hold": config.speedchat.hold},
+            "friends": {"press": config.friends.press, "hold": config.friends.hold},
         },
         "movement": asdict(config.movement),
         "timing": asdict(config.timing),
@@ -101,6 +111,8 @@ def parse(data: dict) -> tuple[Config, list[str]]:
     battle = bindings.get("battle", {})
     shop = bindings.get("shop", {})
     npc = bindings.get("npc", {})
+    speedchat = bindings.get("speedchat", {})
+    friends = bindings.get("friends", {})
     config = Config(
         bindings=Bindings(
             press=_merge_bindings(defaults.bindings.press, bindings.get("press", {}), warnings, "press"),
@@ -117,6 +129,14 @@ def parse(data: dict) -> tuple[Config, list[str]]:
         npc=Bindings(
             press=_merge_bindings(defaults.npc.press, npc.get("press", {}), warnings, "npc.press"),
             hold=_merge_bindings(defaults.npc.hold, npc.get("hold", {}), warnings, "npc.hold"),
+        ),
+        speedchat=Bindings(
+            press=_merge_bindings(defaults.speedchat.press, speedchat.get("press", {}), warnings, "speedchat.press"),
+            hold=_merge_bindings(defaults.speedchat.hold, speedchat.get("hold", {}), warnings, "speedchat.hold"),
+        ),
+        friends=Bindings(
+            press=_merge_bindings(defaults.friends.press, friends.get("press", {}), warnings, "friends.press"),
+            hold=_merge_bindings(defaults.friends.hold, friends.get("hold", {}), warnings, "friends.hold"),
         ),
         movement=_merge_numbers(defaults.movement, data.get("movement", {}), warnings, "movement"),
         timing=_merge_numbers(defaults.timing, data.get("timing", {}), warnings, "timing"),
@@ -159,6 +179,12 @@ def unknown_actions(config: Config, ttr_controls) -> list[str]:
         for button, action in bindings.items():
             if action not in NPC_ACTIONS:
                 problems.append(f"bindings.{table}.{button}: unknown NPC action {action!r}")
+    for section, actions, bindings in (("speedchat", SPEEDCHAT_ACTIONS, config.speedchat),
+                                       ("friends", FRIENDS_ACTIONS, config.friends)):
+        for table, table_bindings in (("press", bindings.press), ("hold", bindings.hold)):
+            for button, action in table_bindings.items():
+                if action not in actions:
+                    problems.append(f"bindings.{section}.{table}.{button}: unknown {section} action {action!r}")
     return problems
 
 
