@@ -54,7 +54,7 @@ Added during a planning session on November 3, 2026. Items marked [VERIFY] need 
 
 - **M0 Setup:** done. Public repo at https://github.com/collinb0607/toontown-controller-module.
 - **M1 Overworld movement:** done and tested in game. Stick movement with partial-tilt walk, L3 sprint (fresh double-tap: release, tap, release, hold, 60ms steps), A jump, D-pad gags/tasks/map, Start tap = shticker book, hold Start = options (Shift+Esc toggles it open and closed), R3 camera, right stick look up/down. Keybinds come from TTR's settings.json.
-- **First click target:** done and tested at several window sizes. RB opens the friends list, or closes it by clicking its X; B also closes it.
+- **M2 Overworld hotkeys:** done and tested in game. RB opens the friends list or closes it by clicking its X; View clicks the speedchat button (again to close); B closes speedchat, then the friends list. Config file at %APPDATA%\ToontownControllerModule\config.json for bindings, stick tuning and timing, reloaded live. Decided: no pause combo; LB (select closest toon) deferred until screen detection can find nametags; speedchat menu navigation comes with the menu selector.
 
 ### 2. How It Works (Architecture)
 
@@ -85,13 +85,13 @@ Most states share one pattern: a grid of clickable buttons. Build it once and re
 - The last selection is saved per screen. This gives the "last gag picked carries over between rounds and battles" behavior.
 - Skipping gags you have 0 of or have not unlocked needs data, either from the Local API or from spotting a grayed-out button on screen.
 - TTR's UI scales with window size and aspect ratio, so layouts have to be measured at several window sizes. [VERIFY]
-- **How positions are measured:** TTR's 2D UI scales with the window height, and each panel is pinned to the left edge, center or right edge. A button is stored as its anchor plus an offset in window heights (see `src/ttcontroller/ui.py`), which is accurate at any window size. Capture the screen with `tools/capture_ttr.py`, measure at two window sizes, and check that both agree.
+- **How positions are measured:** TTR's 2D UI scales with the window's shorter side (the height in a wide window, the width in a tall one), and each element is pinned to an edge or the center, horizontally and vertically. A button is stored as its anchors plus offsets in units of the shorter side (see `src/ttcontroller/ui.py`), which is accurate at any window size or shape. Capture the screen with `tools/capture_ttr.py`, measure at two or more window sizes (including a tall one), and check that they agree.
 - **How "is it open?" is detected:** each clickable button has a few probe points where its fill color shows. The module samples those pixels when a button is pressed, so it never has to remember what is open. This is the first piece of automatic state detection.
 - Screens with no supported layout yet (Ice Slide, Photo Fun, fishing, catalog, estate, Make-a-Toon) still need keyboard/mouse until a layout is added.
 
 ### 5. Default Bindings by State
 
-- **Overworld:** Left stick moves (with a deadzone; diagonals = forward + turn). A = jump, L3 = sprint (double-tap forward), LB = select closest toon, RB = friends list (press again to close), B = close friends list, D-pad left = show gags, D-pad right = show tasks, D-pad up = map, R3 = switch camera, right stick up/down = look up/down, Start = shticker book, View = speedchat, hold Start = game settings (works in every state).
+- **Overworld:** Left stick moves (with a deadzone; diagonals = forward + turn). A = jump, L3 = sprint (double-tap forward), LB = unbound (select closest toon deferred), RB = friends list (press again to close), B = close speedchat or the friends list, D-pad left = show gags, D-pad right = show tasks, D-pad up = map, R3 = switch camera, right stick up/down = look up/down, Start = shticker book, View = speedchat (press again to close), hold Start = game settings (works in every state).
 - **Battle:** Left stick or D-pad moves the gag highlight, A = select, B = undo choice, hold B (1 sec) = run, Y = trunk, LB / RB = cycle teammate hover. After a gag is picked, the highlight moves to choosing a cog (or a toon for Toon-Up): left/right to move, A to confirm.
 - **Gag shop:** Left stick or D-pad moves the highlight, A = buy one, Y = buy max (repeat buy until full or out of jellybeans), LB = save preset, RB = load preset, B = done/exit.
 - **Menus (shticker book, speedchat, friends, settings):** Left stick or D-pad moves, A = select, B = back or close.
@@ -143,7 +143,7 @@ Most states share one pattern: a grid of clickable buttons. Build it once and re
 
 - **M0 Setup:** Repo, README, project skeleton.
 - **M1 Proof of concept:** Read the Xbox controller, find the TTR window, and get movement, jump and sprint working in the overworld.
-- **M2 Overworld hotkeys:** Shticker book open/close, show gags and tasks, closest toon, open speedchat, friends and settings, pause toggle and config file.
+- **M2 Overworld hotkeys:** done.
 - **M3 Overlay:** Overlay window and state-aware hints.
 - **M4 Battle:** Selector framework and the battle gag picker (targets, teammate hover, run, saved selection), with manual state switching.
 - **M5 Other menus:** Gag shop, dialogue, task choice, popups, shticker book, speedchat, friends list and settings.

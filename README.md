@@ -2,28 +2,53 @@
 
 Play **Toontown Rewritten** with a controller.
 
-Toontown Rewritten and Toontown Corporate Clash have no built-in controller support. This module runs alongside the game, reads your controller, and turns its input into the keyboard and mouse actions the game expects. Movement, battles, menus, the gag shop and boss fights all get controller support, with on-screen hints that show what each button does.
+Toontown Rewritten's own controller support is experimental: it covers movement and a virtual mouse, but has no menu navigation and no remapping. This module runs alongside the game, reads your controller, and turns its input into the keyboard and mouse actions the game expects. Controller buttons press on-screen buttons for you directly, so you never have to steer a mouse cursor around. Every button can be remapped.
 
-> **Status:** early development. Nothing is playable yet. See [plan.md](plan.md) for the full design.
+> **Status:** early development. Overworld controls, the friends list and speedchat (open/close) work. Battles and menus are next. See [plan.md](plan.md) for the full design.
 
-## Planned features
+## Features
 
-- **Movement:** left stick to walk and turn, A to jump, L3 to sprint.
+Working now:
+
+- **Movement:** left stick to walk and turn (a small tilt walks, a full tilt runs), A to jump, L3 to sprint.
+- **Overworld hotkeys:** shticker book, options, gags, tasks, map, camera.
+- **Friends list and speedchat:** open and close them with one button. The module checks the screen to see what's open, then clicks the right on-screen button and puts your mouse back.
+- **Remapping:** a config file lets you rebind any button.
+- Uses your TTR keybinds automatically, works at any window size, and never blocks your keyboard or mouse.
+
+Planned:
+
+- **Speedchat menus:** pick phrases with the D-pad.
 - **Battles:** move a highlight across your gags with the D-pad or stick, pick a target, hover teammates' gags with LB/RB, hold B to run.
 - **Menus:** controller navigation for the shticker book, speedchat, friends list, settings, task choice and dialogue.
 - **Gag shop:** buy one gag or buy max, and save/load presets.
 - **Boss fights:** VP and CJ throwing, CFO crane, CEO charge attacks.
 - **Trolley games:** support for each minigame.
-- **Virtual cursor:** the right stick moves the mouse for any screen without dedicated support.
 - **On-screen hints:** button prompts that change with what you're doing in game.
-- **Remapping:** rebind any button for any game state.
-- Works while the module window is unfocused, and never blocks your keyboard or mouse.
+- **Settings window:** remap buttons without editing a file.
 
 ## Default controls
 
+Working now:
+
+| Button | Overworld |
+|---|---|
+| Left stick | Move (small tilt walks) |
+| A | Jump |
+| B | Close speedchat or the friends list |
+| L3 | Sprint |
+| R3 | Switch camera |
+| Right stick up/down | Look up/down |
+| RB | Friends list (press again to close) |
+| View | Speedchat (press again to close) |
+| D-pad left / right | Show gags / show tasks |
+| D-pad up | Map |
+| Start | Shticker book (tap) · Options (hold) |
+
+Planned:
+
 | State | Controls |
 |---|---|
-| Overworld | Left stick move · A jump · L3 sprint · LB select closest toon · RB friends list · D-pad left show gags · D-pad right show tasks · Start shticker book · View speedchat · hold Start game settings |
 | Battle | Stick/D-pad move highlight · A select · B undo · hold B run · Y trunk · LB/RB hover teammates' gags |
 | Gag shop | Stick/D-pad move highlight · A buy one · Y buy max · LB save preset · RB load preset · B done |
 | Menus | Stick/D-pad move · A select · B back |
@@ -38,13 +63,36 @@ Toontown Rewritten and Toontown Corporate Clash have no built-in controller supp
 - Windows 10 or 11
 - An Xbox controller (more controllers planned)
 - Toontown Rewritten running in **windowed** mode
+- TTR's built-in controller support turned **off** (Options > Controls), or each button will act twice
+
+## Changing controls
+
+On first run the module creates `%APPDATA%\ToontownControllerModule\config.json`. Edit it while the module is running and changes apply right away. The `_help` section at the top lists every button name and action.
+
+```json
+"bindings": {
+  "press": {
+    "x": "performAction",
+    "dpad_up": null
+  },
+  "hold": {
+    "start": "options"
+  }
+}
+```
+
+- **`press`:** button → action. An action is any TTR control name from TTR's Options > Controls (e.g. `jump`, `showGags`), or one of `sprint`, `friendsList`, `speedchat` or `back`. Set a button to `null` to unbind it.
+- **`hold`:** button → action after holding it for `timing.hold_seconds`. That button's `press` action then fires as a tap when it's released early.
+- **`movement`** and **`timing`** hold the stick deadzone, walk threshold, hold time and sprint timing.
+
+If something in the file is wrong, the console prints `Config problem: ...` and the module uses the default for that setting.
 
 ## Roadmap
 
-1. Project setup
-2. Overworld movement (controller, window tracking, move/jump/sprint)
-3. Overworld hotkeys
-4. Overlay, hints and virtual cursor
+1. ~~Project setup~~
+2. ~~Overworld movement~~
+3. ~~Overworld hotkeys, friends list, speedchat open/close, config file~~
+4. On-screen hints overlay
 5. Battle gag picker
 6. Gag shop, dialogue, task choice and other menus
 7. Settings window and remapping
@@ -57,7 +105,7 @@ Toontown Rewritten and Toontown Corporate Clash have no built-in controller supp
 
 ## Development
 
-Built with Python 3.12+ and pygame-ce (controller input). Keyboard output and window tracking use the Windows API directly. PySide6 (settings window and overlay) and OpenCV (game state detection) come in later milestones.
+Built with Python 3.12+ and pygame-ce (controller input). Keyboard and mouse output, window tracking and screen reading use the Windows API directly. PySide6 (settings window and overlay) comes in a later milestone.
 
 ```powershell
 py -3.12 -m venv .venv
@@ -69,11 +117,23 @@ py -3.12 -m venv .venv
 # Print the keys it would send instead of sending them
 .\.venv\Scripts\python.exe -m ttcontroller --dry-run
 
+# Log every button press, key and click while playing
+.\.venv\Scripts\python.exe -m ttcontroller --debug
+
 # Run the tests
 .\.venv\Scripts\python.exe -m pytest
 ```
 
-The module reads your keybinds from TTR's `settings.json`, so rebinding keys in TTR's Options works automatically. Turn off TTR's built-in controller support (Options > Controls) while using this module, or each button will act twice.
+The module reads your keybinds from TTR's `settings.json`, so rebinding keys in TTR's Options works automatically.
+
+### Adding an on-screen button
+
+TTR's 2D UI scales with the window's shorter side, and each element is pinned to an edge or the center. Positions in [src/ttcontroller/ui.py](src/ttcontroller/ui.py) are stored as an anchor plus offsets in units of the shorter side, so they work at any window size.
+
+1. Capture the screen with the button showing: `.\.venv\Scripts\python.exe tools\capture_ttr.py NAME`, then click into TTR within 3 seconds.
+2. Capture again at a different window size, including a tall one if you can.
+3. Measure the button in both and check that the anchored offsets agree.
+4. If the module needs to detect whether the button is showing, add probe points where a known color shows, then make test crops with `tools\make_fixture.py`.
 
 ## Disclaimer
 
