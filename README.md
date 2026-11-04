@@ -23,7 +23,8 @@ Working now:
 Planned:
 
 - **Speedchat menus:** pick phrases with the D-pad.
-- **Menus:** controller navigation for the shticker book, speedchat, friends list, settings, task choice and dialogue.
+- **Friends list:** scroll it, pick a friend, and teleport to them.
+- **Shticker book:** controller navigation for every page.
 - **Boss fights:** VP and CJ throwing, CFO crane, CEO charge attacks.
 - **Trolley games:** support for each minigame.
 - **On-screen hints:** button prompts that change with what you're doing in game.
@@ -110,12 +111,13 @@ If something in the file is wrong, the console prints `Config problem: ...` and 
 2. ~~Overworld movement~~
 3. ~~Overworld hotkeys, friends list, speedchat open/close, config file~~
 4. ~~Battles~~ (including teammate hover, Toon-Up targets and the trunk)
-5. Gag shop, dialogue, task choice and other menus
-6. Settings window
-7. Boss fights
-8. Trolley games and fishing
-9. On-screen hints overlay
-10. First release
+5. Gag shop, NPC dialogue and task choice, speedchat menus, friends list
+6. Shticker book
+7. Settings window
+8. Boss fights
+9. Trolley games and fishing
+10. On-screen hints overlay
+11. First release
 
 **Later:** Toontown Corporate Clash, PlayStation/Switch controllers, Mac, borderless fullscreen, multi-toon.
 

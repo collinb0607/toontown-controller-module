@@ -150,13 +150,14 @@ Most states share one pattern: a grid of clickable buttons. Build it once and re
 - **M2 Overworld hotkeys:** done.
 - **M4 Battle:** Selector framework and the battle gag picker (targets, teammate hover, run, saved selection). Each screen is detected by probe pixels as it's added, so no manual state switching is needed.
 - **M4.2 Battle extras:** LB/RB teammate gag hover, the Toon-Up "which toon?" screen, and the trunk's tabs (SOS cards, pink slips, remotes, doodle) with their follow-up screens.
-- **M5 Other menus:** Gag shop, dialogue, task choice, popups, shticker book, speedchat, friends list and settings.
-- **M6 Settings window:** Remapping, controller and window pickers, hints toggle.
-- **M7 Auto-detection:** Automatic game state detection.
-- **M8 Boss fights:** VP, CFO, CJ and CEO.
-- **M9 Minigames:** Trolley games and fishing.
+- **M5 Menus:** Gag shop, NPC dialogue, task choice and popups (built), then speedchat menu navigation and the friends list.
+- **M6 Shticker book:** Its own milestone (decided Nov 4, 2026): the book has many pages, each with its own layout and controls, so it gets planned and built on its own.
+- **M7 Settings window:** Remapping, controller and window pickers, hints toggle.
+- **M8 Auto-detection:** Automatic game state detection.
+- **M9 Boss fights:** VP, CFO, CJ and CEO.
+- **M10 Minigames:** Trolley games and fishing.
 - **M3 Overlay:** Overlay window and state-aware hints. Moved to the end (decided Nov 3, 2026): hints are drawn on top of layouts that the other milestones measure, so they come last.
-- **M10 Release:** .exe build and first public release.
+- **M11 Release:** .exe build and first public release.
 - **Future:** Corporate Clash, PlayStation/Switch/generic controllers, Mac, borderless fullscreen, multi-toon.
 
 ### 10. Testing Plan
