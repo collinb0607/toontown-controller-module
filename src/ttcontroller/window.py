@@ -98,6 +98,9 @@ class ForegroundWatcher:
         return self._path
 
 
+PARK_ABOVE = 12  # pixels above the game area: the middle of the title bar
+
+
 class TTRView:
     """Reads and locates TTR's on-screen buttons in one game window."""
 
@@ -111,6 +114,14 @@ class TTRView:
     def is_visible(self, button: ui.Button) -> bool:
         frame = self.snapshot()
         return ui.is_visible(button, frame.width, frame.height, frame.get_pixel)
+
+    def park_spot(self) -> tuple[int, int] | None:
+        """Where to leave the cursor when nothing needs hovering: on the title bar, just
+        above the game area, where Windows draws the cursor instead of TTR (so it can be
+        hidden even with TTR's custom cursor). None if there's no title bar showing."""
+        left, top, width, _ = client_rect(self.hwnd)
+        y = top - PARK_ABOVE
+        return (left + width // 2, y) if y >= 0 else None
 
     def to_screen(self, point: ui.UIPoint) -> tuple[int, int]:
         left, top, width, height = client_rect(self.hwnd)

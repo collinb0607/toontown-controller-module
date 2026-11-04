@@ -284,6 +284,12 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 output.sync(controls_to_keys(controls, watcher.settings))
                 for button in mapper.take_clicks():
                     point("click", button.center, button.name, view)
+                # Nothing to hover: while the cursor is hidden, leave it off the game area.
+                idle = not (in_battle or in_shop or in_menu or npc_screen.kind == "tasks")
+                if idle and hider.hidden and view is not None and not clicker.busy and not dry_run:
+                    spot = view.park_spot()
+                    if spot is not None and clicker.moved_to != spot:
+                        clicker.hover(*spot)
                 if mapper.take_unite():
                     speedchat_mapper.go_to_unite(now)
             # Runs even when unfocused, so a click in progress always puts the cursor back.

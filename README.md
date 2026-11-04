@@ -20,7 +20,7 @@ Working now:
 - **Friends list:** move down the list (it scrolls for you), switch pages, open a toon, teleport to them (X) or whisper (Y). Nearby toons work too.
 - **Trunk:** SOS cards (scrolling the list as you go, and filtering them from the dropdown or with L3), pink slips, remotes and doodle tricks, all with the D-pad or stick.
 - **Remapping:** a config file lets you rebind any button.
-- **Hidden cursor:** the cursor disappears while you use the controller and comes back as soon as you move the mouse. This needs TTR's custom cursor turned off in its Options.
+- **Hidden cursor:** the cursor disappears while you use the controller and comes back as soon as you move the mouse. When nothing needs hovering it waits on the window's title bar, out of the way. While it hovers a menu it's only hidden if TTR's custom cursor is turned off in its Options.
 - Uses your TTR keybinds automatically, works at any window size, and never blocks your keyboard or mouse.
 
 Planned:
