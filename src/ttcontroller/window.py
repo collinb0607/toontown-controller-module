@@ -5,9 +5,11 @@ from ctypes import wintypes
 from pathlib import Path
 
 from . import ui
+from .screen import Frame, grab
 
 TTR_PROCESS = "ttrengine64.exe"
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = ctypes.c_void_p(-4)
 
 _user32 = ctypes.WinDLL("user32", use_last_error=True)
 _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -17,14 +19,12 @@ _user32.GetWindowThreadProcessId.argtypes = (wintypes.HWND, ctypes.POINTER(winty
 _user32.GetClientRect.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.RECT))
 _user32.ClientToScreen.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.POINT))
 _user32.IsWindowVisible.argtypes = (wintypes.HWND,)
-_user32.GetDC.argtypes = (wintypes.HWND,)
-_user32.GetDC.restype = wintypes.HDC
-_user32.ReleaseDC.argtypes = (wintypes.HWND, wintypes.HDC)
-_gdi32 = ctypes.WinDLL("gdi32")
-_gdi32.GetPixel.argtypes = (wintypes.HDC, ctypes.c_int, ctypes.c_int)
-_gdi32.GetPixel.restype = wintypes.DWORD
-
-DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = ctypes.c_void_p(-4)
+_kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+_kernel32.OpenProcess.restype = wintypes.HANDLE
+_kernel32.QueryFullProcessImageNameW.argtypes = (
+    wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD),
+)
+_kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
 
 
 def make_dpi_aware() -> None:
@@ -33,21 +33,6 @@ def make_dpi_aware() -> None:
         _user32.SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)
     except AttributeError:
         pass
-
-
-def screen_pixel(x: int, y: int) -> tuple[int, int, int]:
-    dc = _user32.GetDC(None)
-    try:
-        color = _gdi32.GetPixel(dc, x, y)  # 0x00BBGGRR
-    finally:
-        _user32.ReleaseDC(None, dc)
-    return color & 0xFF, (color >> 8) & 0xFF, (color >> 16) & 0xFF
-_kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
-_kernel32.OpenProcess.restype = wintypes.HANDLE
-_kernel32.QueryFullProcessImageNameW.argtypes = (
-    wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD),
-)
-_kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
 
 
 def _process_path(hwnd) -> Path | None:
@@ -119,9 +104,13 @@ class TTRView:
     def __init__(self, hwnd):
         self.hwnd = hwnd
 
+    def snapshot(self) -> Frame:
+        """Copy the game area, so its pixels can be read in client coordinates."""
+        return grab(*client_rect(self.hwnd))
+
     def is_visible(self, button: ui.Button) -> bool:
-        left, top, width, height = client_rect(self.hwnd)
-        return ui.is_visible(button, width, height, lambda x, y: screen_pixel(left + x, top + y))
+        frame = self.snapshot()
+        return ui.is_visible(button, frame.width, frame.height, frame.get_pixel)
 
     def to_screen(self, point: ui.UIPoint) -> tuple[int, int]:
         left, top, width, height = client_rect(self.hwnd)

@@ -5,13 +5,16 @@ from pathlib import Path
 
 from . import config as module_config
 from . import ttr_settings
+from .battle import BattleMapper, BattleScreen, read_screen
 from .controller import NEUTRAL, ControllerReader
-from .mapper import OverworldMapper
+from .mapper import OverworldMapper, controller_buttons
 from .output import KeyboardOutput, MouseClicker, send_key
 from .window import ForegroundWatcher, TTRView, make_dpi_aware
 
 FRAME_SECONDS = 1 / 120
 SETTINGS_CHECK_SECONDS = 1.0
+# How often to look at the screen for battle panels.
+BATTLE_CHECK_SECONDS = 0.1
 
 
 def log(message: str) -> None:
@@ -62,15 +65,33 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
             send_key(name, down)
 
     reader = ControllerReader()
-    mapper = make_mapper(config_watcher.config)
+    config = config_watcher.config
+    mapper = make_mapper(config)
+    battle_mapper = BattleMapper(config.battle)
+    battle_screen = BattleScreen()
     output = KeyboardOutput(logged_send if dry_run or debug else send_key)
     clicker = MouseClicker()
     last_buttons = frozenset()
     foreground = ForegroundWatcher()
 
+    def point(kind: str, target, name: str, view, restore: bool = True) -> None:
+        """Hover or click an on-screen point (a ui.UIPoint) in the TTR window."""
+        if view is None:
+            return
+        x, y = view.to_screen(target)
+        if dry_run or debug:
+            log(f"{kind.capitalize()} {name} at screen {x},{y}" + (" (dry run, not moved)" if dry_run else ""))
+        if dry_run:
+            return
+        if kind == "hover":
+            clicker.hover(x, y)
+        else:
+            clicker.click(x, y, restore=restore)
+
     controller_name = ""  # differs from None so the first poll logs either way
     ttr_focused = None
     next_settings_check = 0.0
+    next_battle_check = 0.0
     log("Running. Press Ctrl+C to quit." + (" (dry run: keys are printed, not sent)" if dry_run else ""))
 
     try:
@@ -107,21 +128,40 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     log("Module config changed, reloaded.")
                     describe_config(config_watcher, watcher.settings)
                     output.release_all()
-                    mapper = make_mapper(config_watcher.config)
+                    config = config_watcher.config
+                    mapper = make_mapper(config)
+                    battle_mapper.set_bindings(config.battle)
 
             if not focused:
                 mapper.reset()
+                battle_mapper.reset_buttons()
+                battle_screen = BattleScreen()
                 output.release_all()
             else:
                 view = TTRView(foreground.ttr_hwnd) if foreground.ttr_hwnd else None
-                controls = mapper.update(state or NEUTRAL, now, view)
+                if view is not None and now >= next_battle_check:
+                    next_battle_check = now + BATTLE_CHECK_SECONDS
+                    frame = view.snapshot()
+                    screen = read_screen(frame.width, frame.height, frame.get_pixel)
+                    if screen.kind != battle_screen.kind and (dry_run or debug):
+                        log(f"Battle screen: {screen.kind or 'none'}")
+                    battle_screen = screen
+
+                state = state or NEUTRAL
+                in_battle = battle_screen.kind is not None
+                if in_battle:
+                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
+                    for command in battle_mapper.update(buttons, now, battle_screen):
+                        # Battle clicks leave the cursor on the button, where the highlight is.
+                        point(command.kind, command.point, command.name, view, restore=False)
+                else:
+                    battle_mapper.reset_buttons()
+                # In battle, the battle bindings own their buttons and the left stick doesn't walk.
+                blocked = frozenset(battle_mapper.buttons) if in_battle else frozenset()
+                controls = mapper.update(state, now, view, blocked=blocked, movement=not in_battle)
                 output.sync(controls_to_keys(controls, watcher.settings))
                 for button in mapper.take_clicks():
-                    x, y = view.to_screen(button.center)
-                    if dry_run or debug:
-                        log(f"Click {button.name} at screen {x},{y}" + (" (dry run, not clicked)" if dry_run else ""))
-                    if not dry_run:
-                        clicker.click(x, y)
+                    point("click", button.center, button.name, view)
             # Runs even when unfocused, so a click in progress always puts the cursor back.
             clicker.update(now)
 

@@ -105,8 +105,10 @@ def cursor_pos() -> tuple[int, int]:
 
 
 class MouseClicker:
-    """Clicks a screen point and then puts the cursor back where it was.
+    """Moves and clicks the mouse for on-screen buttons.
 
+    click() clicks a point and, by default, puts the cursor back where it was.
+    hover() just parks the cursor on a point (the battle highlight).
     The steps are spread over a few frames so the game sees the cursor arrive
     on the button before the click, like a real mouse.
     """
@@ -115,39 +117,53 @@ class MouseClicker:
 
     def __init__(self, move=move_mouse, button=left_button, get_pos=cursor_pos):
         self._move, self._button, self._get_pos = move, button, get_pos
-        self._queue: deque[tuple[int, int]] = deque()
+        # (x, y, click, restore)
+        self._queue: deque[tuple[int, int, bool, bool]] = deque()
         self._step = 0
         self._next_at = 0.0
-        self._target: tuple[int, int] | None = None
-        self._restore: tuple[int, int] | None = None
+        self._job: tuple[int, int, bool, bool] | None = None
+        self._restore_to: tuple[int, int] | None = None
 
-    def click(self, x: int, y: int) -> None:
-        self._queue.append((x, y))
+    def click(self, x: int, y: int, restore: bool = True) -> None:
+        self._queue.append((x, y, True, restore))
+
+    def hover(self, x: int, y: int) -> None:
+        # A newer hover replaces any hover still waiting, so fast stick input doesn't lag behind.
+        if self._queue and not self._queue[-1][2]:
+            self._queue.pop()
+        self._queue.append((x, y, False, False))
 
     @property
     def busy(self) -> bool:
-        return self._target is not None or bool(self._queue)
+        return self._job is not None or bool(self._queue)
 
     def update(self, now: float) -> None:
-        if self._target is None:
+        if self._job is None:
             if not self._queue:
                 return
-            self._target = self._queue.popleft()
-            self._restore = self._get_pos()
+            self._job = self._queue.popleft()
+            self._restore_to = self._get_pos() if self._job[3] else None
             self._step = 0
             self._next_at = now
         if now < self._next_at:
             return
 
+        x, y, click, _ = self._job
         if self._step == 0:
-            self._move(*self._target)
+            self._move(x, y)
+            if not click:
+                self._job = None
+                return
         elif self._step == 1:
             self._button(True)
         elif self._step == 2:
             self._button(False)
+            if self._restore_to is None:
+                self._job = None
+                return
         else:
-            self._move(*self._restore)
-            self._target = None
+            self._move(*self._restore_to)
+            self._job = None
             return
         self._step += 1
         self._next_at = now + self.STEP_SECONDS

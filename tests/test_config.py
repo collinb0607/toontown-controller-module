@@ -3,7 +3,8 @@ import os
 
 from ttcontroller import config
 from ttcontroller.controller import ControllerState
-from ttcontroller.mapper import Bindings, OverworldMapper
+from ttcontroller.bindings import Bindings
+from ttcontroller.mapper import OverworldMapper
 
 
 def test_defaults_round_trip():

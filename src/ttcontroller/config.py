@@ -10,8 +10,10 @@ import os
 from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
 
+from .battle import BATTLE_ACTIONS, default_battle_bindings
+from .bindings import STICK_BUTTONS, Bindings
 from .controller import BUTTONS
-from .mapper import SPECIAL_ACTIONS, STICK_BUTTONS, Bindings, Timing
+from .mapper import SPECIAL_ACTIONS, Timing, default_bindings
 from .movement import MovementTuning
 
 CONFIG_DIR = Path(os.environ.get("APPDATA", Path.home())) / "ToontownControllerModule"
@@ -27,12 +29,16 @@ HELP = {
              "Set a button to null to unbind it.",
     "hold": "Button -> action after holding it for timing.hold_seconds. "
             "A button with a hold action sends its press action as a tap when released early.",
+    "battle": "Bindings used while a battle panel is showing. Buttons not bound here keep their "
+              "overworld action (e.g. speedchat), except that the left stick never walks in battle. "
+              "Actions: " + "; ".join(f"{name} = {desc}" for name, desc in BATTLE_ACTIONS.items()),
 }
 
 
 @dataclass
 class Config:
-    bindings: Bindings = field(default_factory=Bindings)
+    bindings: Bindings = field(default_factory=default_bindings)
+    battle: Bindings = field(default_factory=default_battle_bindings)
     movement: MovementTuning = field(default_factory=MovementTuning)
     timing: Timing = field(default_factory=Timing)
 
@@ -40,7 +46,11 @@ class Config:
 def to_json(config: Config) -> dict:
     return {
         "_help": HELP,
-        "bindings": {"press": config.bindings.press, "hold": config.bindings.hold},
+        "bindings": {
+            "press": config.bindings.press,
+            "hold": config.bindings.hold,
+            "battle": {"press": config.battle.press, "hold": config.battle.hold},
+        },
         "movement": asdict(config.movement),
         "timing": asdict(config.timing),
     }
@@ -78,10 +88,15 @@ def parse(data: dict) -> tuple[Config, list[str]]:
     warnings: list[str] = []
     defaults = Config()
     bindings = data.get("bindings", {})
+    battle = bindings.get("battle", {})
     config = Config(
         bindings=Bindings(
             press=_merge_bindings(defaults.bindings.press, bindings.get("press", {}), warnings, "press"),
             hold=_merge_bindings(defaults.bindings.hold, bindings.get("hold", {}), warnings, "hold"),
+        ),
+        battle=Bindings(
+            press=_merge_bindings(defaults.battle.press, battle.get("press", {}), warnings, "battle.press"),
+            hold=_merge_bindings(defaults.battle.hold, battle.get("hold", {}), warnings, "battle.hold"),
         ),
         movement=_merge_numbers(defaults.movement, data.get("movement", {}), warnings, "movement"),
         timing=_merge_numbers(defaults.timing, data.get("timing", {}), warnings, "timing"),
@@ -112,6 +127,10 @@ def unknown_actions(config: Config, ttr_controls) -> list[str]:
         for button, action in bindings.items():
             if action not in SPECIAL_ACTIONS and action not in ttr_controls:
                 problems.append(f"bindings.{table}.{button}: unknown action {action!r}")
+    for table, bindings in (("battle.press", config.battle.press), ("battle.hold", config.battle.hold)):
+        for button, action in bindings.items():
+            if action not in BATTLE_ACTIONS:
+                problems.append(f"bindings.{table}.{button}: unknown battle action {action!r}")
     return problems
 
 

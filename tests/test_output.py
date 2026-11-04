@@ -16,6 +16,23 @@ def test_click_moves_clicks_and_restores_cursor():
     assert events == [("move", 100, 200), ("down",), ("up",), ("move", 5, 6)]
 
 
+def test_hover_and_click_without_restore():
+    events = []
+    clicker = MouseClicker(
+        move=lambda x, y: events.append(("move", x, y)),
+        button=lambda down: events.append(("down" if down else "up",)),
+        get_pos=lambda: (5, 6),
+    )
+    clicker.hover(1, 1)
+    clicker.hover(2, 2)  # replaces the waiting hover
+    clicker.click(3, 3, restore=False)
+    t = 0.0
+    while clicker.busy:
+        clicker.update(t)
+        t += 0.01
+    assert events == [("move", 2, 2), ("move", 3, 3), ("down",), ("up",)]
+
+
 def make():
     sent = []
     return KeyboardOutput(lambda name, down: sent.append((name, down))), sent

@@ -4,7 +4,7 @@ Play **Toontown Rewritten** with a controller.
 
 Toontown Rewritten's own controller support is experimental: it covers movement and a virtual mouse, but has no menu navigation and no remapping. This module runs alongside the game, reads your controller, and turns its input into the keyboard and mouse actions the game expects. Controller buttons press on-screen buttons for you directly, so you never have to steer a mouse cursor around. Every button can be remapped.
 
-> **Status:** early development. Overworld controls, the friends list and speedchat (open/close) work. Battles and menus are next. See [plan.md](plan.md) for the full design.
+> **Status:** early development. Overworld controls, the friends list, speedchat (open/close) and battles work. Menus are next. See [plan.md](plan.md) for the full design.
 
 ## Features
 
@@ -13,13 +13,14 @@ Working now:
 - **Movement:** left stick to walk and turn (a small tilt walks, a full tilt runs), A to jump, L3 to sprint.
 - **Overworld hotkeys:** shticker book, options, gags, tasks, map, camera.
 - **Friends list and speedchat:** open and close them with one button. The module checks the screen to see what's open, then clicks the right on-screen button and puts your mouse back.
+- **Battles:** move a highlight across your gags with the D-pad or stick, pick a target, pass, open and close the trunk, and hold B to run (A/B answer the "are you sure" prompt). Your last gag stays highlighted between rounds and battles.
 - **Remapping:** a config file lets you rebind any button.
 - Uses your TTR keybinds automatically, works at any window size, and never blocks your keyboard or mouse.
 
 Planned:
 
 - **Speedchat menus:** pick phrases with the D-pad.
-- **Battles:** move a highlight across your gags with the D-pad or stick, pick a target, hover teammates' gags with LB/RB, hold B to run.
+- **More battle controls:** hover teammates' gags with LB/RB, and the trunk's SOS, pink slip, remote and doodle screens.
 - **Menus:** controller navigation for the shticker book, speedchat, friends list, settings, task choice and dialogue.
 - **Gag shop:** buy one gag or buy max, and save/load presets.
 - **Boss fights:** VP and CJ throwing, CFO crane, CEO charge attacks.
@@ -45,11 +46,19 @@ Working now:
 | D-pad up | Map |
 | Start | Shticker book (tap) · Options (hold) |
 
+| Battle screen | Controls |
+|---|---|
+| Gag picker | Stick/D-pad move highlight · A select · X trunk · Y pass · hold B run |
+| Which cog? | Stick/D-pad left/right choose · A select · B back |
+| Waiting for other toons | B back (change your gag) |
+| Trunk | B or X close |
+| Run prompt | A OK · B cancel |
+
 Planned:
 
 | State | Controls |
 |---|---|
-| Battle | Stick/D-pad move highlight · A select · B undo · hold B run · Y trunk · LB/RB hover teammates' gags |
+| Battle | LB/RB hover teammates' gags · trunk item screens |
 | Gag shop | Stick/D-pad move highlight · A buy one · Y buy max · LB save preset · RB load preset · B done |
 | Menus | Stick/D-pad move · A select · B back |
 | Dialogue | A continue |
@@ -92,7 +101,7 @@ If something in the file is wrong, the console prints `Config problem: ...` and 
 1. ~~Project setup~~
 2. ~~Overworld movement~~
 3. ~~Overworld hotkeys, friends list, speedchat open/close, config file~~
-4. Battle gag picker
+4. ~~Battle gag picker~~ (teammate hover and trunk items to come)
 5. Gag shop, dialogue, task choice and other menus
 6. Settings window
 7. Boss fights
