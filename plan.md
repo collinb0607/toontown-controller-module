@@ -47,6 +47,14 @@ Added during a planning session on November 3, 2026. Items marked [VERIFY] need 
 - **Sprint:** double-tapping forward is built into TTR. L3 sends that double-tap.
 - **Buy max:** the TTR gag shop has no max button, so Y clicks buy repeatedly until the gag is full or you run out of jellybeans.
 - **Terms of service:** not a concern for this project. Sprint double-tap and buy max give no unfair advantage.
+- **No virtual cursor:** you never steer a mouse cursor. Every on-screen button the module supports gets a controller button that clicks it directly (the module moves the mouse there, clicks, and puts it back).
+- **TTR's built-in controller support** (added in TTR 3.4.0, experimental) covers movement and a virtual mouse but has no menu navigation or remapping. It must be turned **off** while using this module, or every button acts twice.
+
+### Progress
+
+- **M0 Setup:** done. Public repo at https://github.com/collinb0607/toontown-controller-module.
+- **M1 Overworld movement:** done and tested in game. Stick movement with partial-tilt walk, L3 sprint (fresh double-tap: release, tap, release, hold, 60ms steps), A jump, D-pad gags/tasks/map, Start tap = shticker book, hold Start = options (Shift+Esc toggles it open and closed), R3 camera, right stick look up/down. Keybinds come from TTR's settings.json.
+- **First click target:** done and tested at several window sizes. RB opens the friends list, or closes it by clicking its X; B also closes it.
 
 ### 2. How It Works (Architecture)
 
@@ -77,11 +85,13 @@ Most states share one pattern: a grid of clickable buttons. Build it once and re
 - The last selection is saved per screen. This gives the "last gag picked carries over between rounds and battles" behavior.
 - Skipping gags you have 0 of or have not unlocked needs data, either from the Local API or from spotting a grayed-out button on screen.
 - TTR's UI scales with window size and aspect ratio, so layouts have to be measured at several window sizes. [VERIFY]
-- **Virtual cursor fallback:** A mode where the right stick moves the real mouse cursor and a button clicks. It covers any screen without a custom layout (Ice Slide, Photo Fun, fishing, catalog, estate, Make-a-Toon). Build it early because it fills every gap.
+- **How positions are measured:** TTR's 2D UI scales with the window height, and each panel is pinned to the left edge, center or right edge. A button is stored as its anchor plus an offset in window heights (see `src/ttcontroller/ui.py`), which is accurate at any window size. Capture the screen with `tools/capture_ttr.py`, measure at two window sizes, and check that both agree.
+- **How "is it open?" is detected:** each clickable button has a few probe points where its fill color shows. The module samples those pixels when a button is pressed, so it never has to remember what is open. This is the first piece of automatic state detection.
+- Screens with no supported layout yet (Ice Slide, Photo Fun, fishing, catalog, estate, Make-a-Toon) still need keyboard/mouse until a layout is added.
 
 ### 5. Default Bindings by State
 
-- **Overworld:** Left stick moves (with a deadzone; diagonals = forward + turn). A = jump, L3 = sprint (double-tap forward), LB = select closest toon, RB = friends list, D-pad left = show gags, D-pad right = show tasks, Start = shticker book, View = speedchat, hold Start = game settings (works in every state).
+- **Overworld:** Left stick moves (with a deadzone; diagonals = forward + turn). A = jump, L3 = sprint (double-tap forward), LB = select closest toon, RB = friends list (press again to close), B = close friends list, D-pad left = show gags, D-pad right = show tasks, D-pad up = map, R3 = switch camera, right stick up/down = look up/down, Start = shticker book, View = speedchat, hold Start = game settings (works in every state).
 - **Battle:** Left stick or D-pad moves the gag highlight, A = select, B = undo choice, hold B (1 sec) = run, Y = trunk, LB / RB = cycle teammate hover. After a gag is picked, the highlight moves to choosing a cog (or a toon for Toon-Up): left/right to move, A to confirm.
 - **Gag shop:** Left stick or D-pad moves the highlight, A = buy one, Y = buy max (repeat buy until full or out of jellybeans), LB = save preset, RB = load preset, B = done/exit.
 - **Menus (shticker book, speedchat, friends, settings):** Left stick or D-pad moves, A = select, B = back or close.
@@ -91,29 +101,28 @@ Most states share one pattern: a grid of clickable buttons. Build it once and re
 - **VP / CJ throwing:** Left stick moves, hold RT to charge the throw, release to throw.
 - **CFO crane:** Left stick moves the crane, hold X = magnet on, B = leave the crane.
 - **CEO:** Left stick turns, hold X = charge, release to fire, B = leave.
-- **Virtual cursor:** Right stick moves the cursor, RT or A = click, B = exit cursor mode.
 
 ### 6. Game States Not Yet Covered
 
 - Picking a cog target after choosing a gag, and picking a toon for Toon-Up.
 - Battle sub-menus: SOS cards, Fires/Pink Slips and Unites.
 - Popups and confirmations (task complete, gag track upgrade, "Are you sure you want to leave?").
-- Fishing: click-and-drag casting, the bucket, selling fish. Use virtual cursor, or a custom mode where you hold A and aim with the stick.
+- Fishing: click-and-drag casting, the bucket, selling fish. Needs a custom mode, e.g. hold A and aim with the stick.
 - List what each trolley game needs [VERIFY the list in game]:
   - Movement only: Ring, Catching, Maze, Treasure Dive, Jungle Vines.
   - Movement + action button: Cog Thief (throw), Cannon (aim + fire, reused in CJ).
   - Pick an option: Race (cards 1–4), Match Minnie (arrow pattern).
   - Special: Tug of War (alternate left/right).
-  - Mouse aiming (virtual cursor): Ice Slide, Photo Fun.
+  - Mouse aiming (needs a custom stick-aim mode): Ice Slide, Photo Fun.
 - Cog HQ facilities (factories, mints, DA offices, golf courses) and Field Offices: mostly movement and battles. Check each for unique interactions. [VERIFY]
 - Elevators and boarding groups: the "Leave" / "Exit" buttons.
-- Out of scope at first (keyboard/mouse or virtual cursor): login and toon picker, Make-a-Toon, typed chat, catalog, closet, estate furniture. An on-screen keyboard for typed chat could come later.
+- Out of scope at first (use keyboard/mouse): login and toon picker, Make-a-Toon, typed chat, catalog, closet, estate furniture. An on-screen keyboard for typed chat could come later.
 
 ### 7. Settings Window (Expanding "Elements")
 
 - Game dropdown, TTR window picker, controller dropdown, and a button that opens Windows Bluetooth settings.
 - Remap screen: click an action, then press the controller button to bind it. One tab per game state.
-- Sliders for stick deadzone, trigger threshold and virtual cursor speed.
+- Sliders for stick deadzone, walk threshold and trigger threshold.
 - Toggle for on-screen hints.
 - Indicator showing the detected game state, with a manual override.
 - A pause hotkey (e.g., hold View + Start) that turns the module off without closing it.
@@ -135,7 +144,7 @@ Most states share one pattern: a grid of clickable buttons. Build it once and re
 - **M0 Setup:** Repo, README, project skeleton.
 - **M1 Proof of concept:** Read the Xbox controller, find the TTR window, and get movement, jump and sprint working in the overworld.
 - **M2 Overworld hotkeys:** Shticker book open/close, show gags and tasks, closest toon, open speedchat, friends and settings, pause toggle and config file.
-- **M3 Overlay:** Overlay window, state-aware hints and virtual cursor mode.
+- **M3 Overlay:** Overlay window and state-aware hints.
 - **M4 Battle:** Selector framework and the battle gag picker (targets, teammate hover, run, saved selection), with manual state switching.
 - **M5 Other menus:** Gag shop, dialogue, task choice, popups, shticker book, speedchat, friends list and settings.
 - **M6 Settings window:** Remapping, controller and window pickers, hints toggle.
