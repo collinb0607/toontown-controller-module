@@ -1,5 +1,5 @@
 """Battles: where TTR draws the battle screens, how to recognize them, and
-controller navigation of the gag picker and target choice.
+controller navigation of the gag picker, target choice and trunk.
 
 Every battle panel is centered on the window, so positions are offsets from
 the center in units of the window's shorter side (see ui.py). Measured from
@@ -44,11 +44,38 @@ WAITING_BACK = _center(-0.2131, 0.0332)
 RUN_YES = _center(-0.0555, 0.1200)
 RUN_NO = _center(0.0541, 0.1200)
 
-# Rows that hold one arrow button per cog (above) or per toon (below) on the
-# "which cog/toon?" screen. The toon row is a guess from the panel layout. [VERIFY]
+# Rows that hold one arrow button per cog (above) or per teammate (below) on the
+# "which cog/toon?" screen. The toon row crosses the down arrows' shafts.
 COG_ARROW_ROW = -0.0788
-TOON_ARROW_ROW = 0.119
+TOON_ARROW_ROW = 0.105
 _ARROW_SCAN_HALF_WIDTH = 0.42
+
+# Toon panels along the bottom, one per toon, each with a circle showing the gag
+# that toon picked (or "?"). Their spacing depends only on how many toons there
+# are and whether the window is wider than tall, not on its exact size.
+_PANEL_SPACING = {True: {2: 0.254, 3: 0.276, 4: 0.251}, False: {2: 0.187, 3: 0.2055, 4: 0.187}}
+_PANEL_MIDDLE = -0.0075
+_PANEL_HALF_WIDTH = 0.088
+_CHOICE_OFFSET = 0.0415  # choice circle center, right of the panel center
+_CHOICE_ROW = 0.412
+_PANEL_ROWS = tuple(0.37 + 0.01 * i for i in range(11))
+
+# Trunk tabs down its left side. Pink slips has no tab page: it goes straight to "which cog?".
+TRUNK_TABS = (("SOS", -0.173), ("pink slips", -0.0788), ("remotes", 0.0253), ("doodle", 0.1244))
+_TAB_X = -0.4955
+_TAB_PROBES_X = (-0.448, -0.444)  # lighter blue behind the open tab
+_SOS_CALL_XS = (-0.3251, -0.1893, -0.0535, 0.0823)  # the CALL button on each column of cards
+_SOS_TOP, _SOS_BOTTOM = -0.18, 0.175  # the visible part of the scrolling card list
+SOS_LIST = _center(-0.12, 0.0)
+# A row of cards isn't a whole number of mouse wheel notches, so scroll most of the
+# way, then a notch at a time until the next row is fully in view.
+SOS_SCROLL_NOTCHES = 5
+SOS_EXTRA_NOTCHES = 4
+_SOS_ROW_STEP = 0.18
+_REMOTE_XS = (-0.3053, -0.1982, -0.0912)
+_REMOTE_ROWS = (("damage", -0.0837), ("healing", 0.1065))
+_TRICK_ROW0, _TRICK_STEP, _TRICK_ROWS = -0.1829, 0.0551, 7
+_TRICK_ICON_X, _TRICK_X = -0.062, -0.0377  # probe on the blue button, click its center
 
 
 def is_panel_red(c: RGB) -> bool:
@@ -74,8 +101,31 @@ def is_dialog_yellow(c: RGB) -> bool:
     return c[0] > 240 and c[1] > 240 and 160 < c[2] < 215
 
 
-def is_notepad_yellow(c: RGB) -> bool:
-    return c[0] > 230 and c[1] > 230 and c[2] < 100
+def is_trunk_blue(c: RGB) -> bool:
+    r, g, b = c
+    return 40 < r < 95 and 90 < g < 150 and 125 < b < 185 and b - r > 60
+
+
+def _is_bright_blue(c: RGB) -> bool:
+    """Usable remotes and doodle trick icons."""
+    return c[2] > 190 and c[2] - c[0] > 100
+
+
+def _is_call_red(c: RGB) -> bool:
+    """A usable SOS card's CALL button (unavailable ones are pale pink)."""
+    return c[0] > 200 and c[1] < 120 and c[2] < 120 and c[0] - c[1] > 100
+
+
+def _is_panel_green(c: RGB) -> bool:
+    """Toon panels are see-through, but stay greener than the street behind them."""
+    r, g, b = c
+    return g - r >= 20 and g - b >= 20 and g >= 100
+
+
+def _is_question_teal(c: RGB) -> bool:
+    """The "?" circle of a toon who hasn't picked a gag yet."""
+    r, g, b = c
+    return r < 100 and 90 < g < 170 and g - r > 50 and b - r > 15 and g - b > 15
 
 
 def _is_arrow_orange(c: RGB) -> bool:
@@ -87,6 +137,8 @@ def _is_arrow_blue(c: RGB) -> bool:
 
 
 # Screen detectors. The probes avoid text and icons.
+# The trunk replaces the gag grid inside the same red panel. The notepad can't be
+# used to spot it because hovering an item turns the notepad into an info card.
 PICKER = ui.Button("gag picker", cell(0, 0),
                    tuple(_center(0.288, -0.21 + 0.045 * i) for i in range(10)), is_panel_red, min_hits=8)
 TARGET = ui.Button("which cog/toon", TARGET_BACK,
@@ -95,12 +147,12 @@ TARGET = ui.Button("which cog/toon", TARGET_BACK,
 WAITING = ui.Button("waiting for other toons", WAITING_BACK,
                     tuple(_center(x, y) for y in (-0.02, 0.088) for x in (-0.12, -0.05, 0.05, 0.12, 0.19)),
                     is_white, min_hits=8)
-# The yellow notepad to the right of the gag grid, which stays when the trunk
-# replaces the grid. Probes skip the "Total gags" text and stay inside tall windows.
-NOTEPAD = ui.Button("trunk", TRUNK,
-                    tuple(_center(x, y) for y in (-0.10, -0.06, -0.02) for x in (0.36, 0.40, 0.43)
-                          if (x, y) != (0.43, -0.06)),
-                    is_notepad_yellow, min_hits=7)
+TRUNK_RED = ui.Button("trunk", TRUNK, tuple(_center(0.302, y) for y in (-0.2, -0.1, 0.0, 0.1, 0.2)),
+                      is_panel_red, min_hits=5)
+TRUNK_BLUE = ui.Button("trunk", TRUNK,
+                       tuple(_center(-0.43, y) for y in (-0.125, -0.025, 0.075, 0.17))
+                       + tuple(_center(x, 0.205) for x in (-0.3, -0.1, 0.1)),
+                       is_trunk_blue, min_hits=6)
 # The run dialog's pale yellow panel spans x -0.249..0.249 and y -0.108..0.188;
 # these probes sit above the question and beside the buttons.
 RUN_CONFIRM = ui.Button("run: are you sure?", RUN_YES,
@@ -110,10 +162,22 @@ RUN_CONFIRM = ui.Button("run: are you sure?", RUN_YES,
 
 
 @dataclass(frozen=True)
+class Item:
+    """Something to highlight and click on a screen laid out freely, like the trunk."""
+    name: str
+    point: ui.UIPoint
+    tab: bool = False
+
+
+@dataclass(frozen=True)
 class BattleScreen:
     kind: str | None = None  # "picker", "trunk", "target", "waiting", "confirm_run", or None when no battle panel shows
     usable: tuple[tuple[bool, ...], ...] = ()  # picker: [track][level]
+    teammates: tuple[ui.UIPoint, ...] = ()  # picker, waiting: toons' gag choices, left to right
+    unpicked: tuple[ui.UIPoint, ...] = ()  # picker, waiting: "?" circles of toons still choosing
     targets: tuple[ui.UIPoint, ...] = ()  # target: one arrow per cog (or toon), left to right
+    tab: str | None = None  # trunk: the open tab
+    items: tuple[Item, ...] = ()  # trunk: tabs, then what's usable on the open tab
 
 
 def _scan_arrows(width: int, height: int, get_pixel: PixelReader, row: float) -> list[ui.UIPoint]:
@@ -122,6 +186,7 @@ def _scan_arrows(width: int, height: int, get_pixel: PixelReader, row: float) ->
     y = round(height / 2 + row * unit)
     x0 = max(0, round(width / 2 - _ARROW_SCAN_HALF_WIDTH * unit))
     x1 = min(width - 1, round(width / 2 + _ARROW_SCAN_HALF_WIDTH * unit))
+    outline = max(8, round(0.012 * unit))
     kinds = []
     for x in range(x0, x1 + 1):
         c = get_pixel(x, y)
@@ -136,12 +201,94 @@ def _scan_arrows(width: int, height: int, get_pixel: PixelReader, row: float) ->
         while i < len(kinds) and kinds[i] == "b":
             i += 1
         # The arrow has a dark outline a few pixels wide between the blue and the orange.
-        before = kinds[max(0, start - 8):start]
-        after = kinds[i:i + 8]
+        before = kinds[max(0, start - outline):start]
+        after = kinds[i:i + outline]
         if "o" in before and "o" in after and i - start >= 3:
             x = x0 + (start + i - 1) / 2
             found.append(_center((x - width / 2) / unit, row))
     return found
+
+
+def panel_centers(count: int, wide: bool) -> list[float]:
+    spacing = _PANEL_SPACING[wide][count]
+    return [_PANEL_MIDDLE + (i - (count - 1) / 2) * spacing for i in range(count)]
+
+
+def _has_panel(width: int, height: int, get_pixel: PixelReader, x: float) -> bool:
+    """Check the left part of a toon panel (left of its choice circle) column by column.
+    Nametags, faces and toons can cover some rows, so each column only needs a few."""
+    columns = 0
+    for i in range(11):
+        cx = x - _PANEL_HALF_WIDTH + 0.005 + 0.008 * i
+        hits = sum(_is_panel_green(get_pixel(*_center(cx, y).to_client(width, height))) for y in _PANEL_ROWS)
+        columns += hits >= 4
+    return columns >= 8
+
+
+def _read_choices(width: int, height: int, get_pixel: PixelReader) -> dict:
+    """Choice circles of toons who have picked a gag, and of those still choosing ("?").
+    Your own shows "?" while you pick, and your gag once you have."""
+    wide = width >= height
+    for count in (4, 3, 2):
+        centers = panel_centers(count, wide)
+        if not all(_has_panel(width, height, get_pixel, x) for x in centers):
+            continue
+        chosen, unpicked = [], []
+        for x in centers:
+            circle = _center(x + _CHOICE_OFFSET, _CHOICE_ROW)
+            spots = [circle.offset(dx, dy) for dx, dy in ((0, 0), (-0.018, 0), (0.018, 0), (0, -0.018), (0, 0.018))]
+            if sum(_is_question_teal(get_pixel(*p.to_client(width, height))) for p in spots) < 3:
+                chosen.append(circle)
+            else:
+                unpicked.append(circle)
+        return {"teammates": tuple(chosen), "unpicked": tuple(unpicked)}
+    return {}
+
+
+def _scan_calls(width: int, height: int, get_pixel: PixelReader, x: float) -> list[float]:
+    """Rows of red CALL buttons down one column of SOS cards, fully in view. The
+    lettering covers most of the red, and the solid edges are only a pixel or two
+    thick, so every pixel row is checked at a few spots across the button."""
+    unit = min(width, height)
+    xs = sorted({round(width / 2 + (x + dx) * unit) for dx in (-0.02, -0.016, -0.012, -0.008, -0.004, 0.0, 0.004, 0.008, 0.012)})
+    top, bottom = (round(height / 2 + y * unit) for y in (_SOS_TOP, _SOS_BOTTOM))
+    gap = 0.015 * unit
+    rows, run = [], []
+    for py in range(top, bottom + 1):
+        if any(_is_call_red(get_pixel(px, py)) for px in xs):
+            if run and py - run[-1] > gap:
+                rows.append(run)
+                run = []
+            run.append(py)
+    if run:
+        rows.append(run)
+    # Skip buttons cut off at the edge of the list.
+    return [((r[0] + r[-1]) / 2 - height / 2) / unit for r in rows
+            if r[0] > top + 1 and r[-1] < bottom - 1 and r[-1] - r[0] >= 0.006 * unit]
+
+
+def _read_trunk(width: int, height: int, get_pixel: PixelReader) -> BattleScreen:
+    def looks(point: ui.UIPoint, test) -> bool:
+        return test(get_pixel(*point.to_client(width, height)))
+
+    items = [Item(f"tab {name}", _center(_TAB_X, y), tab=True) for name, y in TRUNK_TABS]
+    tab = next((name for name, y in TRUNK_TABS
+                if all(looks(_center(x, y), is_trunk_blue) for x in _TAB_PROBES_X)), None)
+    if tab == "SOS":
+        for col, x in enumerate(_SOS_CALL_XS):
+            items += [Item(f"SOS card {col + 1} at {y:.2f}", _center(x, y))
+                      for y in _scan_calls(width, height, get_pixel, x)]
+    elif tab == "remotes":
+        for kind, y in _REMOTE_ROWS:
+            items += [Item(f"{kind} remote {i + 1}", _center(x, y)) for i, x in enumerate(_REMOTE_XS)
+                      if looks(_center(x - 0.032, y), _is_bright_blue)
+                      and looks(_center(x - 0.032, y + 0.04), _is_bright_blue)]
+    elif tab == "doodle":
+        for i in range(_TRICK_ROWS):
+            y = _TRICK_ROW0 + i * _TRICK_STEP
+            if looks(_center(_TRICK_ICON_X, y), _is_bright_blue):
+                items.append(Item(f"doodle trick {i + 1}", _center(_TRICK_X, y)))
+    return BattleScreen("trunk", tab=tab, items=tuple(items))
 
 
 def read_screen(width: int, height: int, get_pixel: PixelReader) -> BattleScreen:
@@ -151,16 +298,15 @@ def read_screen(width: int, height: int, get_pixel: PixelReader) -> BattleScreen
             tuple(is_usable_gag(get_pixel(*cell(r, c).offset(*_CELL_BG).to_client(width, height)))
                   for c in range(LEVELS))
             for r in range(len(TRACKS)))
-        return BattleScreen("picker", usable=usable)
-    # The notepad without the gag grid means the trunk is open.
-    if ui.is_visible(NOTEPAD, width, height, get_pixel):
-        return BattleScreen("trunk")
+        return BattleScreen("picker", usable=usable, **_read_choices(width, height, get_pixel))
+    if ui.is_visible(TRUNK_RED, width, height, get_pixel) and ui.is_visible(TRUNK_BLUE, width, height, get_pixel):
+        return _read_trunk(width, height, get_pixel)
     if ui.is_visible(TARGET, width, height, get_pixel):
         targets = (_scan_arrows(width, height, get_pixel, COG_ARROW_ROW)
                    or _scan_arrows(width, height, get_pixel, TOON_ARROW_ROW))
         return BattleScreen("target", targets=tuple(targets))
     if ui.is_visible(WAITING, width, height, get_pixel):
-        return BattleScreen("waiting")
+        return BattleScreen("waiting", **_read_choices(width, height, get_pixel))
     if ui.is_visible(RUN_CONFIRM, width, height, get_pixel):
         return BattleScreen("confirm_run")
     return BattleScreen()
@@ -173,14 +319,15 @@ DIRECTIONS = {"up": (-1, 0), "down": (1, 0), "left": (0, -1), "right": (0, 1)}
 BATTLE_ACTIONS = {
     "up": "move the highlight up", "down": "move the highlight down",
     "left": "move the highlight left", "right": "move the highlight right",
-    "select": "click the highlighted gag or target, or Yes when asked if you want to run",
+    "select": "click the highlighted gag, target or trunk item, or OK when asked if you want to run",
     "back": "go back (on the target, waiting and trunk screens), or cancel running",
-    "run": "run from the battle", "trunk": "open the trunk", "pass": "pass this turn",
+    "run": "run from the battle", "trunk": "open or close the trunk", "pass": "pass this turn",
+    "teammates": "switch between your gags and hovering teammates' gag choices (left/right to pick one)",
 }
 
 
 def default_battle_bindings() -> Bindings:
-    press = {"a": "select", "b": "back", "x": "trunk", "y": "pass"}
+    press = {"a": "select", "b": "back", "x": "trunk", "y": "pass", "lb": "teammates"}
     for direction in DIRECTIONS:
         press[f"dpad_{direction}"] = direction
         press[f"ls_{direction}"] = direction
@@ -208,6 +355,28 @@ def move(usable, pos: tuple[int, int], direction: str) -> tuple[int, int]:
     return pos
 
 
+_STEPS = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}
+
+
+def step(items, current: ui.UIPoint, direction: str):
+    """The closest item in a direction, favoring ones straight ahead."""
+    dx, dy = _STEPS[direction]
+    best, best_cost = None, None
+    for item in items:
+        ax, ay = item.point.x - current.x, item.point.y - current.y
+        along = ax * dx + ay * dy
+        if along <= 0.01:
+            continue
+        cost = along + 2 * (abs(ax * dy) + abs(ay * dx))
+        if best_cost is None or cost < best_cost:
+            best, best_cost = item, cost
+    return best
+
+
+def _distance(a: ui.UIPoint, b: ui.UIPoint) -> float:
+    return abs(a.x - b.x) + abs(a.y - b.y)
+
+
 def nearest_usable(usable, pos: tuple[int, int]) -> tuple[int, int] | None:
     r, c = pos
     cells = [(rr, cc) for rr in range(len(usable)) for cc in range(LEVELS) if usable[rr][cc]]
@@ -219,9 +388,10 @@ def nearest_usable(usable, pos: tuple[int, int]) -> tuple[int, int] | None:
 
 @dataclass(frozen=True)
 class PointerCommand:
-    kind: str  # "hover" (park the cursor) or "click"
+    kind: str  # "hover" (park the cursor), "click", or "scroll" (turn the wheel there)
     point: ui.UIPoint
     name: str
+    notches: int = 0  # scroll: positive is up
 
 
 @dataclass
@@ -245,6 +415,16 @@ class BattleMapper:
         # Remembered across rounds and battles.
         self.gag: tuple[int, int] = DEFAULT_GAG
         self.target_index = 0
+        self.trunk_item: Item | None = None
+        self.teammate: int | None = None  # which teammate's choice is hovered, if any
+        # "?" circles seen while picking: one of them is yours.
+        self._maybe_mine: frozenset[ui.UIPoint] = frozenset()
+        self._mine: ui.UIPoint | None = None
+        # The target arrows seen on this "which cog/toon?" screen. The hovered arrow
+        # lights up and can drop out of a read, so a shorter read is ignored.
+        self._targets: tuple[ui.UIPoint, ...] = ()
+        # While scrolling the SOS list: (+1 up / -1 down, where the highlight was, extra notches left).
+        self._scrolling: tuple[int, ui.UIPoint, int] | None = None
         self._kind: str | None = None
         self._settle_until = 0.0
 
@@ -263,6 +443,14 @@ class BattleMapper:
 
     def update(self, buttons: frozenset[str], now: float, screen: BattleScreen) -> list[PointerCommand]:
         _, fired = self._actions.update(buttons & self.buttons, now)
+        if screen.kind == "picker":
+            self._maybe_mine = frozenset(screen.unpicked)
+            self._mine = None
+        elif screen.kind == "waiting" and self._mine is None:
+            changed = [p for p in screen.teammates if p in self._maybe_mine]
+            if len(changed) == 1:
+                # Remembered, so it's still skipped after teammates pick too.
+                self._mine = changed[0]
         if now < self._settle_until:
             # Right after a click the old screen may still show; wait for the next one.
             return []
@@ -270,12 +458,34 @@ class BattleMapper:
         commands: list[PointerCommand] = []
         if screen.kind != self._kind:
             self._kind = screen.kind
-            commands += self._on_appear(screen)
+            commands += self._on_appear(screen, now)
+        if screen.kind == "target" and len(screen.targets) > len(self._targets):
+            self._targets = screen.targets
+        if screen.kind == "waiting" and self.teammate is None and self._others(screen):
+            # Nothing to pick while waiting, so look at what teammates picked
+            # (also once the first of them picks).
+            self.teammate = 0
+            commands.append(self._hover_teammate(screen))
         for action in fired:
             commands += self._run(action, screen, now)
         return commands
 
-    def _on_appear(self, screen: BattleScreen) -> list[PointerCommand]:
+    def _others(self, screen: BattleScreen) -> tuple[ui.UIPoint, ...]:
+        """Teammates' choices to hover. While waiting, your own circle shows your gag
+        too: it's the one "?" from the picker that changed first, if only one did."""
+        if screen.kind != "waiting":
+            return screen.teammates
+        return tuple(p for p in screen.teammates if p != self._mine)
+
+    def _on_appear(self, screen: BattleScreen, now: float) -> list[PointerCommand]:
+        if self._scrolling is not None:
+            if screen.kind == "trunk":
+                return self._after_scroll(screen, now)
+            self._scrolling = None
+        if screen.kind == "trunk":
+            return self._appear_trunk(screen)
+        if screen.kind in ("picker", "waiting"):
+            self.teammate = None
         if screen.kind == "picker":
             pos = nearest_usable(screen.usable, self.gag)
             if pos is None:
@@ -284,10 +494,90 @@ class BattleMapper:
             return [self._hover_gag()]
         if screen.kind == "confirm_run":
             return [PointerCommand("hover", RUN_YES, "run: yes")]
-        if screen.kind == "target" and screen.targets:
-            self.target_index = min(self.target_index, len(screen.targets) - 1)
-            return [PointerCommand("hover", screen.targets[self.target_index], f"target {self.target_index + 1}")]
+        if screen.kind == "target":
+            self._targets = screen.targets
+            if screen.targets:
+                self.target_index = min(self.target_index, len(screen.targets) - 1)
+                return [self._hover_target()]
         return []
+
+    def _appear_trunk(self, screen: BattleScreen) -> list[PointerCommand]:
+        content = [i for i in screen.items if not i.tab]
+        last = self.trunk_item
+        if last is not None and last.tab:
+            # After switching tabs, stay on the tab list.
+            item = next((i for i in screen.items if i.name == last.name), None)
+        elif last is not None and content:
+            item = min(content, key=lambda i: _distance(i.point, last.point))
+        else:
+            item = content[0] if content else next(
+                (i for i in screen.items if i.name == f"tab {screen.tab}"), None)
+        return self._hover_trunk(item) if item else []
+
+    def _scroll(self, direction: int, notches: int, now: float) -> list[PointerCommand]:
+        self._settle_until = now + self.timing.settle_seconds
+        self._kind = None
+        return [PointerCommand("scroll", SOS_LIST, "SOS list", direction * notches)]
+
+    def _after_scroll(self, screen: BattleScreen, now: float) -> list[PointerCommand]:
+        direction, origin, extra = self._scrolling
+        # The first scroll moves the highlighted card's row most of a row away, so a
+        # card near or past where it was is the row that was hidden. If nothing
+        # moved (the end of the list), that's the same card, and scrolling stops.
+        cards = [i for i in screen.items if not i.tab
+                 and (i.point.y < origin.y + _SOS_ROW_STEP / 4 if direction > 0
+                      else i.point.y > origin.y - _SOS_ROW_STEP / 4)]
+        if not cards and extra > 0:
+            self._scrolling = (direction, origin, extra - 1)
+            return self._scroll(direction, 1, now)
+        self._scrolling = None
+        if not cards:
+            # The end of the list (or a row with no usable cards).
+            return self._appear_trunk(screen)
+        return self._hover_trunk(min(cards, key=lambda i: _distance(i.point, origin)))
+
+    def _hover_trunk(self, item: Item) -> list[PointerCommand]:
+        self.trunk_item = item
+        return [PointerCommand("hover", item.point, item.name)]
+
+    def _trunk_move(self, screen: BattleScreen, direction: str, now: float) -> list[PointerCommand]:
+        current = self.trunk_item
+        if current is None:
+            return self._appear_trunk(screen)
+        # The hovered item may light up and drop out of a read; step from where it was anyway.
+        if direction in ("up", "down"):
+            # Up and down stay within the tab list or within the tab's contents.
+            pool = [i for i in screen.items if i.tab == current.tab]
+        else:
+            pool = list(screen.items)
+        item = step(pool, current.point, direction)
+        if item is not None:
+            return self._hover_trunk(item)
+        if screen.tab == "SOS" and not current.tab and direction in ("up", "down"):
+            # Past the top or bottom of the visible cards: scroll the next row into view.
+            sign = 1 if direction == "up" else -1
+            self._scrolling = (sign, current.point, SOS_EXTRA_NOTCHES)
+            return self._scroll(sign, SOS_SCROLL_NOTCHES, now)
+        return []
+
+    def _hover_teammate(self, screen: BattleScreen) -> PointerCommand:
+        others = self._others(screen)
+        self.teammate = min(self.teammate, len(others) - 1)
+        return PointerCommand("hover", others[self.teammate], f"teammate gag {self.teammate + 1}")
+
+    def _move_teammate(self, screen: BattleScreen, action: str) -> list[PointerCommand]:
+        if action not in ("left", "right") or not self._others(screen):
+            return []
+        if self.teammate is None:
+            self.teammate = 0
+        else:
+            step = -1 if action == "left" else 1
+            self.teammate = max(0, min(len(self._others(screen)) - 1, self.teammate + step))
+        return [self._hover_teammate(screen)]
+
+    def _hover_target(self) -> PointerCommand:
+        self.target_index = min(self.target_index, len(self._targets) - 1)
+        return PointerCommand("hover", self._targets[self.target_index], f"target {self.target_index + 1}")
 
     def _hover_gag(self) -> PointerCommand:
         r, c = self.gag
@@ -301,10 +591,24 @@ class BattleMapper:
 
     def _run(self, action: str, screen: BattleScreen, now: float) -> list[PointerCommand]:
         if screen.kind == "picker":
+            if self.teammate is not None:
+                # Hovering teammates' choices: left/right pick one; the teammates
+                # button, A or B go back to your own gags.
+                if action in ("teammates", "select", "back") or not screen.teammates:
+                    self.teammate = None
+                    return [self._hover_gag()]
+                return self._move_teammate(screen, action)
+            if action == "teammates":
+                if not screen.teammates:
+                    return []
+                self.teammate = 0
+                return [self._hover_teammate(screen)]
             if action in DIRECTIONS:
                 self.gag = move(screen.usable, self.gag, action)
                 return [self._hover_gag()]
-            elif action == "select" and screen.usable[self.gag[0]][self.gag[1]]:
+            elif action == "select":
+                # No usable check: the highlight only ever lands on usable gags, and the
+                # hovered gag can look different from what the reader expects.
                 r, c = self.gag
                 return self._click(cell(r, c), f"{TRACKS[r]} level {c + 1}", now)
             elif action == "run":
@@ -314,22 +618,33 @@ class BattleMapper:
             elif action == "pass":
                 return self._click(PASS, "pass", now)
         elif screen.kind == "target":
-            if action in ("left", "right") and screen.targets:
+            if action in ("left", "right") and self._targets:
+                # Wraps around at either end.
                 step = -1 if action == "left" else 1
-                self.target_index = max(0, min(len(screen.targets) - 1, self.target_index + step))
-                return [PointerCommand("hover", screen.targets[self.target_index], f"target {self.target_index + 1}")]
-            if action == "select" and screen.targets:
-                return self._click(screen.targets[self.target_index], f"target {self.target_index + 1}", now)
+                self.target_index = (self.target_index + step) % len(self._targets)
+                return [self._hover_target()]
+            if action == "select" and self._targets:
+                self.target_index = min(self.target_index, len(self._targets) - 1)
+                return self._click(self._targets[self.target_index], f"target {self.target_index + 1}", now)
             if action in ("back", "run"):
                 return self._click(TARGET_BACK, "back", now)
-        elif screen.kind == "trunk" and action in ("back", "run", "trunk"):
-            # The trunk button closes the trunk too.
-            return self._click(TRUNK, "close trunk", now)
+        elif screen.kind == "trunk":
+            if action in DIRECTIONS:
+                return self._trunk_move(screen, action, now)
+            if action == "select" and self.trunk_item is not None:
+                return self._click(self.trunk_item.point, self.trunk_item.name, now)
+            if action == "pass":
+                return self._click(PASS, "pass", now)
+            if action in ("back", "run", "trunk"):
+                # The trunk button closes the trunk too.
+                return self._click(TRUNK, "close trunk", now)
         elif screen.kind == "confirm_run":
             if action == "select":
                 return self._click(RUN_YES, "run: yes", now)
             if action == "back":
                 return self._click(RUN_NO, "run: no", now)
-        elif screen.kind == "waiting" and action in ("back", "run"):
-            return self._click(WAITING_BACK, "back", now)
+        elif screen.kind == "waiting":
+            if action in ("back", "run"):
+                return self._click(WAITING_BACK, "back", now)
+            return self._move_teammate(screen, action)
         return []

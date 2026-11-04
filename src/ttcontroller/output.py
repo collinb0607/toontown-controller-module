@@ -12,6 +12,8 @@ INPUT_KEYBOARD = 1
 MOUSEEVENTF_MOVE = 0x0001
 MOUSEEVENTF_LEFTDOWN = 0x0002
 MOUSEEVENTF_LEFTUP = 0x0004
+MOUSEEVENTF_WHEEL = 0x0800
+WHEEL_DELTA = 120
 MOUSEEVENTF_VIRTUALDESK = 0x4000
 MOUSEEVENTF_ABSOLUTE = 0x8000
 SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN = 76, 77, 78, 79
@@ -77,8 +79,8 @@ def send_key(name: str, down: bool) -> None:
     _user32.SendInput(1, ctypes.byref(event), ctypes.sizeof(INPUT))
 
 
-def _send_mouse(flags: int, dx: int = 0, dy: int = 0) -> None:
-    event = INPUT(type=INPUT_MOUSE, u=_INPUTUNION(mi=MOUSEINPUT(dx, dy, 0, flags, 0, 0)))
+def _send_mouse(flags: int, dx: int = 0, dy: int = 0, data: int = 0) -> None:
+    event = INPUT(type=INPUT_MOUSE, u=_INPUTUNION(mi=MOUSEINPUT(dx, dy, data, flags, 0, 0)))
     _user32.SendInput(1, ctypes.byref(event), ctypes.sizeof(INPUT))
 
 
@@ -98,6 +100,13 @@ def left_button(down: bool) -> None:
     _send_mouse(MOUSEEVENTF_LEFTDOWN if down else MOUSEEVENTF_LEFTUP)
 
 
+def wheel(notches: int) -> None:
+    """Turn the mouse wheel: positive scrolls up, negative down. Each notch is
+    its own event, since games may count events rather than the distance."""
+    for _ in range(abs(notches)):
+        _send_mouse(MOUSEEVENTF_WHEEL, data=WHEEL_DELTA if notches > 0 else -WHEEL_DELTA)
+
+
 def cursor_pos() -> tuple[int, int]:
     point = wintypes.POINT()
     _user32.GetCursorPos(ctypes.byref(point))
@@ -109,29 +118,33 @@ class MouseClicker:
 
     click() clicks a point and, by default, puts the cursor back where it was.
     hover() just parks the cursor on a point (the battle highlight).
+    scroll() parks the cursor on a point and turns the mouse wheel there.
     The steps are spread over a few frames so the game sees the cursor arrive
     on the button before the click, like a real mouse.
     """
 
     STEP_SECONDS = 0.03
 
-    def __init__(self, move=move_mouse, button=left_button, get_pos=cursor_pos):
-        self._move, self._button, self._get_pos = move, button, get_pos
-        # (x, y, click, restore)
-        self._queue: deque[tuple[int, int, bool, bool]] = deque()
+    def __init__(self, move=move_mouse, button=left_button, get_pos=cursor_pos, wheel=wheel):
+        self._move, self._button, self._get_pos, self._wheel = move, button, get_pos, wheel
+        # (x, y, click, restore, wheel notches)
+        self._queue: deque[tuple[int, int, bool, bool, int]] = deque()
         self._step = 0
         self._next_at = 0.0
-        self._job: tuple[int, int, bool, bool] | None = None
+        self._job: tuple[int, int, bool, bool, int] | None = None
         self._restore_to: tuple[int, int] | None = None
 
     def click(self, x: int, y: int, restore: bool = True) -> None:
-        self._queue.append((x, y, True, restore))
+        self._queue.append((x, y, True, restore, 0))
+
+    def scroll(self, x: int, y: int, notches: int) -> None:
+        self._queue.append((x, y, False, False, notches))
 
     def hover(self, x: int, y: int) -> None:
         # A newer hover replaces any hover still waiting, so fast stick input doesn't lag behind.
-        if self._queue and not self._queue[-1][2]:
+        if self._queue and not self._queue[-1][2] and not self._queue[-1][4]:
             self._queue.pop()
-        self._queue.append((x, y, False, False))
+        self._queue.append((x, y, False, False, 0))
 
     @property
     def busy(self) -> bool:
@@ -148,12 +161,16 @@ class MouseClicker:
         if now < self._next_at:
             return
 
-        x, y, click, _ = self._job
+        x, y, click, _, notches = self._job
         if self._step == 0:
             self._move(x, y)
-            if not click:
+            if not click and not notches:
                 self._job = None
                 return
+        elif notches:
+            self._wheel(notches)
+            self._job = None
+            return
         elif self._step == 1:
             self._button(True)
         elif self._step == 2:

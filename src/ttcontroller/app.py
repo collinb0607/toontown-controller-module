@@ -74,7 +74,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     last_buttons = frozenset()
     foreground = ForegroundWatcher()
 
-    def point(kind: str, target, name: str, view, restore: bool = True) -> None:
+    def point(kind: str, target, name: str, view, restore: bool = True, notches: int = 0) -> None:
         """Hover or click an on-screen point (a ui.UIPoint) in the TTR window."""
         if view is None:
             return
@@ -85,6 +85,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
             return
         if kind == "hover":
             clicker.hover(x, y)
+        elif kind == "scroll":
+            clicker.scroll(x, y, notches)
         else:
             clicker.click(x, y, restore=restore)
 
@@ -153,7 +155,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     buttons = controller_buttons(state, config.timing.stick_button_threshold)
                     for command in battle_mapper.update(buttons, now, battle_screen):
                         # Battle clicks leave the cursor on the button, where the highlight is.
-                        point(command.kind, command.point, command.name, view, restore=False)
+                        point(command.kind, command.point, command.name, view, restore=False,
+                              notches=command.notches)
                 else:
                     battle_mapper.reset_buttons()
                 # In battle, the battle bindings own their buttons and the left stick doesn't walk.

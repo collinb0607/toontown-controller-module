@@ -33,6 +33,23 @@ def test_hover_and_click_without_restore():
     assert events == [("move", 2, 2), ("move", 3, 3), ("down",), ("up",)]
 
 
+def test_scroll_moves_then_turns_wheel():
+    events = []
+    clicker = MouseClicker(
+        move=lambda x, y: events.append(("move", x, y)),
+        button=lambda down: events.append(("down" if down else "up",)),
+        get_pos=lambda: (5, 6),
+        wheel=lambda n: events.append(("wheel", n)),
+    )
+    clicker.scroll(7, 8, -1)
+    clicker.hover(9, 9)  # doesn't replace the scroll
+    t = 0.0
+    while clicker.busy:
+        clicker.update(t)
+        t += 0.01
+    assert events == [("move", 7, 8), ("wheel", -1), ("move", 9, 9)]
+
+
 def make():
     sent = []
     return KeyboardOutput(lambda name, down: sent.append((name, down))), sent
