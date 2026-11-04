@@ -112,7 +112,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     next_battle_check = 0.0
     last_battle_seen = -BATTLE_GRACE_SECONDS
     last_shop_seen = -BATTLE_GRACE_SECONDS
-    was_in_speedchat = False
+    was_in_menu = False
     log("Running. Press Ctrl+C to quit." + (" (dry run: keys are printed, not sent)" if dry_run else ""))
 
     try:
@@ -188,11 +188,11 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     if npc.kind != npc_screen.kind and (dry_run or debug):
                         log(f"NPC screen: {npc.kind or 'none'}")
                     npc_screen = npc
-                    menus = screen.kind is None and shop.kind is None and npc.kind != "tasks"
-                    # Speedchat works in battle too, for the unite hotkey.
+                    # Speedchat and the friends list work in battle too.
+                    menus = shop.kind is None and npc.kind != "tasks"
                     speedchat = (read_speedchat(frame.width, frame.height, frame.get_pixel,
                                                 look_for_unite=speedchat_mapper.wants_unite)
-                                 if shop.kind is None and npc.kind != "tasks" else SpeedchatScreen())
+                                 if menus else SpeedchatScreen())
                     if speedchat.is_open != speedchat_screen.is_open and (dry_run or debug):
                         log(f"Speedchat menu: {'open' if speedchat.is_open else 'closed'}")
                     speedchat_screen = speedchat
@@ -223,9 +223,10 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 else:
                     npc_mapper.reset_buttons()
                 # Speedchat first when both are open: it closes as soon as a phrase is said.
-                # It's above battles too, which pause while it's open.
+                # Both are above battles too, which pause while one is open.
                 in_speedchat = not (in_shop or in_npc) and speedchat_screen.is_open
-                in_friends = not (in_battle or in_shop or in_npc or in_speedchat) and friends_screen.kind is not None
+                in_friends = not (in_shop or in_npc or in_speedchat) and friends_screen.kind is not None
+                in_menu = in_speedchat or in_friends
                 for active, menu_mapper, menu_screen in ((in_speedchat, speedchat_mapper, speedchat_screen),
                                                          (in_friends, friends_mapper, friends_screen)):
                     if active:
@@ -235,10 +236,10 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                                   delay=command.delay)
                     else:
                         menu_mapper.reset_buttons()
-                if in_battle and was_in_speedchat and not in_speedchat:
+                if in_battle and was_in_menu and not in_menu:
                     battle_mapper.rehover()
-                was_in_speedchat = in_speedchat
-                if in_battle and not in_speedchat:
+                was_in_menu = in_menu
+                if in_battle and not in_menu:
                     buttons = controller_buttons(state, config.timing.stick_button_threshold)
                     for command in battle_mapper.update(buttons, now, battle_screen):
                         # Battle clicks leave the cursor on the button, where the highlight is.
@@ -251,6 +252,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     blocked = frozenset(battle_mapper.buttons)
                     if in_speedchat:
                         blocked |= speedchat_mapper.buttons
+                    elif in_friends:
+                        blocked |= friends_mapper.buttons
                 elif in_shop:
                     blocked = frozenset(shop_mapper.buttons)
                 elif in_npc:
