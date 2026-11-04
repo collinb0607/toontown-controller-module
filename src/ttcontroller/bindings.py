@@ -53,14 +53,30 @@ class ButtonActions:
         self.repeat = repeat
         self.reset()
 
-    def reset(self) -> None:
+    def reset(self, ignore_held: bool = False) -> None:
+        """Forget all button state. With ignore_held, buttons held at the next update
+        do nothing until released, so letting go of one can't look like a fresh tap."""
         self._prev: frozenset[str] = frozenset()
         self._down_at: dict[str, float] = {}
         self._hold_fired: set[str] = set()
         self._next_repeat: dict[str, float] = {}
+        self._ignored: set[str] = set()
+        self._ignore_held_next = ignore_held
+
+    def ignore_held(self) -> None:
+        """Make the buttons held right now do nothing until they're released."""
+        self._ignored |= self._prev
+        self._prev = frozenset()
+        self._down_at.clear()
+        self._next_repeat.clear()
 
     def update(self, buttons: frozenset[str], now: float) -> tuple[set[str], list[str]]:
         """Return (actions to hold right now, one-shot actions that fired this frame)."""
+        if self._ignore_held_next:
+            self._ignore_held_next = False
+            self._ignored |= buttons
+        self._ignored &= buttons  # a released button counts again
+        buttons = buttons - self._ignored
         pressed = buttons - self._prev
         released = self._prev - buttons
         self._prev = buttons

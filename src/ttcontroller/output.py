@@ -127,24 +127,25 @@ class MouseClicker:
 
     def __init__(self, move=move_mouse, button=left_button, get_pos=cursor_pos, wheel=wheel):
         self._move, self._button, self._get_pos, self._wheel = move, button, get_pos, wheel
-        # (x, y, click, restore, wheel notches)
-        self._queue: deque[tuple[int, int, bool, bool, int]] = deque()
+        # (x, y, click, restore, wheel notches, seconds to wait first)
+        self._queue: deque[tuple[int, int, bool, bool, int, float]] = deque()
         self._step = 0
         self._next_at = 0.0
-        self._job: tuple[int, int, bool, bool, int] | None = None
+        self._job: tuple[int, int, bool, bool, int, float] | None = None
         self._restore_to: tuple[int, int] | None = None
 
-    def click(self, x: int, y: int, restore: bool = True) -> None:
-        self._queue.append((x, y, True, restore, 0))
+    def click(self, x: int, y: int, restore: bool = True, delay: float = 0.0) -> None:
+        """delay waits after the previous step, e.g. for a menu the last click opens."""
+        self._queue.append((x, y, True, restore, 0, delay))
 
     def scroll(self, x: int, y: int, notches: int) -> None:
-        self._queue.append((x, y, False, False, notches))
+        self._queue.append((x, y, False, False, notches, 0.0))
 
     def hover(self, x: int, y: int) -> None:
         # A newer hover replaces any hover still waiting, so fast stick input doesn't lag behind.
         if self._queue and not self._queue[-1][2] and not self._queue[-1][4]:
             self._queue.pop()
-        self._queue.append((x, y, False, False, 0))
+        self._queue.append((x, y, False, False, 0, 0.0))
 
     @property
     def busy(self) -> bool:
@@ -157,11 +158,11 @@ class MouseClicker:
             self._job = self._queue.popleft()
             self._restore_to = self._get_pos() if self._job[3] else None
             self._step = 0
-            self._next_at = now
+            self._next_at = now + self._job[5]
         if now < self._next_at:
             return
 
-        x, y, click, _, notches = self._job
+        x, y, click, _, notches, _ = self._job
         if self._step == 0:
             self._move(x, y)
             if not click and not notches:

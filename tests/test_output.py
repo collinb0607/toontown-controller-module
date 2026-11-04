@@ -50,6 +50,29 @@ def test_scroll_moves_then_turns_wheel():
     assert events == [("move", 7, 8), ("wheel", -1), ("move", 9, 9)]
 
 
+def test_click_delay_waits_after_the_previous_click():
+    events = []
+    clicker = MouseClicker(
+        move=lambda x, y: events.append(("move", x, y)),
+        button=lambda down: events.append(("down" if down else "up",)),
+        get_pos=lambda: (5, 6),
+    )
+    clicker.click(1, 1, restore=False)
+    clicker.click(2, 2, restore=False, delay=0.1)
+    times = {}
+    t = 0.0
+    while clicker.busy:
+        before = len(events)
+        clicker.update(t)
+        if len(events) > before and events[-1] == ("move", 2, 2):
+            times["second"] = t
+        if len(events) > before and events[-1] == ("up",) and "first_up" not in times:
+            times["first_up"] = t
+        t = round(t + 0.01, 2)
+    assert events == [("move", 1, 1), ("down",), ("up",), ("move", 2, 2), ("down",), ("up",)]
+    assert times["second"] - times["first_up"] >= 0.1 - 1e-9
+
+
 def make():
     sent = []
     return KeyboardOutput(lambda name, down: sent.append((name, down))), sent

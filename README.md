@@ -14,7 +14,7 @@ Working now:
 - **Overworld hotkeys:** shticker book, options, gags, tasks, map, camera.
 - **Friends list and speedchat:** open and close them with one button. The module checks the screen to see what's open, then clicks the right on-screen button and puts your mouse back.
 - **Battles:** move a highlight across your gags with the D-pad or stick, pick a cog or toon, hover teammates' gags (LB, then left/right), pass, and hold B to run (A/B answer the "are you sure" prompt). Your last gag stays highlighted between rounds and battles.
-- **Trunk:** SOS cards (scrolling the list as you go), pink slips, remotes and doodle tricks, all with the D-pad or stick.
+- **Trunk:** SOS cards (scrolling the list as you go, and filtering them from the dropdown or with L3), pink slips, remotes and doodle tricks, all with the D-pad or stick.
 - **Remapping:** a config file lets you rebind any button.
 - Uses your TTR keybinds automatically, works at any window size, and never blocks your keyboard or mouse.
 
@@ -51,7 +51,7 @@ Working now:
 | Gag picker | Stick/D-pad move highlight · A select · LB hover teammates' gags (left/right to choose, LB again to return) · X trunk · Y pass · hold B run |
 | Which cog / toon? | Stick/D-pad left/right choose · A select · B back |
 | Waiting for other toons | Hovers teammates' gags automatically · Stick/D-pad left/right choose · B back (change your gag) |
-| Trunk | Stick/D-pad move between tabs and items · A use · Y pass · B or X close |
+| Trunk | Stick/D-pad move between tabs and items · A use · L3 next SOS filter · LB hover teammates' gags · Y pass · B or X close |
 | Run prompt | A OK · B cancel |
 
 Planned:

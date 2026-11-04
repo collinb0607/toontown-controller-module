@@ -260,7 +260,8 @@ def test_trunk_items_lead_to_cog_choice(name):
 
 
 def content(screen):
-    return [i.name for i in screen.items if not i.tab]
+    """What's on the open tab, not counting the SOS filter dropdown."""
+    return [i.name for i in screen.items if not i.tab and i.name != "SOS filter"]
 
 
 @pytest.mark.parametrize("name", ["battle_trunk_1920x1009", "battle_trunk_1433x531"])
@@ -441,3 +442,135 @@ def test_sos_finds_every_call_button_in_a_short_row():
     m.trunk_item = next(i for i in sos.items if i.name.startswith("SOS card 3"))
     m.update(frozenset(), 0.0, sos)
     assert press(m, sos, 1.0, "dpad_right")[-1].name.startswith("SOS card 4")
+
+
+
+# --- SOS filter ---
+
+@pytest.mark.parametrize("name", ["battle_trunk_sos_filter_hover_1920x1009", "battle_trunk_sos_more_1156x326",
+                                  "battle_trunk_sos_more_406x885"])
+def test_sos_filter_list_open(name):
+    screen = replay(name)
+    assert screen.tab == "SOS" and screen.filter_open
+    assert content(screen) == [f"filter {f}" for f in battle.SOS_FILTERS]
+
+
+@pytest.mark.parametrize("name,can_scroll", [
+    ("battle_trunk_1920x1009", (False, True)),  # at the top
+    ("battle_trunk_sos_more_1920x1009", (True, True)),  # in the middle
+    ("battle_trunk_sos_five_1920x1009", (True, False)),  # at the bottom
+    ("battle_trunk_sos_filtered_1920x1009", (False, False)),  # nothing to scroll
+])
+def test_sos_scrollbar(name, can_scroll):
+    assert replay(name).can_scroll == can_scroll
+
+
+def test_up_from_the_top_row_goes_to_the_dropdown_and_a_opens_it():
+    sos = replay("battle_trunk_1920x1009")
+    m = BattleMapper()
+    m.update(frozenset(), 0.0, sos)
+    assert press(m, sos, 1.0, "dpad_up")[-1].name == "SOS filter"  # already at the top: no scroll
+    assert [(c.kind, c.point) for c in press(m, sos, 2.0, "a")] == [("click", battle.SOS_FILTER)]
+    opened = replay("battle_trunk_sos_filter_hover_1920x1009")
+    assert [c.name for c in m.update(frozenset(), 3.0, opened)] == ["filter All"]
+    assert press(m, opened, 4.0, "dpad_down")[-1].name == "filter Restock"
+    press(m, opened, 5.0, "dpad_down")
+    assert [c.name for c in press(m, opened, 6.0, "a")] == ["filter Toon-Up"]
+    assert m.sos_filter == 2
+    # The filtered list: the first card is highlighted.
+    assert [c.name for c in m.update(frozenset(), 7.0, sos)] == ["SOS card 1 at -0.04"]
+
+
+def test_up_from_the_top_row_scrolls_when_the_list_can():
+    middle = replay("battle_trunk_sos_more_1920x1009")
+    m = BattleMapper()
+    m.trunk_item = next(i for i in middle.items if i.name == "SOS card 1 at -0.17")
+    m.update(frozenset(), 0.0, middle)
+    assert [(c.kind, c.notches) for c in press(m, middle, 1.0, "dpad_up")] == [("scroll", battle.SOS_SCROLL_NOTCHES)]
+
+
+def test_b_closes_the_filter_list_without_changing_it():
+    opened = replay("battle_trunk_sos_filter_hover_1920x1009")
+    m = BattleMapper()
+    m.update(frozenset(), 0.0, opened)
+    press(m, opened, 1.0, "dpad_down")
+    assert [c.point for c in press(m, opened, 2.0, "b")] == [battle.FILTER_CLOSE]
+    assert m.sos_filter == 0
+    sos = replay("battle_trunk_1920x1009")
+    assert [c.name for c in m.update(frozenset(), 3.0, sos)] == ["SOS filter"]
+
+
+def test_l3_opens_the_list_and_clicks_the_next_filter_at_once():
+    sos = replay("battle_trunk_1920x1009")
+    m = BattleMapper()
+    m.update(frozenset(), 0.0, sos)
+    cmds = press(m, sos, 1.0, "l3")
+    assert [(c.kind, c.name) for c in cmds] == [("click", "SOS filter"), ("click", "filter Restock")]
+    assert cmds[1].delay == battle.FILTER_OPEN_SECONDS
+    # Clicks the option where the list draws it.
+    opened = replay("battle_trunk_sos_filter_hover_1920x1009")
+    assert cmds[1].point == next(i.point for i in opened.items if i.name == "filter Restock")
+    assert [c.name for c in m.update(frozenset(), 2.0, sos)] == ["SOS card 1 at -0.04"]
+    assert press(m, sos, 3.0, "l3")[-1].name == "filter Toon-Up"
+    m.sos_filter = len(battle.SOS_FILTERS) - 1
+    assert press(m, sos, 4.0, "l3")[-1].name == "filter All"  # wraps
+
+
+def test_empty_filter_highlights_the_dropdown():
+    empty = replay("battle_trunk_sos_filtered_1920x1009")
+    assert content(empty) == []
+    m = BattleMapper()
+    m._filtered = True
+    assert [c.name for c in m.update(frozenset(), 0.0, empty)] == ["SOS filter"]
+    assert press(m, empty, 1.0, "dpad_left")[-1].name.startswith("tab ")
+
+
+def test_lb_hovers_teammates_in_the_trunk():
+    sos = replay("battle_trunk_1920x1009")
+    mates = (battle._center(-0.3, 0.412), battle._center(0.0, 0.412))
+    screen = BattleScreen("trunk", tab="SOS", items=sos.items, teammates=mates)
+    m = BattleMapper()
+    m.update(frozenset(), 0.0, screen)
+    assert press(m, screen, 1.0, "lb")[-1].point == mates[0]
+    assert press(m, screen, 2.0, "dpad_right")[-1].point == mates[1]
+    assert press(m, screen, 3.0, "lb")[-1].name == "SOS card 1 at -0.04"  # back where you were
+
+
+
+def test_releasing_b_after_the_run_hold_never_cancels():
+    m = BattleMapper()
+    m.update(frozenset(), 0.0, PICKER)
+    clicks = []
+    for i in range(70):  # hold B: runs at 0.5s
+        clicks += [c.point for c in m.update(frozenset({"b"}), 1.0 + i * 0.01, PICKER) if c.kind == "click"]
+    # Button tracking restarts while B is still held (e.g. the panel blinked out).
+    m.reset_buttons()
+    clicks += [c.point for c in m.update(frozenset({"b"}), 1.75, BattleScreen())]
+    clicks += [c.point for c in m.update(frozenset({"b"}), 1.8, CONFIRM) if c.kind == "click"]
+    clicks += [c.point for c in m.update(frozenset(), 1.85, CONFIRM) if c.kind == "click"]  # let go
+    assert clicks == [RUN]
+    # A real B press afterwards does cancel.
+    assert [c.point for c in press(m, CONFIRM, 2.0, "b")] == [RUN_NO]
+
+
+def test_b_still_held_when_the_prompt_appears_needs_a_new_press():
+    m = BattleMapper()
+    m.update(frozenset(), 0.0, PICKER)
+    for i in range(60):
+        m.update(frozenset({"b"}), 1.0 + i * 0.01, PICKER)
+    m.update(frozenset({"b"}), 2.0, CONFIRM)  # appears while B is held
+    assert [c for c in m.update(frozenset(), 2.1, CONFIRM) if c.kind == "click"] == []
+
+
+
+def test_l3_relocks_on_the_first_card_even_if_the_list_is_still_open_at_first():
+    sos = replay("battle_trunk_1920x1009")
+    opened = replay("battle_trunk_sos_filter_hover_1920x1009")
+    m = BattleMapper()
+    m.trunk_item = next(i for i in sos.items if i.name == "SOS card 3 at 0.14")
+    m.update(frozenset(), 0.0, sos)
+    press(m, sos, 1.0, "l3")
+    assert m.update(frozenset(), 1.3, sos) == []  # still clicking
+    assert m.update(frozenset(), 2.0, opened) == []  # the list hasn't closed yet
+    assert [c.name for c in m.update(frozenset(), 2.1, sos)] == ["SOS card 1 at -0.04"]
+    assert m.update(frozenset(), 2.2, sos) == []  # just once

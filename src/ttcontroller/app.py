@@ -15,6 +15,9 @@ FRAME_SECONDS = 1 / 120
 SETTINGS_CHECK_SECONDS = 1.0
 # How often to look at the screen for battle panels.
 BATTLE_CHECK_SECONDS = 0.1
+# A battle panel can vanish for a moment (a dialog fading in); stay in battle mode
+# until none has shown for this long.
+BATTLE_GRACE_SECONDS = 0.5
 
 
 def log(message: str) -> None:
@@ -74,7 +77,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     last_buttons = frozenset()
     foreground = ForegroundWatcher()
 
-    def point(kind: str, target, name: str, view, restore: bool = True, notches: int = 0) -> None:
+    def point(kind: str, target, name: str, view, restore: bool = True, notches: int = 0,
+              delay: float = 0.0) -> None:
         """Hover or click an on-screen point (a ui.UIPoint) in the TTR window."""
         if view is None:
             return
@@ -88,12 +92,13 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
         elif kind == "scroll":
             clicker.scroll(x, y, notches)
         else:
-            clicker.click(x, y, restore=restore)
+            clicker.click(x, y, restore=restore, delay=delay)
 
     controller_name = ""  # differs from None so the first poll logs either way
     ttr_focused = None
     next_settings_check = 0.0
     next_battle_check = 0.0
+    last_battle_seen = -BATTLE_GRACE_SECONDS
     log("Running. Press Ctrl+C to quit." + (" (dry run: keys are printed, not sent)" if dry_run else ""))
 
     try:
@@ -150,13 +155,15 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     battle_screen = screen
 
                 state = state or NEUTRAL
-                in_battle = battle_screen.kind is not None
+                if battle_screen.kind is not None:
+                    last_battle_seen = now
+                in_battle = now - last_battle_seen < BATTLE_GRACE_SECONDS
                 if in_battle:
                     buttons = controller_buttons(state, config.timing.stick_button_threshold)
                     for command in battle_mapper.update(buttons, now, battle_screen):
                         # Battle clicks leave the cursor on the button, where the highlight is.
                         point(command.kind, command.point, command.name, view, restore=False,
-                              notches=command.notches)
+                              notches=command.notches, delay=command.delay)
                 else:
                     battle_mapper.reset_buttons()
                 # In battle, the battle bindings own their buttons and the left stick doesn't walk.

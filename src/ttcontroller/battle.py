@@ -67,6 +67,18 @@ _TAB_PROBES_X = (-0.448, -0.444)  # lighter blue behind the open tab
 _SOS_CALL_XS = (-0.3251, -0.1893, -0.0535, 0.0823)  # the CALL button on each column of cards
 _SOS_TOP, _SOS_BOTTOM = -0.18, 0.175  # the visible part of the scrolling card list
 SOS_LIST = _center(-0.12, 0.0)
+# The filter dropdown above the cards. Its options open downward from the button,
+# the first ("All") right over it.
+SOS_FILTERS = ("All", "Restock", "Toon-Up", "Trap", "Lure", "Sound", "Throw", "Squirt", "Drop", "Other")
+SOS_FILTER = _center(0.154, -0.2116)
+_FILTER_OPTION_X, _FILTER_STEP = 0.149, 0.0305
+_FILTER_LIST_X = 0.20  # right of the option names
+# Somewhere on the panel that does nothing: clicking off the open list closes it.
+FILTER_CLOSE = _center(0.0, -0.21)
+_FILTER_ITEM = "SOS filter"
+FILTER_OPEN_SECONDS = 0.1  # for the list to open before clicking an option in it
+# The yellow scrollbar knob, centered here at the top and bottom of its track.
+_SOS_KNOB_X, _SOS_KNOB_TOP, _SOS_KNOB_BOTTOM = 0.2032, -0.16, 0.145
 # A row of cards isn't a whole number of mouse wheel notches, so scroll most of the
 # way, then a notch at a time until the next row is fully in view.
 SOS_SCROLL_NOTCHES = 5
@@ -109,6 +121,15 @@ def is_trunk_blue(c: RGB) -> bool:
 def _is_bright_blue(c: RGB) -> bool:
     """Usable remotes and doodle trick icons."""
     return c[2] > 190 and c[2] - c[0] > 100
+
+
+def _is_list_blue(c: RGB) -> bool:
+    """The open filter list."""
+    return 205 < c[0] < 228 and 232 < c[1] < 252 and c[2] > 245
+
+
+def _is_knob_yellow(c: RGB) -> bool:
+    return c[0] > 220 and c[1] > 220 and c[2] < 130
 
 
 def _is_call_red(c: RGB) -> bool:
@@ -177,7 +198,9 @@ class BattleScreen:
     unpicked: tuple[ui.UIPoint, ...] = ()  # picker, waiting: "?" circles of toons still choosing
     targets: tuple[ui.UIPoint, ...] = ()  # target: one arrow per cog (or toon), left to right
     tab: str | None = None  # trunk: the open tab
-    items: tuple[Item, ...] = ()  # trunk: tabs, then what's usable on the open tab
+    items: tuple[Item, ...] = ()  # trunk: tabs, then what's usable on the open tab (or the filter options)
+    filter_open: bool = False  # trunk: the SOS filter list is open
+    can_scroll: tuple[bool, bool] = (False, False)  # trunk: the SOS list can scroll (up, down)
 
 
 def _scan_arrows(width: int, height: int, get_pixel: PixelReader, row: float) -> list[ui.UIPoint]:
@@ -267,6 +290,19 @@ def _scan_calls(width: int, height: int, get_pixel: PixelReader, x: float) -> li
             if r[0] > top + 1 and r[-1] < bottom - 1 and r[-1] - r[0] >= 0.006 * unit]
 
 
+def _read_knob(width: int, height: int, get_pixel: PixelReader) -> tuple[bool, bool]:
+    """Whether the SOS list can scroll up and down, from where its knob sits.
+    With no knob, everything fits and it can't scroll at all."""
+    unit = min(width, height)
+    px = round(width / 2 + _SOS_KNOB_X * unit)
+    top, bottom = (round(height / 2 + y * unit) for y in (_SOS_TOP, _SOS_BOTTOM))
+    knob = [py for py in range(top, bottom + 1) if _is_knob_yellow(get_pixel(px, py))]
+    if not knob:
+        return False, False
+    middle = ((knob[0] + knob[-1]) / 2 - height / 2) / unit
+    return middle > _SOS_KNOB_TOP, middle < _SOS_KNOB_BOTTOM
+
+
 def _read_trunk(width: int, height: int, get_pixel: PixelReader) -> BattleScreen:
     def looks(point: ui.UIPoint, test) -> bool:
         return test(get_pixel(*point.to_client(width, height)))
@@ -274,10 +310,18 @@ def _read_trunk(width: int, height: int, get_pixel: PixelReader) -> BattleScreen
     items = [Item(f"tab {name}", _center(_TAB_X, y), tab=True) for name, y in TRUNK_TABS]
     tab = next((name for name, y in TRUNK_TABS
                 if all(looks(_center(x, y), is_trunk_blue) for x in _TAB_PROBES_X)), None)
+    choices = _read_choices(width, height, get_pixel)
     if tab == "SOS":
+        options = [_center(_FILTER_OPTION_X, SOS_FILTER.y + i * _FILTER_STEP) for i in range(len(SOS_FILTERS))]
+        if sum(looks(_center(_FILTER_LIST_X, o.y), _is_list_blue) for o in options[1:9]) >= 6:
+            items += [Item(f"filter {name}", o) for name, o in zip(SOS_FILTERS, options)]
+            return BattleScreen("trunk", tab=tab, items=tuple(items), filter_open=True, **choices)
         for col, x in enumerate(_SOS_CALL_XS):
             items += [Item(f"SOS card {col + 1} at {y:.2f}", _center(x, y))
                       for y in _scan_calls(width, height, get_pixel, x)]
+        items.append(Item(_FILTER_ITEM, SOS_FILTER))
+        return BattleScreen("trunk", tab=tab, items=tuple(items),
+                            can_scroll=_read_knob(width, height, get_pixel), **choices)
     elif tab == "remotes":
         for kind, y in _REMOTE_ROWS:
             items += [Item(f"{kind} remote {i + 1}", _center(x, y)) for i, x in enumerate(_REMOTE_XS)
@@ -288,7 +332,7 @@ def _read_trunk(width: int, height: int, get_pixel: PixelReader) -> BattleScreen
             y = _TRICK_ROW0 + i * _TRICK_STEP
             if looks(_center(_TRICK_ICON_X, y), _is_bright_blue):
                 items.append(Item(f"doodle trick {i + 1}", _center(_TRICK_X, y)))
-    return BattleScreen("trunk", tab=tab, items=tuple(items))
+    return BattleScreen("trunk", tab=tab, items=tuple(items), **choices)
 
 
 def read_screen(width: int, height: int, get_pixel: PixelReader) -> BattleScreen:
@@ -323,11 +367,12 @@ BATTLE_ACTIONS = {
     "back": "go back (on the target, waiting and trunk screens), or cancel running",
     "run": "run from the battle", "trunk": "open or close the trunk", "pass": "pass this turn",
     "teammates": "switch between your gags and hovering teammates' gag choices (left/right to pick one)",
+    "sos_filter": "show the next kind of SOS card (All, Restock, Toon-Up, ...)",
 }
 
 
 def default_battle_bindings() -> Bindings:
-    press = {"a": "select", "b": "back", "x": "trunk", "y": "pass", "lb": "teammates"}
+    press = {"a": "select", "b": "back", "x": "trunk", "y": "pass", "lb": "teammates", "l3": "sos_filter"}
     for direction in DIRECTIONS:
         press[f"dpad_{direction}"] = direction
         press[f"ls_{direction}"] = direction
@@ -392,6 +437,7 @@ class PointerCommand:
     point: ui.UIPoint
     name: str
     notches: int = 0  # scroll: positive is up
+    delay: float = 0.0  # click: seconds to wait after the previous command
 
 
 @dataclass
@@ -416,6 +462,8 @@ class BattleMapper:
         self.gag: tuple[int, int] = DEFAULT_GAG
         self.target_index = 0
         self.trunk_item: Item | None = None
+        self.sos_filter = 0  # index into SOS_FILTERS, as last picked through the module
+        self._filtered = False  # just picked a filter: start on the first card
         self.teammate: int | None = None  # which teammate's choice is hovered, if any
         # "?" circles seen while picking: one of them is yours.
         self._maybe_mine: frozenset[ui.UIPoint] = frozenset()
@@ -439,7 +487,9 @@ class BattleMapper:
         return self.bindings.buttons()
 
     def reset_buttons(self) -> None:
-        self._actions.reset()
+        # A button still held when battle input picks up again (like B from a run
+        # hold) needs a fresh press.
+        self._actions.reset(ignore_held=True)
 
     def update(self, buttons: frozenset[str], now: float, screen: BattleScreen) -> list[PointerCommand]:
         _, fired = self._actions.update(buttons & self.buttons, now)
@@ -459,6 +509,9 @@ class BattleMapper:
         if screen.kind != self._kind:
             self._kind = screen.kind
             commands += self._on_appear(screen, now)
+        if screen.kind == "trunk" and self._filtered and not screen.filter_open and not commands:
+            # The list closed after picking a filter (it can still be open at first).
+            commands += self._appear_trunk(screen, now)
         if screen.kind == "target" and len(screen.targets) > len(self._targets):
             self._targets = screen.targets
         if screen.kind == "waiting" and self.teammate is None and self._others(screen):
@@ -483,7 +536,7 @@ class BattleMapper:
                 return self._after_scroll(screen, now)
             self._scrolling = None
         if screen.kind == "trunk":
-            return self._appear_trunk(screen)
+            return self._appear_trunk(screen, now)
         if screen.kind in ("picker", "waiting"):
             self.teammate = None
         if screen.kind == "picker":
@@ -493,6 +546,8 @@ class BattleMapper:
             self.gag = pos
             return [self._hover_gag()]
         if screen.kind == "confirm_run":
+            # B held from the run hold mustn't cancel when it's let go: only a new press does.
+            self._actions.ignore_held()
             return [PointerCommand("hover", RUN_YES, "run: yes")]
         if screen.kind == "target":
             self._targets = screen.targets
@@ -501,9 +556,20 @@ class BattleMapper:
                 return [self._hover_target()]
         return []
 
-    def _appear_trunk(self, screen: BattleScreen) -> list[PointerCommand]:
+    def _appear_trunk(self, screen: BattleScreen, now: float) -> list[PointerCommand]:
+        self.teammate = None
+        if screen.filter_open:
+            if self._filtered:
+                return []  # a filter was just clicked: wait for the list to close
+            return self._hover_trunk(self._filter_option(screen, self.sos_filter))
         content = [i for i in screen.items if not i.tab]
         last = self.trunk_item
+        if self._filtered:
+            # After picking a filter: the first card, or the dropdown if none match.
+            self._filtered = False
+            return self._hover_trunk(content[0]) if content else []
+        if last is not None and last.name.startswith("filter "):
+            last = next((i for i in content if i.name == _FILTER_ITEM), None)
         if last is not None and last.tab:
             # After switching tabs, stay on the tab list.
             item = next((i for i in screen.items if i.name == last.name), None)
@@ -524,7 +590,7 @@ class BattleMapper:
         # The first scroll moves the highlighted card's row most of a row away, so a
         # card near or past where it was is the row that was hidden. If nothing
         # moved (the end of the list), that's the same card, and scrolling stops.
-        cards = [i for i in screen.items if not i.tab
+        cards = [i for i in screen.items if not i.tab and i.name != _FILTER_ITEM
                  and (i.point.y < origin.y + _SOS_ROW_STEP / 4 if direction > 0
                       else i.point.y > origin.y - _SOS_ROW_STEP / 4)]
         if not cards and extra > 0:
@@ -533,8 +599,17 @@ class BattleMapper:
         self._scrolling = None
         if not cards:
             # The end of the list (or a row with no usable cards).
-            return self._appear_trunk(screen)
+            return self._appear_trunk(screen, now)
         return self._hover_trunk(min(cards, key=lambda i: _distance(i.point, origin)))
+
+    def _filter_option(self, screen: BattleScreen, index: int) -> Item:
+        return next(i for i in screen.items if i.name == f"filter {SOS_FILTERS[index]}")
+
+    def _pick_filter(self, screen: BattleScreen, index: int, now: float) -> list[PointerCommand]:
+        self.sos_filter = index
+        self._filtered = True
+        option = self._filter_option(screen, index)
+        return self._click(option.point, option.name, now)
 
     def _hover_trunk(self, item: Item) -> list[PointerCommand]:
         self.trunk_item = item
@@ -543,21 +618,31 @@ class BattleMapper:
     def _trunk_move(self, screen: BattleScreen, direction: str, now: float) -> list[PointerCommand]:
         current = self.trunk_item
         if current is None:
-            return self._appear_trunk(screen)
+            return self._appear_trunk(screen, now)
+        if screen.filter_open:
+            if direction not in ("up", "down"):
+                return []
+            item = step(screen.items, current.point, direction)
+            return self._hover_trunk(item) if item else []
         # The hovered item may light up and drop out of a read; step from where it was anyway.
         if direction in ("up", "down"):
-            # Up and down stay within the tab list or within the tab's contents.
-            pool = [i for i in screen.items if i.tab == current.tab]
+            # Up and down stay within the tab list or within the cards; the
+            # dropdown is above the top card once the list can't scroll up.
+            pool = [i for i in screen.items if i.tab == current.tab and i.name != _FILTER_ITEM]
         else:
             pool = list(screen.items)
         item = step(pool, current.point, direction)
         if item is not None:
             return self._hover_trunk(item)
-        if screen.tab == "SOS" and not current.tab and direction in ("up", "down"):
+        if screen.tab != "SOS" or current.tab or direction not in ("up", "down"):
+            return []
+        sign = 1 if direction == "up" else -1
+        if current.name != _FILTER_ITEM and screen.can_scroll[0 if sign > 0 else 1]:
             # Past the top or bottom of the visible cards: scroll the next row into view.
-            sign = 1 if direction == "up" else -1
             self._scrolling = (sign, current.point, SOS_EXTRA_NOTCHES)
             return self._scroll(sign, SOS_SCROLL_NOTCHES, now)
+        if sign > 0 and current.name != _FILTER_ITEM:
+            return self._hover_trunk(next(i for i in screen.items if i.name == _FILTER_ITEM))
         return []
 
     def _hover_teammate(self, screen: BattleScreen) -> PointerCommand:
@@ -629,6 +714,41 @@ class BattleMapper:
             if action in ("back", "run"):
                 return self._click(TARGET_BACK, "back", now)
         elif screen.kind == "trunk":
+            if self.teammate is not None:
+                # Hovering teammates' choices, as in the gag picker.
+                if action in ("teammates", "select", "back") or not screen.teammates:
+                    self.teammate = None
+                    item = self.trunk_item
+                    return self._hover_trunk(item) if item else []
+                return self._move_teammate(screen, action)
+            if action == "teammates" and not screen.filter_open:
+                if not screen.teammates:
+                    return []
+                self.teammate = 0
+                return [self._hover_teammate(screen)]
+            if screen.filter_open:
+                if action == "select" and self.trunk_item is not None and self.trunk_item.name.startswith("filter "):
+                    return self._pick_filter(screen, SOS_FILTERS.index(self.trunk_item.name[7:]), now)
+                if action == "sos_filter":
+                    return self._pick_filter(screen, (self.sos_filter + 1) % len(SOS_FILTERS), now)
+                if action in ("back", "run"):
+                    # Leave the filter as it was and go back to the dropdown.
+                    self.trunk_item = Item(_FILTER_ITEM, SOS_FILTER)
+                    return self._click(FILTER_CLOSE, "close filter list", now)
+                if action in DIRECTIONS:
+                    return self._trunk_move(screen, action, now)
+                return []
+            if action == "sos_filter" and screen.tab == "SOS":
+                # The options always open in the same place, so click the next one
+                # right after opening the list, without waiting to see it.
+                self.sos_filter = (self.sos_filter + 1) % len(SOS_FILTERS)
+                self._filtered = True
+                option = _center(_FILTER_OPTION_X, SOS_FILTER.y + self.sos_filter * _FILTER_STEP)
+                commands = self._click(SOS_FILTER, "SOS filter", now) + [
+                    PointerCommand("click", option, f"filter {SOS_FILTERS[self.sos_filter]}", delay=FILTER_OPEN_SECONDS)]
+                # Don't look until both clicks are done.
+                self._settle_until += FILTER_OPEN_SECONDS + 0.1
+                return commands
             if action in DIRECTIONS:
                 return self._trunk_move(screen, action, now)
             if action == "select" and self.trunk_item is not None:
