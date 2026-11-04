@@ -118,9 +118,9 @@ FRIENDS_ACTIONS = {
 
 def default_friends_bindings() -> Bindings:
     press = {"a": "select", "b": "back", "x": "goTo", "y": "whisper"}
+    # Only the D-pad, so the left stick still walks.
     for direction in ("up", "down", "left", "right"):
         press[f"dpad_{direction}"] = direction
-        press[f"ls_{direction}"] = direction
     return Bindings(press=press)
 
 

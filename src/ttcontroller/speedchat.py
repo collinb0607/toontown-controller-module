@@ -166,9 +166,9 @@ SPEEDCHAT_ACTIONS = {
 
 def default_speedchat_bindings() -> Bindings:
     press = {"a": "select", "b": "back"}
+    # Only the D-pad, so the left stick still walks.
     for direction in ("up", "down", "left", "right"):
         press[f"dpad_{direction}"] = direction
-        press[f"ls_{direction}"] = direction
     return Bindings(press=press)
 
 

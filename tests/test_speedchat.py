@@ -71,7 +71,8 @@ def test_opening_hovers_the_first_row_and_up_wraps():
     screen = SpeedchatScreen((top,))
     assert [c.point for c in m.update(frozenset(), 0.0, screen)] == [top.rows[0]]
     assert press(m, screen, 1.0, "dpad_up")[-1].point == top.rows[4]
-    assert press(m, screen, 2.0, "ls_down")[-1].point == top.rows[0]
+    assert press(m, screen, 2.0, "dpad_down")[-1].point == top.rows[0]
+    assert press(m, screen, 3.0, "ls_down") == []  # the stick still walks
 
 
 def test_right_enters_a_submenu_once_it_opens_and_left_comes_back():

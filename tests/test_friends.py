@@ -64,7 +64,7 @@ def test_list_moves_scrolls_and_opens():
     for t in range(7):
         press(m, screen, 2.0 + t, "dpad_down")
     assert m.row == 7
-    assert [(c.kind, c.point) for c in press(m, screen, 10.0, "ls_down")] == [
+    assert [(c.kind, c.point) for c in press(m, screen, 10.0, "dpad_down")] == [
         ("click", f.SCROLL_DOWN), ("hover", screen.rows[7])]
     assert [(c.kind, c.point) for c in press(m, screen, 11.0, "a")] == [("click", screen.rows[7])]
 

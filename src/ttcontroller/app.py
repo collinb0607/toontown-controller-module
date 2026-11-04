@@ -252,8 +252,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 else:
                     blocked = frozenset()
                 # Walking still works mid-conversation (it walks away); not while choosing a task.
-                # Nor in a menu, where the stick moves the highlight.
-                walk = not (in_battle or in_shop or npc_screen.kind == "tasks" or in_speedchat or in_friends)
+                walk = not (in_battle or in_shop or npc_screen.kind == "tasks")
                 controls = mapper.update(state, now, view, blocked=blocked, movement=walk)
                 output.sync(controls_to_keys(controls, watcher.settings))
                 for button in mapper.take_clicks():

@@ -10,13 +10,13 @@ Toontown Rewritten's own controller support is experimental: it covers movement 
 
 Working now:
 
-- **Movement:** left stick to walk and turn (a small tilt walks, a full tilt runs), A to jump, L3 to sprint.
+- **Movement:** left stick to walk and turn (a small tilt walks, a full tilt runs), A to jump, L3 to sprint. The stick keeps walking while speedchat or the friends list is open.
 - **Overworld hotkeys:** shticker book, options, gags, tasks, map, camera.
 - **Friends list and speedchat:** open and close them with one button. The module checks the screen to see what's open, then clicks the right on-screen button and puts your mouse back.
 - **Battles:** move a highlight across your gags with the D-pad or stick, pick a cog or toon, hover teammates' gags (LB, then left/right), pass, and hold B to run (A/B answer the "are you sure" prompt). Your last gag stays highlighted between rounds and battles.
 - **Gag shop:** move across the gags, buy one or as many as fit, delete mode, and save/load your usual set.
 - **Talking to NPCs:** A clicks through speech bubbles; pick a ToonTask with the D-pad.
-- **Speedchat menus:** move through the menus and submenus with the D-pad or stick and say a phrase with A. Works with any speedchat color.
+- **Speedchat menus:** move through the menus and submenus with the D-pad and say a phrase with A. Works with any speedchat color.
 - **Friends list:** move down the list (it scrolls for you), switch pages, open a toon, teleport to them (X) or whisper (Y). Nearby toons work too.
 - **Trunk:** SOS cards (scrolling the list as you go, and filtering them from the dropdown or with L3), pink slips, remotes and doodle tricks, all with the D-pad or stick.
 - **Remapping:** a config file lets you rebind any button.
@@ -44,7 +44,7 @@ Working now:
 | Right stick up/down | Look up/down |
 | RB | Friends list (press again to close) |
 | View | Speedchat (press again to close) |
-| D-pad left / right | Show gags / show tasks |
+| Y / X | Show gags / show tasks |
 | D-pad up | Map |
 | Start | Shticker book (tap) · Options (hold) |
 
@@ -69,9 +69,9 @@ Working now:
 
 | Menus | Controls |
 |---|---|
-| Speedchat | Stick/D-pad up/down move · right or A open a submenu · left or B go back · A say the phrase · B in the top menu closes speedchat |
-| Friends list | Stick/D-pad up/down move (scrolls at the ends) · left/right change page · A open the toon · X Go To (teleport) · Y Whisper · B close |
-| A toon's panel | Stick/D-pad up/down move between its buttons · A press · X Go To (teleport) · Y Whisper · B close Toon Details, then the panel |
+| Speedchat | D-pad up/down move · right or A open a submenu · left or B go back · A say the phrase · B in the top menu closes speedchat |
+| Friends list | D-pad up/down move (scrolls at the ends) · left/right change page · A open the toon · X Go To (teleport) · Y Whisper · B close |
+| A toon's panel | D-pad up/down move between its buttons · A press · X Go To (teleport) · Y Whisper · B close Toon Details, then the panel |
 
 Planned:
 
