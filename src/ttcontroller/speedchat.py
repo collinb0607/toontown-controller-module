@@ -99,8 +99,9 @@ def _menu(width: int, height: int, get_pixel: PixelReader, left: int, y0: int, u
     rows = tuple(ui.UIPoint("left", hover_x, y / unit) for y in ys)
     highlighted = None
     for i, y in enumerate(ys):
-        hits = sum(_is_colored(get_pixel(left + round(dx * unit), round(y + dy * unit)))
-                   for dx in (0.008, 0.014, 0.02, 0.026) for dy in (-0.006, 0, 0.006))
+        # Across the start of the row, where text can cover most points but never the arrow.
+        hits = sum(_is_colored(get_pixel(left + round((0.006 + 0.006 * k) * unit), round(y + dy * unit)))
+                   for k in range(16) for dy in (-0.006, 0, 0.006))
         if hits >= 3:
             highlighted = i
             break
@@ -114,7 +115,8 @@ def _find_child(width: int, height: int, get_pixel: PixelReader, left: int, y: i
     limit = min(width - 2, left + round(0.9 * unit))
     while x < limit and _is_run(get_pixel(x, y)):
         x += 1
-    if x >= limit or x < left + 0.05 * unit:
+    # A submenu can open as little as 0.045 in from its parent's edge (UNITE > Jellybeans).
+    if x >= limit or x < left + 0.025 * unit:
         return None
     window = range(x, min(width - 1, x + round(0.012 * unit)))
     brightest = max(sum(get_pixel(px, y)) for px in window)

@@ -26,6 +26,12 @@ def replay(name):
     ("speedchat_hover_1920x1009", [(137, 19, 5), (335, 10, None)]),  # GOODBYE
     # PLACES > DISTRICT > SPECIFIC, each overlapping the one before.
     ("speedchat_deep_1920x1009", [(137, 19, 11), (335, 17, 1), (452, 6, 0), (609, 15, None)]),
+    # Bold letters cover most of HELLO's highlight; a gray Sellbot HQ behind.
+    ("speedchat_hello_grey_1920x1009", [(137, 20, 5), (335, 9, None)]),
+    # UNITE's submenus open only 0.05 in from their parent's edge.
+    ("speedchat_unite_toonup_1920x1009", [(137, 20, 3), (335, 3, 0), (386, 2, None)]),
+    ("speedchat_unite_gagup_1920x1009", [(137, 20, 3), (335, 3, 1), (386, 7, None)]),
+    ("speedchat_unite_jellybeans_1920x1009", [(137, 20, 3), (335, 3, 2), (386, 2, None)]),
     # BATTLE > STRATEGY > I DON'T HAVE, pushed up to fit in the window.
     ("speedchat_long_1920x1009", [(137, 19, 14), (335, 9, 0), (408, 14, 2), (549, 15, None)]),
 ])
