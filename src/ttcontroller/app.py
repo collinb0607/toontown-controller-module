@@ -3,6 +3,7 @@
 import time
 from pathlib import Path
 
+from . import config as module_config
 from . import ttr_settings
 from .controller import NEUTRAL, ControllerReader
 from .mapper import OverworldMapper
@@ -29,6 +30,15 @@ def describe_settings(settings: ttr_settings.TTRSettings) -> None:
         log(f"Note: TTR display mode is '{settings.display_mode}'. Windowed mode is recommended.")
 
 
+def describe_config(watcher: module_config.ConfigWatcher, settings: ttr_settings.TTRSettings) -> None:
+    for problem in watcher.warnings + module_config.unknown_actions(watcher.config, settings.controls):
+        log(f"Config problem: {problem}")
+
+
+def make_mapper(config: module_config.Config) -> OverworldMapper:
+    return OverworldMapper(config.bindings, config.movement, config.timing)
+
+
 def controls_to_keys(controls: set[str], settings: ttr_settings.TTRSettings) -> set[str]:
     keys = set()
     for control in controls:
@@ -42,6 +52,9 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     watcher = ttr_settings.SettingsWatcher(ttr_dir or ttr_settings.DEFAULT_TTR_DIR)
     log(f"Reading TTR settings from {watcher.path}")
     describe_settings(watcher.settings)
+    config_watcher = module_config.ConfigWatcher()
+    log(f"Module config: {config_watcher.path}")
+    describe_config(config_watcher, watcher.settings)
 
     def logged_send(name: str, down: bool) -> None:
         log(f"{'DOWN' if down else 'up  '} {name}" + ("" if dry_run else " (sent)"))
@@ -49,7 +62,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
             send_key(name, down)
 
     reader = ControllerReader()
-    mapper = OverworldMapper()
+    mapper = make_mapper(config_watcher.config)
     output = KeyboardOutput(logged_send if dry_run or debug else send_key)
     clicker = MouseClicker()
     last_buttons = frozenset()
@@ -89,6 +102,12 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 if watcher.check() is not None:
                     log("TTR settings changed, reloaded.")
                     describe_settings(watcher.settings)
+                    describe_config(config_watcher, watcher.settings)
+                if config_watcher.check() is not None:
+                    log("Module config changed, reloaded.")
+                    describe_config(config_watcher, watcher.settings)
+                    output.release_all()
+                    mapper = make_mapper(config_watcher.config)
 
             if not focused:
                 mapper.reset()

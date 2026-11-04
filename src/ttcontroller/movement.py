@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class MovementTuning:
+    # Left stick tilt (0 to 1) needed before the toon moves.
     deadzone: float = 0.25
     # Tilting less than this (but past the deadzone) holds the walk key.
     walk_threshold: float = 0.7
