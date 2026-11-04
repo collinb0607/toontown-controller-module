@@ -100,26 +100,43 @@ def presses(flags):
     return sum(1 for prev, cur in zip([False, *flags], flags) if cur and not prev)
 
 
-def test_sprint_while_running_sends_fresh_double_tap():
+def test_sprint_button_toggles_auto_sprint():
     m = OverworldMapper()
-    frames = run_frames(m, [(state(left=FORWARD), 50), (state("l3", left=FORWARD), 1), (state(left=FORWARD), 40)])
-    forward = ["forward" in f for f in frames[50:]]
-    assert not forward[0]  # released first, so the old long press doesn't count
-    assert presses(forward) == 2
-    assert forward[-1]
+    assert not m.auto_sprint
+    run_frames(m, [(state("ls"), 1), (state(), 1)])
+    assert m.auto_sprint and m.take_sprint_toggle() and not m.take_sprint_toggle()
+    run_frames(m, [(state("ls"), 1), (state(), 1)], start=1.0)
+    assert not m.auto_sprint
 
 
-def test_sprint_armed_while_standing_then_push():
+def test_auto_sprint_double_taps_each_time_a_run_starts():
+    m = OverworldMapper(auto_sprint=True)
+    frames = run_frames(m, [(state(left=FORWARD), 40), (state(), 10), (state(left=FORWARD), 40)])
+    forward = ["forward" in f for f in frames]
+    assert presses(forward[:40]) == 2 and forward[39]  # the first run
+    assert presses(forward[50:]) == 2 and forward[-1]  # and the next
+
+
+def test_auto_sprint_skips_walking_but_sprints_when_walking_turns_into_a_run():
+    m = OverworldMapper(auto_sprint=True)
+    walk = (0.0, -0.5)  # past the deadzone, under the walk threshold
+    frames = run_frames(m, [(state(left=walk), 30), (state(left=FORWARD), 40)])
+    forward = ["forward" in f for f in frames]
+    assert presses(forward[:30]) == 1  # just walking
+    assert presses(forward[30:]) == 2 and forward[-1]
+
+
+def test_auto_sprint_off_just_runs():
     m = OverworldMapper()
-    frames = run_frames(m, [(state("l3"), 1), (state(), 20), (state(left=FORWARD), 40)])
-    forward = ["forward" in f for f in frames[21:]]
+    frames = run_frames(m, [(state(left=FORWARD), 40)])
+    assert all("forward" in f for f in frames)
+
+
+def test_turning_auto_sprint_on_mid_run_sprints_right_away():
+    m = OverworldMapper()
+    frames = run_frames(m, [(state(left=FORWARD), 30), (state("ls", left=FORWARD), 1), (state(left=FORWARD), 30)])
+    forward = ["forward" in f for f in frames[30:]]
     assert presses(forward) == 2 and forward[-1]
-
-
-def test_sprint_arm_expires():
-    m = OverworldMapper()
-    frames = run_frames(m, [(state("l3"), 1), (state(), 150), (state(left=FORWARD), 30)])
-    assert all("forward" in f for f in frames[151:])
 
 
 def test_left_trigger_is_the_unite_hotkey():

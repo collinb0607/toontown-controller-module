@@ -365,7 +365,7 @@ BATTLE_ACTIONS = {
 
 
 def default_battle_bindings() -> Bindings:
-    press = {"a": "select", "b": "back", "x": "trunk", "y": "pass", "lb": "teammates", "l3": "sos_filter"}
+    press = {"a": "select", "b": "back", "x": "trunk", "y": "pass", "lb": "teammates", "ls": "sos_filter"}
     for direction in DIRECTIONS:
         press[f"dpad_{direction}"] = direction
         press[f"ls_{direction}"] = direction

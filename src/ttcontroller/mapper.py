@@ -24,7 +24,7 @@ class ScreenView(Protocol):
 
 # Actions that do more than hold a TTR key.
 SPECIAL_ACTIONS = {
-    "sprint": "double-tap forward to sprint",
+    "sprint": "turn auto-sprint on or off (when on, every run starts with a sprint)",
     "friendsList": "open the friends list, or close it if it's open",
     "back": "close whatever is open (speedchat, then the friends list)",
     "speedchat": "open speedchat, or close it if it's open",
@@ -37,8 +37,8 @@ def default_bindings() -> Bindings:
         press={
             "a": "jump",
             "b": "back",
-            "l3": "sprint",
-            "r3": "cameraNext",
+            "ls": "sprint",
+            "rs": "cameraNext",
             "rb": "friendsList",
             "y": "showGags",
             "x": "showTasks",
@@ -60,8 +60,6 @@ class Timing:
     # Sprint is a fresh double-tap of forward, even if forward is already held:
     # release, tap, release, then hold. Each of the first three steps lasts this long.
     sprint_step_seconds: float = 0.06
-    # Clicking sprint while standing still arms it for this long.
-    sprint_arm_seconds: float = 1.0
     # Stick tilt needed to count as a stick button press.
     stick_button_threshold: float = 0.5
 
@@ -82,10 +80,13 @@ def controller_buttons(state: ControllerState, threshold: float) -> frozenset[st
 
 class OverworldMapper:
     def __init__(self, bindings: Bindings | None = None, tuning: MovementTuning = MovementTuning(),
-                 timing: Timing | None = None):
+                 timing: Timing | None = None, auto_sprint: bool = False):
         self.bindings = bindings or default_bindings()
         self.tuning = tuning
         self.timing = timing or Timing()
+        # When on, each run (a full tilt forward, not a walk) starts with a sprint.
+        self.auto_sprint = auto_sprint
+        self._sprint_toggled = False
         self._actions = ButtonActions(self.bindings, self.timing.hold_seconds,
                                       is_oneshot=lambda action: action in SPECIAL_ACTIONS)
         self.reset()
@@ -95,8 +96,13 @@ class OverworldMapper:
         self._pulses: dict[str, float] = {}
         self._clicks: list[ui.Button] = []
         self._unite = False
-        self._sprint_armed_until: float | None = None
+        self._was_running = False
         self._sprint_started_at: float | None = None
+
+    def take_sprint_toggle(self) -> bool:
+        """Whether auto-sprint was turned on or off since the last call."""
+        toggled, self._sprint_toggled = self._sprint_toggled, False
+        return toggled
 
     def take_unite(self) -> bool:
         """Whether the unite hotkey was pressed since the last call."""
@@ -127,7 +133,10 @@ class OverworldMapper:
     def _run(self, action: str, now: float, screen: ScreenView | None) -> None:
         """Do a one-shot action: a special action, or a quick tap of a TTR control."""
         if action == "sprint":
-            self._sprint_armed_until = now + self.timing.sprint_arm_seconds
+            self.auto_sprint = not self.auto_sprint
+            self._sprint_toggled = True
+            # Turned on mid-run: sprint now.
+            self._was_running = False
         elif action == "back" and screen is not None and screen.is_visible(ui.SPEEDCHAT_MENU):
             self._clicks.append(ui.SPEEDCHAT)
         elif action in ("friendsList", "back"):
@@ -150,15 +159,13 @@ class OverworldMapper:
         self._pulses[control] = now + PULSE_SECONDS
 
     def _update_sprint(self, controls: set[str], now: float) -> None:
-        if "forward" not in controls:
-            self._sprint_started_at = None
-            if self._sprint_armed_until is not None and now > self._sprint_armed_until:
-                self._sprint_armed_until = None
-            return
-
-        if self._sprint_armed_until is not None and self._sprint_started_at is None:
+        running = "forward" in controls and "walk" not in controls
+        if running and not self._was_running and self.auto_sprint:
             self._sprint_started_at = now
-            self._sprint_armed_until = None
+        self._was_running = running
+        if not running:
+            self._sprint_started_at = None
+            return
 
         if self._sprint_started_at is not None:
             step = int((now - self._sprint_started_at) / self.timing.sprint_step_seconds)

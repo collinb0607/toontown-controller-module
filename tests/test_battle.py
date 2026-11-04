@@ -504,16 +504,16 @@ def test_l3_opens_the_list_and_clicks_the_next_filter_at_once():
     sos = replay("battle_trunk_1920x1009")
     m = BattleMapper()
     m.update(frozenset(), 0.0, sos)
-    cmds = press(m, sos, 1.0, "l3")
+    cmds = press(m, sos, 1.0, "ls")
     assert [(c.kind, c.name) for c in cmds] == [("click", "SOS filter"), ("click", "filter Restock")]
     assert cmds[1].delay == battle.FILTER_OPEN_SECONDS
     # Clicks the option where the list draws it.
     opened = replay("battle_trunk_sos_filter_hover_1920x1009")
     assert cmds[1].point == next(i.point for i in opened.items if i.name == "filter Restock")
     assert [c.name for c in m.update(frozenset(), 2.0, sos)] == ["SOS card 1 at -0.04"]
-    assert press(m, sos, 3.0, "l3")[-1].name == "filter Toon-Up"
+    assert press(m, sos, 3.0, "ls")[-1].name == "filter Toon-Up"
     m.sos_filter = len(battle.SOS_FILTERS) - 1
-    assert press(m, sos, 4.0, "l3")[-1].name == "filter All"  # wraps
+    assert press(m, sos, 4.0, "ls")[-1].name == "filter All"  # wraps
 
 
 def test_empty_filter_highlights_the_dropdown():
@@ -569,7 +569,7 @@ def test_l3_relocks_on_the_first_card_even_if_the_list_is_still_open_at_first():
     m = BattleMapper()
     m.trunk_item = next(i for i in sos.items if i.name == "SOS card 3 at 0.14")
     m.update(frozenset(), 0.0, sos)
-    press(m, sos, 1.0, "l3")
+    press(m, sos, 1.0, "ls")
     assert m.update(frozenset(), 1.3, sos) == []  # still clicking
     assert m.update(frozenset(), 2.0, opened) == []  # the list hasn't closed yet
     assert [c.name for c in m.update(frozenset(), 2.1, sos)] == ["SOS card 1 at -0.04"]

@@ -59,7 +59,7 @@ def controller_used(state) -> bool:
 
 
 def make_mapper(config: module_config.Config) -> OverworldMapper:
-    return OverworldMapper(config.bindings, config.movement, config.timing)
+    return OverworldMapper(config.bindings, config.movement, config.timing, config.auto_sprint)
 
 
 def controls_to_keys(controls: set[str], settings: ttr_settings.TTRSettings) -> set[str]:
@@ -290,6 +290,10 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     spot = view.park_spot()
                     if spot is not None and clicker.moved_to != spot:
                         clicker.hover(*spot)
+                if mapper.take_sprint_toggle():
+                    log(f"Auto-sprint {'on' if mapper.auto_sprint else 'off'}.")
+                    config_watcher.save_auto_sprint(mapper.auto_sprint)
+                    config = config_watcher.config
                 if mapper.take_unite():
                     speedchat_mapper.go_to_unite(now)
             # Runs even when unfocused, so a click in progress always puts the cursor back.

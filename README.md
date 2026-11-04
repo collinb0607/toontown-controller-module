@@ -10,7 +10,7 @@ Toontown Rewritten's own controller support is experimental: it covers movement 
 
 Working now:
 
-- **Movement:** left stick to walk and turn (a small tilt walks, a full tilt runs), A to jump, L3 to sprint. The stick keeps walking while speedchat or the friends list is open.
+- **Movement:** left stick to walk and turn (a small tilt walks, a full tilt runs), A to jump. Press LS (the left stick) to turn auto-sprint on or off: while it's on, every run (a full tilt, not a walk) starts with a sprint. The stick keeps walking while speedchat or the friends list is open.
 - **Overworld hotkeys:** shticker book, options, gags, tasks, map, camera.
 - **Friends list and speedchat:** open and close them with one button. The module checks the screen to see what's open, then clicks the right on-screen button and puts your mouse back.
 - **Battles:** move a highlight across your gags with the D-pad or stick, pick a cog or toon, hover teammates' gags (LB, then left/right), pass, and hold B to run (A/B answer the "are you sure" prompt). Your last gag stays highlighted between rounds and battles.
@@ -18,7 +18,7 @@ Working now:
 - **Talking to NPCs:** A clicks through speech bubbles; pick a ToonTask with the D-pad.
 - **Speedchat menus:** move through the menus and submenus with the D-pad and say a phrase with A. Works with any speedchat color. LT jumps straight to UNITE! > Toon-Up, in battle too.
 - **Friends list:** move down the list (it scrolls for you), switch pages, open a toon, teleport to them (X) or whisper (Y). Nearby toons work too.
-- **Trunk:** SOS cards (scrolling the list as you go, and filtering them from the dropdown or with L3), pink slips, remotes and doodle tricks, all with the D-pad or stick.
+- **Trunk:** SOS cards (scrolling the list as you go, and filtering them from the dropdown or with LS), pink slips, remotes and doodle tricks, all with the D-pad or stick.
 - **Remapping:** a config file lets you rebind any button.
 - **Hidden cursor:** the cursor disappears while you use the controller and comes back as soon as you move the mouse. When nothing needs hovering it waits on the window's title bar, out of the way. While it hovers a menu it's only hidden if TTR's custom cursor is turned off in its Options.
 - Uses your TTR keybinds automatically, works at any window size, and never blocks your keyboard or mouse.
@@ -40,8 +40,8 @@ Working now:
 | Left stick | Move (small tilt walks) |
 | A | Jump |
 | B | Close speedchat or the friends list |
-| L3 | Sprint |
-| R3 | Switch camera |
+| LS (click the left stick) | Auto-sprint on/off |
+| RS (click the right stick) | Switch camera |
 | Right stick up/down | Look up/down |
 | RB | Friends list (press again to close) |
 | View | Speedchat (press again to close) |
@@ -55,7 +55,7 @@ Working now:
 | Gag picker | Stick/D-pad move highlight · A select · LB hover teammates' gags (left/right to choose, LB again to return) · X trunk · Y pass · hold B run |
 | Which cog / toon? | Stick/D-pad left/right choose · A select · B back |
 | Waiting for other toons | Hovers teammates' gags automatically · Stick/D-pad left/right choose · B back (change your gag) |
-| Trunk | Stick/D-pad move between tabs and items · A use · L3 next SOS filter · LB hover teammates' gags · Y pass · B or X close |
+| Trunk | Stick/D-pad move between tabs and items · A use · LS next SOS filter · LB hover teammates' gags · Y pass · B or X close |
 | Run prompt | A OK · B cancel |
 
 | Gag shop | Controls |
@@ -109,7 +109,7 @@ On first run the module creates `%APPDATA%\ToontownControllerModule\config.json`
 
 - **`press`:** button → action. An action is any TTR control name from TTR's Options > Controls (e.g. `jump`, `showGags`), or one of `sprint`, `friendsList`, `speedchat`, `unite` or `back`. The triggers are `lt` and `rt`. Set a button to `null` to unbind it.
 - **`hold`:** button → action after holding it for `timing.hold_seconds`. That button's `press` action then fires as a tap when it's released early.
-- **`movement`** and **`timing`** hold the stick deadzone, walk threshold, hold time and sprint timing.
+- **`movement`** and **`timing`** hold the stick deadzone, walk threshold, hold time and sprint timing. **`auto_sprint`** (true or false) is the auto-sprint setting; LS flips it and saves it here.
 
 If something in the file is wrong, the console prints `Config problem: ...` and the module uses the default for that setting.
 

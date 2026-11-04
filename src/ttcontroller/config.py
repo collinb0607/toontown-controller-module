@@ -24,6 +24,8 @@ CONFIG_DIR = Path(os.environ.get("APPDATA", Path.home())) / "ToontownControllerM
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
 VALID_BUTTONS = (*BUTTONS, *STICK_BUTTONS, *TRIGGER_BUTTONS)
+# Earlier names for the stick clicks, still accepted.
+OLD_BUTTON_NAMES = {"l3": "ls", "r3": "rs"}
 
 HELP = {
     "buttons": ", ".join(VALID_BUTTONS),
@@ -56,6 +58,8 @@ class Config:
     speedchat: Bindings = field(default_factory=default_speedchat_bindings)
     friends: Bindings = field(default_factory=default_friends_bindings)
     movement: MovementTuning = field(default_factory=MovementTuning)
+    # Every run starts with a sprint. The sprint button turns this on and off.
+    auto_sprint: bool = False
     timing: Timing = field(default_factory=Timing)
 
 
@@ -71,6 +75,7 @@ def to_json(config: Config) -> dict:
             "speedchat": {"press": config.speedchat.press, "hold": config.speedchat.hold},
             "friends": {"press": config.friends.press, "hold": config.friends.hold},
         },
+        "auto_sprint": config.auto_sprint,
         "movement": asdict(config.movement),
         "timing": asdict(config.timing),
     }
@@ -79,6 +84,7 @@ def to_json(config: Config) -> dict:
 def _merge_bindings(defaults: dict[str, str], user: dict, warnings: list[str], table: str) -> dict[str, str]:
     merged = dict(defaults)
     for button, action in user.items():
+        button = OLD_BUTTON_NAMES.get(button, button)
         if button not in VALID_BUTTONS:
             warnings.append(f"bindings.{table}: unknown button {button!r} (ignored)")
         elif action is None:
@@ -141,6 +147,11 @@ def parse(data: dict) -> tuple[Config, list[str]]:
         movement=_merge_numbers(defaults.movement, data.get("movement", {}), warnings, "movement"),
         timing=_merge_numbers(defaults.timing, data.get("timing", {}), warnings, "timing"),
     )
+    auto_sprint = data.get("auto_sprint", defaults.auto_sprint)
+    if isinstance(auto_sprint, bool):
+        config = replace(config, auto_sprint=auto_sprint)
+    else:
+        warnings.append(f"auto_sprint: must be true or false (using {str(defaults.auto_sprint).lower()})")
     return config, warnings
 
 
@@ -201,6 +212,23 @@ class ConfigWatcher:
             return self.path.stat().st_mtime
         except OSError:
             return None
+
+    def save_auto_sprint(self, on: bool) -> None:
+        """Remember auto-sprint in the file, keeping everything else as the user wrote it.
+        Not reported as a change by check(), since the running module already has it."""
+        try:
+            data = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        if not isinstance(data, dict):
+            return
+        data["auto_sprint"] = on
+        try:
+            self.path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        except OSError:
+            return
+        self.config = replace(self.config, auto_sprint=on)
+        self._mtime = self._stat()
 
     def check(self) -> Config | None:
         """Return the new config if the file changed since the last check, else None."""
