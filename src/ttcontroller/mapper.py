@@ -6,13 +6,20 @@ The output layer diffs that against what is already held, so a key can never
 get stuck down.
 """
 
+from typing import Protocol
+
+from . import ui
 from .controller import ControllerState
 from .movement import MovementTuning, stick_to_movement
+
+
+class ScreenView(Protocol):
+    def is_visible(self, button: ui.Button) -> bool: ...
+
 
 # Buttons that hold a TTR control for as long as they are held.
 HOLD_BINDINGS = {
     "a": "jump",
-    "rb": "friendsList",
     "dpad_left": "showGags",
     "dpad_right": "showTasks",
     "dpad_up": "showMap",
@@ -41,12 +48,18 @@ class OverworldMapper:
     def reset(self) -> None:
         self._prev_buttons: frozenset[str] = frozenset()
         self._pulses: dict[str, float] = {}
+        self._clicks: list[ui.Button] = []
         self._start_down_at: float | None = None
         self._start_hold_fired = False
         self._sprint_armed_until: float | None = None
         self._sprint_started_at: float | None = None
 
-    def update(self, state: ControllerState, now: float) -> set[str]:
+    def take_clicks(self) -> list[ui.Button]:
+        """On-screen buttons to click, requested since the last call."""
+        clicks, self._clicks = self._clicks, []
+        return clicks
+
+    def update(self, state: ControllerState, now: float, screen: ScreenView | None = None) -> set[str]:
         buttons = state.buttons
         pressed = buttons - self._prev_buttons
         released = self._prev_buttons - buttons
@@ -63,6 +76,7 @@ class OverworldMapper:
 
         self._update_start(pressed, released, buttons, now)
         self._update_sprint(pressed, controls, now)
+        self._update_friends(pressed, now, screen)
 
         self._pulses = {c: until for c, until in self._pulses.items() if now < until}
         controls.update(self._pulses)
@@ -83,6 +97,17 @@ class OverworldMapper:
             if self._start_down_at is not None and not self._start_hold_fired:
                 self._pulse("stickerBook", now)
             self._start_down_at = None
+
+    def _update_friends(self, pressed, now: float, screen: ScreenView | None) -> None:
+        # The friends list key only opens it; closing takes a click on its X.
+        # The screen is only checked on a press, since reading pixels is slow.
+        if "rb" not in pressed and "b" not in pressed:
+            return
+        is_open = screen is not None and screen.is_visible(ui.FRIENDS_CLOSE)
+        if is_open:
+            self._clicks.append(ui.FRIENDS_CLOSE)
+        elif "rb" in pressed:
+            self._pulse("friendsList", now)
 
     def _update_sprint(self, pressed, controls: set[str], now: float) -> None:
         if "l3" in pressed:

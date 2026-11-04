@@ -6,8 +6,8 @@ from pathlib import Path
 from . import ttr_settings
 from .controller import NEUTRAL, ControllerReader
 from .mapper import OverworldMapper
-from .output import KeyboardOutput, send_key
-from .window import ForegroundWatcher
+from .output import KeyboardOutput, MouseClicker, send_key
+from .window import ForegroundWatcher, TTRView, make_dpi_aware
 
 FRAME_SECONDS = 1 / 120
 SETTINGS_CHECK_SECONDS = 1.0
@@ -38,6 +38,7 @@ def controls_to_keys(controls: set[str], settings: ttr_settings.TTRSettings) -> 
 
 
 def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False) -> None:
+    make_dpi_aware()
     watcher = ttr_settings.SettingsWatcher(ttr_dir or ttr_settings.DEFAULT_TTR_DIR)
     log(f"Reading TTR settings from {watcher.path}")
     describe_settings(watcher.settings)
@@ -50,6 +51,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     reader = ControllerReader()
     mapper = OverworldMapper()
     output = KeyboardOutput(logged_send if dry_run or debug else send_key)
+    clicker = MouseClicker()
     last_buttons = frozenset()
     foreground = ForegroundWatcher()
 
@@ -92,8 +94,17 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 mapper.reset()
                 output.release_all()
             else:
-                controls = mapper.update(state or NEUTRAL, now)
+                view = TTRView(foreground.ttr_hwnd) if foreground.ttr_hwnd else None
+                controls = mapper.update(state or NEUTRAL, now, view)
                 output.sync(controls_to_keys(controls, watcher.settings))
+                for button in mapper.take_clicks():
+                    x, y = view.to_screen(button.center)
+                    if dry_run or debug:
+                        log(f"Click {button.name} at screen {x},{y}" + (" (dry run, not clicked)" if dry_run else ""))
+                    if not dry_run:
+                        clicker.click(x, y)
+            # Runs even when unfocused, so a click in progress always puts the cursor back.
+            clicker.update(now)
 
             time.sleep(max(0.0, FRAME_SECONDS - (time.monotonic() - now)))
     except KeyboardInterrupt:
