@@ -11,7 +11,7 @@ from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
 
 from .battle import BATTLE_ACTIONS, default_battle_bindings
-from .bindings import STICK_BUTTONS, Bindings
+from .bindings import STICK_BUTTONS, TRIGGER_BUTTONS, Bindings
 from .controller import BUTTONS
 from .mapper import SPECIAL_ACTIONS, Timing, default_bindings
 from .movement import MovementTuning
@@ -23,7 +23,7 @@ from .speedchat import SPEEDCHAT_ACTIONS, default_speedchat_bindings
 CONFIG_DIR = Path(os.environ.get("APPDATA", Path.home())) / "ToontownControllerModule"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
-VALID_BUTTONS = (*BUTTONS, *STICK_BUTTONS)
+VALID_BUTTONS = (*BUTTONS, *STICK_BUTTONS, *TRIGGER_BUTTONS)
 
 HELP = {
     "buttons": ", ".join(VALID_BUTTONS),

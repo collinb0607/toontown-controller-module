@@ -120,3 +120,18 @@ def test_sprint_arm_expires():
     m = OverworldMapper()
     frames = run_frames(m, [(state("l3"), 1), (state(), 150), (state(left=FORWARD), 30)])
     assert all("forward" in f for f in frames[151:])
+
+
+def test_left_trigger_is_the_unite_hotkey():
+    m = OverworldMapper()
+    pulled = ControllerState(left_trigger=0.9)
+    m.update(pulled, 0.0, FakeScreen())
+    m.update(ControllerState(), 0.05, FakeScreen())
+    assert m.take_unite()
+    assert m.take_clicks() == [ui.SPEEDCHAT]  # opens speedchat first
+    assert not m.take_unite()
+    # With speedchat already open, it just goes to UNITE!.
+    m.update(pulled, 1.0, FakeScreen(ui.SPEEDCHAT_MENU))
+    m.update(ControllerState(), 1.05, FakeScreen(ui.SPEEDCHAT_MENU))
+    assert m.take_unite()
+    assert m.take_clicks() == []

@@ -28,6 +28,7 @@ SPECIAL_ACTIONS = {
     "friendsList": "open the friends list, or close it if it's open",
     "back": "close whatever is open (speedchat, then the friends list)",
     "speedchat": "open speedchat, or close it if it's open",
+    "unite": "open speedchat at the UNITE! menu, on Toon-Up (works in battle too)",
 }
 
 
@@ -44,6 +45,7 @@ def default_bindings() -> Bindings:
             "dpad_up": "showMap",
             "start": "stickerBook",
             "view": "speedchat",
+            "lt": "unite",
             "rs_up": "lookUp",
             "rs_down": "lookDown",
         },
@@ -70,10 +72,12 @@ _SPRINT_STEPS = (False, True, False)
 
 
 def controller_buttons(state: ControllerState, threshold: float) -> frozenset[str]:
-    """Physical buttons plus both sticks' directions as virtual buttons."""
+    """Physical buttons plus both sticks' directions and the triggers as virtual buttons."""
+    triggers = {name for name, pull in (("lt", state.left_trigger), ("rt", state.right_trigger)) if pull > threshold}
     return frozenset(state.buttons
                      | stick_buttons("ls", *state.left_stick, threshold)
-                     | stick_buttons("rs", *state.right_stick, threshold))
+                     | stick_buttons("rs", *state.right_stick, threshold)
+                     | triggers)
 
 
 class OverworldMapper:
@@ -90,8 +94,14 @@ class OverworldMapper:
         self._actions.reset()
         self._pulses: dict[str, float] = {}
         self._clicks: list[ui.Button] = []
+        self._unite = False
         self._sprint_armed_until: float | None = None
         self._sprint_started_at: float | None = None
+
+    def take_unite(self) -> bool:
+        """Whether the unite hotkey was pressed since the last call."""
+        unite, self._unite = self._unite, False
+        return unite
 
     def take_clicks(self) -> list[ui.Button]:
         """On-screen buttons to click, requested since the last call."""
@@ -129,6 +139,10 @@ class OverworldMapper:
                 self._pulse("friendsList", now)
         elif action == "speedchat":
             self._clicks.append(ui.SPEEDCHAT)
+        elif action == "unite":
+            self._unite = True
+            if screen is None or not screen.is_visible(ui.SPEEDCHAT_MENU):
+                self._clicks.append(ui.SPEEDCHAT)
         else:
             self._pulse(action, now)
 

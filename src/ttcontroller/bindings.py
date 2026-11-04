@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 
 # Stick directions act like extra buttons so they can be bound too.
 STICK_BUTTONS = ("ls_up", "ls_down", "ls_left", "ls_right", "rs_up", "rs_down", "rs_left", "rs_right")
+# The triggers, pulled past the same threshold as the sticks.
+TRIGGER_BUTTONS = ("lt", "rt")
 
 
 def stick_buttons(prefix: str, x: float, y: float, threshold: float) -> set[str]:

@@ -101,3 +101,43 @@ def test_a_says_a_phrase_and_b_backs_out_then_closes():
     press(m, screen, 1.0, "dpad_right")
     assert press(m, screen, 2.0, "b")[-1].point == top.rows[0]
     assert [(c.kind, c.point) for c in press(m, screen, 3.0, "b")] == [("click", ui.SPEEDCHAT.center)]
+
+
+# --- Unite hotkey ---
+
+@pytest.mark.parametrize("name,row", [
+    ("speedchat_1920x1009", 2), ("speedchat_1552x611", 2), ("speedchat_539x786", 2),
+    ("speedchat_long_1920x1009", 2), ("speedchat_hello_grey_1920x1009", 3),  # BOARDING comes first in HQs
+    ("speedchat_unite_toonup_1920x1009", 3),  # highlighted
+    ("speedchat_purple_1920x1009", None),  # no UNITE! menu on this toon
+])
+def test_finds_the_unite_row(name, row):
+    data = json.loads((FIXTURES / f"{name}.json").read_text())
+    w, h = data["size"]
+    pixels = data["pixels"]
+    screen = read_speedchat(w, h, lambda x, y: tuple(pixels[f"{x},{y}"]), look_for_unite=True)
+    assert screen.looked_for_unite
+    assert screen.unite == row
+
+
+def test_unite_hotkey_goes_to_toon_up():
+    m = SpeedchatMapper()
+    m.go_to_unite(0.0)
+    assert m.wants_unite
+    top = menu(0.1, 6)
+    # Opening, before the top menu has been looked at for UNITE!: nothing yet.
+    assert m.update(frozenset(), 0.1, SpeedchatScreen((top,))) == []
+    looked = SpeedchatScreen((top,), unite=3, looked_for_unite=True)
+    assert [c.point for c in m.update(frozenset(), 0.2, looked)] == [top.rows[3]]
+    assert not m.wants_unite
+    sub = menu(0.3, 3)
+    opened = SpeedchatScreen((menu(0.1, 6, highlighted=3), sub))
+    assert [c.point for c in m.update(frozenset(), 0.3, opened)] == [sub.rows[0]]  # Toon-Up
+    assert press(m, opened, 1.0, "dpad_down")[-1].point == sub.rows[1]
+
+
+def test_unite_hotkey_without_a_unite_menu_just_opens_speedchat():
+    m = SpeedchatMapper()
+    m.go_to_unite(0.0)
+    top = menu(0.1, 6)
+    assert [c.point for c in m.update(frozenset(), 0.2, SpeedchatScreen((top,), looked_for_unite=True))] == [top.rows[0]]

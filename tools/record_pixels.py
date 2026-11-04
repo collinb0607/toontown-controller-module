@@ -41,7 +41,7 @@ def main() -> None:
         # The task choice panel (speech bubbles search the whole window, so they're
         # tested from cropped images instead; see tests/fixtures/npc).
         npc = read_npc(w, h, get_pixel)
-        speedchat = read_speedchat(w, h, get_pixel)
+        speedchat = read_speedchat(w, h, get_pixel, look_for_unite=True)
         friends = read_friends(w, h, get_pixel)
         path = OUT / f"{capture.stem}.json"
         path.write_text(json.dumps({"size": [w, h], "pixels": seen}, separators=(",", ":")), encoding="utf-8")

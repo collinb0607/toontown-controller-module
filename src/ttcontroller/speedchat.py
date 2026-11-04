@@ -28,6 +28,14 @@ _TOP_MARGIN_X = 0.138  # inside the top menu's left edge
 _TOP_PROBE_Y = -0.43  # from the window's center; inside the top menu at any size
 _HOVER_X = 0.025  # from a menu's left edge
 
+# The UNITE! row's shape, to find it wherever it is in the top menu (which rows
+# show depends on the toon and where they are): how many of 9 points down the row
+# are dark text, every 0.002 across from the menu's left edge. Measured at 1920x1009.
+_INK_STEP = 0.002
+_INK_DYS = tuple(k * 0.0025 for k in range(-4, 5))
+UNITE_INK = tuple(int(c) for c in "005621148008844368008800228220883331007400000000000000000000000000000000000000000000000210")
+_UNITE_MATCH = 0.8
+
 
 def _is_panel(c: RGB) -> bool:
     return min(c) > 120 and max(c) > 160 and max(c) - min(c) < 60
@@ -52,6 +60,8 @@ class Menu:
 @dataclass(frozen=True)
 class SpeedchatScreen:
     menus: tuple[Menu, ...] = ()  # the top menu, then each open submenu
+    unite: int | None = None  # the top menu's UNITE! row, when looked for and found
+    looked_for_unite: bool = False
 
     @property
     def is_open(self) -> bool:
@@ -130,7 +140,37 @@ def _find_child(width: int, height: int, get_pixel: PixelReader, left: int, y: i
     return child
 
 
-def read_speedchat(width: int, height: int, get_pixel: PixelReader) -> SpeedchatScreen:
+def _ink(get_pixel: PixelReader, left: int, y: int, unit: int) -> list[int]:
+    return [sum(sum(get_pixel(left + round((0.004 + i * _INK_STEP) * unit), y + round(dy * unit))) < 250
+                for dy in _INK_DYS) for i in range(len(UNITE_INK))]
+
+
+def _correlation(a, b) -> float:
+    n = len(a)
+    ma, mb = sum(a) / n, sum(b) / n
+    da = [v - ma for v in a]
+    db = [v - mb for v in b]
+    norm = (sum(v * v for v in da) * sum(v * v for v in db)) ** 0.5
+    return sum(x * y for x, y in zip(da, db)) / norm if norm else 0.0
+
+
+def _unite_score(ink: list[int]) -> float:
+    """How well a row's text matches UNITE!, allowing a few samples' slip (small windows)."""
+    n = len(ink)
+    return max(_correlation(ink[max(0, s):n + min(0, s)], UNITE_INK[max(0, -s):n - max(0, s)])
+               for s in range(-3, 4))
+
+
+def find_unite(width: int, height: int, get_pixel: PixelReader, menu: Menu) -> int | None:
+    """The UNITE! row of the top menu, or None if it isn't there."""
+    unit = min(width, height)
+    left = menu.left.to_client(width, height)[0]
+    scores = [_unite_score(_ink(get_pixel, left, row.to_client(width, height)[1], unit)) for row in menu.rows]
+    best = max(range(len(scores)), key=scores.__getitem__, default=None)
+    return best if best is not None and scores[best] >= _UNITE_MATCH else None
+
+
+def read_speedchat(width: int, height: int, get_pixel: PixelReader, look_for_unite: bool = False) -> SpeedchatScreen:
     if not ui.is_visible(ui.SPEEDCHAT_MENU, width, height, get_pixel):
         return SpeedchatScreen()
     unit = min(width, height)
@@ -153,6 +193,8 @@ def read_speedchat(width: int, height: int, get_pixel: PixelReader) -> Speedchat
         if child is None:
             break
         left = child
+    if look_for_unite and menus:
+        return SpeedchatScreen(tuple(menus), find_unite(width, height, get_pixel, menus[0]), True)
     return SpeedchatScreen(tuple(menus))
 
 
@@ -185,6 +227,16 @@ class SpeedchatMapper:
         self._open = False
         self._entering_until: float | None = None
         self._closing_until = 0.0
+        self._unite_until: float | None = None
+
+    def go_to_unite(self, now: float) -> None:
+        """The unite hotkey: go to UNITE! > Toon-Up once speedchat is open."""
+        self._unite_until = now + 2 * self.open_seconds + 1.0
+        self._closing_until = 0.0
+
+    @property
+    def wants_unite(self) -> bool:
+        return self._unite_until is not None
 
     def set_bindings(self, bindings: Bindings) -> None:
         self.bindings = bindings
@@ -202,6 +254,8 @@ class SpeedchatMapper:
 
     def update(self, buttons: frozenset[str], now: float, screen: SpeedchatScreen) -> list[PointerCommand]:
         _, fired = self._actions.update(buttons, now)
+        if self._unite_until is not None and now > self._unite_until:
+            self._unite_until = None
         if not screen.is_open:
             self._open = False
             self._closing_until = 0.0
@@ -209,6 +263,16 @@ class SpeedchatMapper:
         if now < self._closing_until:
             return []  # a phrase was said: speedchat is closing
         commands: list[PointerCommand] = []
+        if self._unite_until is not None:
+            if not screen.looked_for_unite:
+                return []  # wait for a look at the top menu
+            self._unite_until = None
+            if screen.unite is not None:
+                # Hover UNITE!, then go into its submenu (Toon-Up first) once it opens.
+                self._open = True
+                self.depth, self.row = 0, screen.unite
+                self._entering_until = now + self.open_seconds
+                return [self._hover(screen)]
         if not self._open:
             self._open = True
             self.depth, self.row = 0, 0

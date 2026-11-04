@@ -16,7 +16,7 @@ Working now:
 - **Battles:** move a highlight across your gags with the D-pad or stick, pick a cog or toon, hover teammates' gags (LB, then left/right), pass, and hold B to run (A/B answer the "are you sure" prompt). Your last gag stays highlighted between rounds and battles.
 - **Gag shop:** move across the gags, buy one or as many as fit, delete mode, and save/load your usual set.
 - **Talking to NPCs:** A clicks through speech bubbles; pick a ToonTask with the D-pad.
-- **Speedchat menus:** move through the menus and submenus with the D-pad and say a phrase with A. Works with any speedchat color.
+- **Speedchat menus:** move through the menus and submenus with the D-pad and say a phrase with A. Works with any speedchat color. LT jumps straight to UNITE! > Toon-Up, in battle too.
 - **Friends list:** move down the list (it scrolls for you), switch pages, open a toon, teleport to them (X) or whisper (Y). Nearby toons work too.
 - **Trunk:** SOS cards (scrolling the list as you go, and filtering them from the dropdown or with L3), pink slips, remotes and doodle tricks, all with the D-pad or stick.
 - **Remapping:** a config file lets you rebind any button.
@@ -44,6 +44,7 @@ Working now:
 | Right stick up/down | Look up/down |
 | RB | Friends list (press again to close) |
 | View | Speedchat (press again to close) |
+| LT | Unite: opens speedchat at UNITE! with Toon-Up highlighted (in battle too) |
 | Y / X | Show gags / show tasks |
 | D-pad up | Map |
 | Start | Shticker book (tap) · Options (hold) |
@@ -105,7 +106,7 @@ On first run the module creates `%APPDATA%\ToontownControllerModule\config.json`
 }
 ```
 
-- **`press`:** button → action. An action is any TTR control name from TTR's Options > Controls (e.g. `jump`, `showGags`), or one of `sprint`, `friendsList`, `speedchat` or `back`. Set a button to `null` to unbind it.
+- **`press`:** button → action. An action is any TTR control name from TTR's Options > Controls (e.g. `jump`, `showGags`), or one of `sprint`, `friendsList`, `speedchat`, `unite` or `back`. The triggers are `lt` and `rt`. Set a button to `null` to unbind it.
 - **`hold`:** button → action after holding it for `timing.hold_seconds`. That button's `press` action then fires as a tap when it's released early.
 - **`movement`** and **`timing`** hold the stick deadzone, walk threshold, hold time and sprint timing.
 

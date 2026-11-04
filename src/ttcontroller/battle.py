@@ -484,6 +484,10 @@ class BattleMapper:
         # hold) needs a fresh press.
         self._actions.reset(ignore_held=True)
 
+    def rehover(self) -> None:
+        """Put the highlight back on the screen's usual spot, e.g. after speedchat moved the cursor."""
+        self._kind = None
+
     def update(self, buttons: frozenset[str], now: float, screen: BattleScreen) -> list[PointerCommand]:
         _, fired = self._actions.update(buttons & self.buttons, now)
         if screen.kind == "picker":
