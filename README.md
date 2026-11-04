@@ -92,14 +92,13 @@ If something in the file is wrong, the console prints `Config problem: ...` and 
 1. ~~Project setup~~
 2. ~~Overworld movement~~
 3. ~~Overworld hotkeys, friends list, speedchat open/close, config file~~
-4. On-screen hints overlay
-5. Battle gag picker
-6. Gag shop, dialogue, task choice and other menus
-7. Settings window and remapping
-8. Automatic game state detection
-9. Boss fights
-10. Trolley games and fishing
-11. First release
+4. Battle gag picker
+5. Gag shop, dialogue, task choice and other menus
+6. Settings window
+7. Boss fights
+8. Trolley games and fishing
+9. On-screen hints overlay
+10. First release
 
 **Later:** Toontown Corporate Clash, PlayStation/Switch controllers, Mac, borderless fullscreen, multi-toon.
 

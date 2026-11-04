@@ -144,13 +144,13 @@ Most states share one pattern: a grid of clickable buttons. Build it once and re
 - **M0 Setup:** Repo, README, project skeleton.
 - **M1 Proof of concept:** Read the Xbox controller, find the TTR window, and get movement, jump and sprint working in the overworld.
 - **M2 Overworld hotkeys:** done.
-- **M3 Overlay:** Overlay window and state-aware hints.
-- **M4 Battle:** Selector framework and the battle gag picker (targets, teammate hover, run, saved selection), with manual state switching.
+- **M4 Battle:** Selector framework and the battle gag picker (targets, teammate hover, run, saved selection). Each screen is detected by probe pixels as it's added, so no manual state switching is needed.
 - **M5 Other menus:** Gag shop, dialogue, task choice, popups, shticker book, speedchat, friends list and settings.
 - **M6 Settings window:** Remapping, controller and window pickers, hints toggle.
 - **M7 Auto-detection:** Automatic game state detection.
 - **M8 Boss fights:** VP, CFO, CJ and CEO.
 - **M9 Minigames:** Trolley games and fishing.
+- **M3 Overlay:** Overlay window and state-aware hints. Moved to the end (decided Nov 3, 2026): hints are drawn on top of layouts that the other milestones measure, so they come last.
 - **M10 Release:** .exe build and first public release.
 - **Future:** Corporate Clash, PlayStation/Switch/generic controllers, Mac, borderless fullscreen, multi-toon.
 
