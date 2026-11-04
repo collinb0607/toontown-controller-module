@@ -33,9 +33,10 @@ def is_red(c: RGB) -> bool:
     return c[0] > 150 and c[1] < 100 and c[2] < 100
 
 
-def is_beige(c: RGB) -> bool:
-    r, g, b = c
-    return r > 200 and g > 190 and b > 160 and 5 < r - b < 60
+def is_menu_gray(c: RGB) -> bool:
+    """A speedchat panel: light and barely tinted (beige, lavender and so on, depending
+    on the speedchat color chosen in TTR's options)."""
+    return min(c) > 150 and max(c) > 185 and max(c) - min(c) < 40
 
 
 @dataclass(frozen=True)
@@ -66,8 +67,8 @@ FRIENDS_CLOSE = Button("friends list close", _FRIENDS_X, around(_FRIENDS_X, 0.00
 # The green button in the top-left. Clicking it opens speedchat, and clicking again closes it.
 SPEEDCHAT = Button("speedchat", UIPoint("left", 0.1015, 0.035))
 
-# The open speedchat menu, detected by a column of points down its beige left
+# The open speedchat menu, detected by a column of points down its light left
 # margin (no text ever reaches it). The menu's top sits about 0.49 above the
 # window's center; measured at 1920x1009, 1552x611 and 539x786.
 _SPEEDCHAT_MARGIN = tuple(UIPoint("left", 0.138, -0.43 + 0.05 * i, "center") for i in range(11))
-SPEEDCHAT_MENU = Button("speedchat menu", _SPEEDCHAT_MARGIN[0], _SPEEDCHAT_MARGIN, is_beige, min_hits=8)
+SPEEDCHAT_MENU = Button("speedchat menu", _SPEEDCHAT_MARGIN[0], _SPEEDCHAT_MARGIN, is_menu_gray, min_hits=8)

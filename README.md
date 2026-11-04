@@ -70,7 +70,7 @@ Working now:
 | Menus | Controls |
 |---|---|
 | Speedchat | Stick/D-pad up/down move · right or A open a submenu · left or B go back · A say the phrase · B in the top menu closes speedchat |
-| Friends list | Stick/D-pad up/down move (scrolls at the ends) · left/right change page · A open the toon · B close |
+| Friends list | Stick/D-pad up/down move (scrolls at the ends) · left/right change page · A open the toon · X Go To (teleport) · Y Whisper · B close |
 | A toon's panel | Stick/D-pad up/down move between its buttons · A press · X Go To (teleport) · Y Whisper · B close Toon Details, then the panel |
 
 Planned:

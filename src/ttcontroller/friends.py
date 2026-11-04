@@ -50,6 +50,8 @@ PANEL_BUTTONS = ((FRIEND, "friends"), (GO_TO, "go to"), (WHISPER, "whisper"), (I
                  (REPORT, "report"), (TOON_DETAILS, "toon details"))
 
 DETAILS_CLOSE = _right(-0.6125, 0.4271)
+# How long a toon's panel takes to replace the list after a name is clicked.
+PANEL_OPEN_SECONDS = 0.3
 
 
 def _is_portrait_yellow(c: RGB) -> bool:
@@ -206,6 +208,12 @@ class FriendsMapper:
             return self._click(PAGE_LEFT if action == "left" else PAGE_RIGHT, f"page {action}", now)
         if action == "select" and screen.rows:
             return self._click(screen.rows[self.row], f"open friend {self.row + 1}", now)
+        if action in ("goTo", "whisper") and screen.rows:
+            # Open the toon's panel, then press the button once it shows.
+            point, name = (GO_TO, "go to") if action == "goTo" else (WHISPER, "whisper")
+            commands = self._click(screen.rows[self.row], f"open friend {self.row + 1}", now)
+            self._settle_until = now + PANEL_OPEN_SECONDS + self.settle_seconds
+            return commands + [PointerCommand("click", point, name, delay=PANEL_OPEN_SECONDS)]
         if action == "back":
             return self._click(LIST_CLOSE, "close friends list", now)
         return []

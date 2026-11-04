@@ -226,7 +226,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     if active:
                         buttons = controller_buttons(state, config.timing.stick_button_threshold)
                         for command in menu_mapper.update(buttons, now, menu_screen):
-                            point(command.kind, command.point, command.name, view, restore=False)
+                            point(command.kind, command.point, command.name, view, restore=False,
+                                  delay=command.delay)
                     else:
                         menu_mapper.reset_buttons()
                 if in_battle:

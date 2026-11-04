@@ -22,6 +22,7 @@ def replay(name):
     ("speedchat_1552x611", [(83, 19, None)]),
     ("speedchat_539x786", [(72, 19, None)]),
     ("speedchat_phrase_hover_1920x1009", [(137, 19, 16)]),  # "Yes": no submenu
+    ("speedchat_purple_1920x1009", [(138, 17, None)]),  # another speedchat color, and fewer menus
     ("speedchat_hover_1920x1009", [(137, 19, 5), (335, 10, None)]),  # GOODBYE
     # PLACES > DISTRICT > SPECIFIC, each overlapping the one before.
     ("speedchat_deep_1920x1009", [(137, 19, 11), (335, 17, 1), (452, 6, 0), (609, 15, None)]),

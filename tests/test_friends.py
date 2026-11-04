@@ -88,6 +88,17 @@ def test_pages_and_close():
     assert [c.point for c in press(m, screen, 2.0, "b")] == [f.LIST_CLOSE]
 
 
+@pytest.mark.parametrize("button,target", [("x", f.GO_TO), ("y", f.WHISPER)])
+def test_x_and_y_work_straight_from_the_list(button, target):
+    m = FriendsMapper()
+    screen = full_list()
+    m.update(frozenset(), 0.0, screen)
+    press(m, screen, 1.0, "dpad_down")
+    commands = press(m, screen, 2.0, button)
+    assert [(c.kind, c.point) for c in commands] == [("click", screen.rows[1]), ("click", target)]
+    assert commands[1].delay == f.PANEL_OPEN_SECONDS
+
+
 def test_toon_panel_buttons():
     m = FriendsMapper()
     screen = FriendsScreen("panel")
