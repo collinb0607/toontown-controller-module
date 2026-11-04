@@ -14,6 +14,7 @@ Working now:
 - **Overworld hotkeys:** shticker book, options, gags, tasks, map, camera.
 - **Friends list and speedchat:** open and close them with one button. The module checks the screen to see what's open, then clicks the right on-screen button and puts your mouse back.
 - **Battles:** move a highlight across your gags with the D-pad or stick, pick a cog or toon, hover teammates' gags (LB, then left/right), pass, and hold B to run (A/B answer the "are you sure" prompt). Your last gag stays highlighted between rounds and battles.
+- **Gag shop:** move across the gags, buy one or as many as fit, delete mode, and save/load your usual set.
 - **Trunk:** SOS cards (scrolling the list as you go, and filtering them from the dropdown or with L3), pink slips, remotes and doodle tricks, all with the D-pad or stick.
 - **Remapping:** a config file lets you rebind any button.
 - Uses your TTR keybinds automatically, works at any window size, and never blocks your keyboard or mouse.
@@ -22,7 +23,6 @@ Planned:
 
 - **Speedchat menus:** pick phrases with the D-pad.
 - **Menus:** controller navigation for the shticker book, speedchat, friends list, settings, task choice and dialogue.
-- **Gag shop:** buy one gag or buy max, and save/load presets.
 - **Boss fights:** VP and CJ throwing, CFO crane, CEO charge attacks.
 - **Trolley games:** support for each minigame.
 - **On-screen hints:** button prompts that change with what you're doing in game.
@@ -54,11 +54,16 @@ Working now:
 | Trunk | Stick/D-pad move between tabs and items · A use · L3 next SOS filter · LB hover teammates' gags · Y pass · B or X close |
 | Run prompt | A OK · B cancel |
 
+| Gag shop | Controls |
+|---|---|
+| Gags | Stick/D-pad move highlight · A buy one · Y buy max · X delete mode on/off · LB save preset · RB load preset · B done |
+| Delete mode | A delete one · Y delete all of that gag · X or B back to buying |
+| Preset prompt | A OK · B cancel |
+
 Planned:
 
 | State | Controls |
 |---|---|
-| Gag shop | Stick/D-pad move highlight · A buy one · Y buy max · LB save preset · RB load preset · B done |
 | Menus | Stick/D-pad move · A select · B back |
 | Dialogue | A continue |
 | Task choice | D-pad up/left/right/down pick option 1–4 · B cancel |

@@ -3,7 +3,7 @@
 Usage: python tools/record_pixels.py CAPTURE...
 
 Writes tests/fixtures/battle/<capture name>.json holding the window size and
-only the pixels read_screen() sampled, so tests can replay a real screen
+only the pixels read_screen() and read_shop() sampled, so tests can replay a real screen
 without storing (or publishing) whole screenshots.
 """
 
@@ -16,6 +16,7 @@ os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 import pygame  # noqa: E402
 
 from ttcontroller.battle import read_screen  # noqa: E402
+from ttcontroller.shop import read_shop  # noqa: E402
 
 OUT = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "battle"
 
@@ -33,9 +34,10 @@ def main() -> None:
             return c
 
         screen = read_screen(w, h, get_pixel)
+        shop = read_shop(w, h, get_pixel)
         path = OUT / f"{capture.stem}.json"
         path.write_text(json.dumps({"size": [w, h], "pixels": seen}, separators=(",", ":")), encoding="utf-8")
-        print(f"wrote {path.name}: {screen.kind}, {len(seen)} pixels")
+        print(f"wrote {path.name}: {screen.kind or shop.kind}, {len(seen)} pixels")
 
 
 if __name__ == "__main__":

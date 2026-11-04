@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 
 from . import ui
 from .bindings import Bindings, ButtonActions
+from .dialog import find_ok_cancel
 
 RGB = tuple[int, int, int]
 PixelReader = Callable[[int, int], RGB]
@@ -109,10 +110,6 @@ def is_usable_gag(c: RGB) -> bool:
     return b >= 125 and g >= 105 and b - r >= 40 and b - g >= 15
 
 
-def is_dialog_yellow(c: RGB) -> bool:
-    return c[0] > 240 and c[1] > 240 and 160 < c[2] < 215
-
-
 def is_trunk_blue(c: RGB) -> bool:
     r, g, b = c
     return 40 < r < 95 and 90 < g < 150 and 125 < b < 185 and b - r > 60
@@ -174,12 +171,6 @@ TRUNK_BLUE = ui.Button("trunk", TRUNK,
                        tuple(_center(-0.43, y) for y in (-0.125, -0.025, 0.075, 0.17))
                        + tuple(_center(x, 0.205) for x in (-0.3, -0.1, 0.1)),
                        is_trunk_blue, min_hits=6)
-# The run dialog's pale yellow panel spans x -0.249..0.249 and y -0.108..0.188;
-# these probes sit above the question and beside the buttons.
-RUN_CONFIRM = ui.Button("run: are you sure?", RUN_YES,
-                        tuple(_center(x, -0.08) for x in (-0.2, -0.1, 0.0, 0.1, 0.2))
-                        + tuple(_center(x, 0.12) for x in (-0.22, -0.16, 0.16, 0.22)),
-                        is_dialog_yellow, min_hits=8)
 
 
 @dataclass(frozen=True)
@@ -351,7 +342,9 @@ def read_screen(width: int, height: int, get_pixel: PixelReader) -> BattleScreen
         return BattleScreen("target", targets=tuple(targets))
     if ui.is_visible(WAITING, width, height, get_pixel):
         return BattleScreen("waiting", **_read_choices(width, height, get_pixel))
-    if ui.is_visible(RUN_CONFIRM, width, height, get_pixel):
+    # Other OK/Cancel dialogs (like the gag shop's) have their buttons lower down.
+    buttons = find_ok_cancel(width, height, get_pixel)
+    if buttons is not None and abs(buttons[0].y - RUN_YES.y) < 0.02:
         return BattleScreen("confirm_run")
     return BattleScreen()
 

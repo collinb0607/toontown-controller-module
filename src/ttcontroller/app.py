@@ -9,11 +9,12 @@ from .battle import BattleMapper, BattleScreen, read_screen
 from .controller import NEUTRAL, ControllerReader
 from .mapper import OverworldMapper, controller_buttons
 from .output import KeyboardOutput, MouseClicker, send_key
+from .shop import ShopMapper, ShopScreen, read_shop
 from .window import ForegroundWatcher, TTRView, make_dpi_aware
 
 FRAME_SECONDS = 1 / 120
 SETTINGS_CHECK_SECONDS = 1.0
-# How often to look at the screen for battle panels.
+# How often to look at the screen for battle panels and the gag shop.
 BATTLE_CHECK_SECONDS = 0.1
 # A battle panel can vanish for a moment (a dialog fading in); stay in battle mode
 # until none has shown for this long.
@@ -72,6 +73,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     mapper = make_mapper(config)
     battle_mapper = BattleMapper(config.battle)
     battle_screen = BattleScreen()
+    shop_mapper = ShopMapper(config.shop)
+    shop_screen = ShopScreen()
     output = KeyboardOutput(logged_send if dry_run or debug else send_key)
     clicker = MouseClicker()
     last_buttons = frozenset()
@@ -99,6 +102,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     next_settings_check = 0.0
     next_battle_check = 0.0
     last_battle_seen = -BATTLE_GRACE_SECONDS
+    last_shop_seen = -BATTLE_GRACE_SECONDS
     log("Running. Press Ctrl+C to quit." + (" (dry run: keys are printed, not sent)" if dry_run else ""))
 
     try:
@@ -138,11 +142,14 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     config = config_watcher.config
                     mapper = make_mapper(config)
                     battle_mapper.set_bindings(config.battle)
+                    shop_mapper.set_bindings(config.shop)
 
             if not focused:
                 mapper.reset()
                 battle_mapper.reset_buttons()
+                shop_mapper.reset_buttons()
                 battle_screen = BattleScreen()
+                shop_screen = ShopScreen()
                 output.release_all()
             else:
                 view = TTRView(foreground.ttr_hwnd) if foreground.ttr_hwnd else None
@@ -153,11 +160,24 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     if screen.kind != battle_screen.kind and (dry_run or debug):
                         log(f"Battle screen: {screen.kind or 'none'}")
                     battle_screen = screen
+                    shop = read_shop(frame.width, frame.height, frame.get_pixel) if screen.kind is None else ShopScreen()
+                    if shop.kind != shop_screen.kind and (dry_run or debug):
+                        log(f"Gag shop screen: {shop.kind or 'none'}")
+                    shop_screen = shop
 
                 state = state or NEUTRAL
                 if battle_screen.kind is not None:
                     last_battle_seen = now
+                if shop_screen.kind is not None:
+                    last_shop_seen = now
                 in_battle = now - last_battle_seen < BATTLE_GRACE_SECONDS
+                in_shop = not in_battle and now - last_shop_seen < BATTLE_GRACE_SECONDS
+                if in_shop:
+                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
+                    for command in shop_mapper.update(buttons, now, shop_screen):
+                        point(command.kind, command.point, command.name, view, restore=False)
+                else:
+                    shop_mapper.reset_buttons()
                 if in_battle:
                     buttons = controller_buttons(state, config.timing.stick_button_threshold)
                     for command in battle_mapper.update(buttons, now, battle_screen):
@@ -166,9 +186,14 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                               notches=command.notches, delay=command.delay)
                 else:
                     battle_mapper.reset_buttons()
-                # In battle, the battle bindings own their buttons and the left stick doesn't walk.
-                blocked = frozenset(battle_mapper.buttons) if in_battle else frozenset()
-                controls = mapper.update(state, now, view, blocked=blocked, movement=not in_battle)
+                # In battle or the shop, their bindings own their buttons and the left stick doesn't walk.
+                if in_battle:
+                    blocked = frozenset(battle_mapper.buttons)
+                elif in_shop:
+                    blocked = frozenset(shop_mapper.buttons)
+                else:
+                    blocked = frozenset()
+                controls = mapper.update(state, now, view, blocked=blocked, movement=not (in_battle or in_shop))
                 output.sync(controls_to_keys(controls, watcher.settings))
                 for button in mapper.take_clicks():
                     point("click", button.center, button.name, view)

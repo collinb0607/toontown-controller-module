@@ -15,6 +15,7 @@ from .bindings import STICK_BUTTONS, Bindings
 from .controller import BUTTONS
 from .mapper import SPECIAL_ACTIONS, Timing, default_bindings
 from .movement import MovementTuning
+from .shop import SHOP_ACTIONS, default_shop_bindings
 
 CONFIG_DIR = Path(os.environ.get("APPDATA", Path.home())) / "ToontownControllerModule"
 CONFIG_FILE = CONFIG_DIR / "config.json"
@@ -32,6 +33,8 @@ HELP = {
     "battle": "Bindings used while a battle panel is showing. Buttons not bound here keep their "
               "overworld action (e.g. speedchat), except that the left stick never walks in battle. "
               "Actions: " + "; ".join(f"{name} = {desc}" for name, desc in BATTLE_ACTIONS.items()),
+    "shop": "Bindings used in the gag shop, the same way. "
+            "Actions: " + "; ".join(f"{name} = {desc}" for name, desc in SHOP_ACTIONS.items()),
 }
 
 
@@ -39,6 +42,7 @@ HELP = {
 class Config:
     bindings: Bindings = field(default_factory=default_bindings)
     battle: Bindings = field(default_factory=default_battle_bindings)
+    shop: Bindings = field(default_factory=default_shop_bindings)
     movement: MovementTuning = field(default_factory=MovementTuning)
     timing: Timing = field(default_factory=Timing)
 
@@ -50,6 +54,7 @@ def to_json(config: Config) -> dict:
             "press": config.bindings.press,
             "hold": config.bindings.hold,
             "battle": {"press": config.battle.press, "hold": config.battle.hold},
+            "shop": {"press": config.shop.press, "hold": config.shop.hold},
         },
         "movement": asdict(config.movement),
         "timing": asdict(config.timing),
@@ -89,6 +94,7 @@ def parse(data: dict) -> tuple[Config, list[str]]:
     defaults = Config()
     bindings = data.get("bindings", {})
     battle = bindings.get("battle", {})
+    shop = bindings.get("shop", {})
     config = Config(
         bindings=Bindings(
             press=_merge_bindings(defaults.bindings.press, bindings.get("press", {}), warnings, "press"),
@@ -97,6 +103,10 @@ def parse(data: dict) -> tuple[Config, list[str]]:
         battle=Bindings(
             press=_merge_bindings(defaults.battle.press, battle.get("press", {}), warnings, "battle.press"),
             hold=_merge_bindings(defaults.battle.hold, battle.get("hold", {}), warnings, "battle.hold"),
+        ),
+        shop=Bindings(
+            press=_merge_bindings(defaults.shop.press, shop.get("press", {}), warnings, "shop.press"),
+            hold=_merge_bindings(defaults.shop.hold, shop.get("hold", {}), warnings, "shop.hold"),
         ),
         movement=_merge_numbers(defaults.movement, data.get("movement", {}), warnings, "movement"),
         timing=_merge_numbers(defaults.timing, data.get("timing", {}), warnings, "timing"),
@@ -131,6 +141,10 @@ def unknown_actions(config: Config, ttr_controls) -> list[str]:
         for button, action in bindings.items():
             if action not in BATTLE_ACTIONS:
                 problems.append(f"bindings.{table}.{button}: unknown battle action {action!r}")
+    for table, bindings in (("shop.press", config.shop.press), ("shop.hold", config.shop.hold)):
+        for button, action in bindings.items():
+            if action not in SHOP_ACTIONS:
+                problems.append(f"bindings.{table}.{button}: unknown shop action {action!r}")
     return problems
 
 
