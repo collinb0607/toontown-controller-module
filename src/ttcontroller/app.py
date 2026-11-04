@@ -9,6 +9,7 @@ from .battle import BattleMapper, BattleScreen, read_screen
 from .controller import NEUTRAL, ControllerReader
 from .mapper import OverworldMapper, controller_buttons
 from .output import KeyboardOutput, MouseClicker, send_key
+from .npc import NpcMapper, NpcScreen, read_npc
 from .shop import ShopMapper, ShopScreen, read_shop
 from .window import ForegroundWatcher, TTRView, make_dpi_aware
 
@@ -75,6 +76,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     battle_screen = BattleScreen()
     shop_mapper = ShopMapper(config.shop)
     shop_screen = ShopScreen()
+    npc_mapper = NpcMapper(config.npc)
+    npc_screen = NpcScreen()
     output = KeyboardOutput(logged_send if dry_run or debug else send_key)
     clicker = MouseClicker()
     last_buttons = frozenset()
@@ -143,13 +146,16 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     mapper = make_mapper(config)
                     battle_mapper.set_bindings(config.battle)
                     shop_mapper.set_bindings(config.shop)
+                    npc_mapper.set_bindings(config.npc)
 
             if not focused:
                 mapper.reset()
                 battle_mapper.reset_buttons()
                 shop_mapper.reset_buttons()
+                npc_mapper.reset_buttons()
                 battle_screen = BattleScreen()
                 shop_screen = ShopScreen()
+                npc_screen = NpcScreen()
                 output.release_all()
             else:
                 view = TTRView(foreground.ttr_hwnd) if foreground.ttr_hwnd else None
@@ -164,6 +170,11 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     if shop.kind != shop_screen.kind and (dry_run or debug):
                         log(f"Gag shop screen: {shop.kind or 'none'}")
                     shop_screen = shop
+                    npc = (read_npc(frame.width, frame.height, frame.get_pixel, frame.rgb())
+                           if screen.kind is None and shop.kind is None else NpcScreen())
+                    if npc.kind != npc_screen.kind and (dry_run or debug):
+                        log(f"NPC screen: {npc.kind or 'none'}")
+                    npc_screen = npc
 
                 state = state or NEUTRAL
                 if battle_screen.kind is not None:
@@ -178,6 +189,14 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                         point(command.kind, command.point, command.name, view, restore=False)
                 else:
                     shop_mapper.reset_buttons()
+                # NPC screens come and go with the conversation, so no grace period.
+                in_npc = not (in_battle or in_shop) and npc_screen.kind is not None
+                if in_npc:
+                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
+                    for command in npc_mapper.update(buttons, now, npc_screen):
+                        point(command.kind, command.point, command.name, view, restore=False)
+                else:
+                    npc_mapper.reset_buttons()
                 if in_battle:
                     buttons = controller_buttons(state, config.timing.stick_button_threshold)
                     for command in battle_mapper.update(buttons, now, battle_screen):
@@ -191,9 +210,13 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     blocked = frozenset(battle_mapper.buttons)
                 elif in_shop:
                     blocked = frozenset(shop_mapper.buttons)
+                elif in_npc:
+                    blocked = frozenset(npc_mapper.buttons(npc_screen))
                 else:
                     blocked = frozenset()
-                controls = mapper.update(state, now, view, blocked=blocked, movement=not (in_battle or in_shop))
+                # Walking still works mid-conversation (it walks away); not while choosing a task.
+                walk = not (in_battle or in_shop or npc_screen.kind == "tasks")
+                controls = mapper.update(state, now, view, blocked=blocked, movement=walk)
                 output.sync(controls_to_keys(controls, watcher.settings))
                 for button in mapper.take_clicks():
                     point("click", button.center, button.name, view)

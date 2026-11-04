@@ -15,6 +15,7 @@ from .bindings import STICK_BUTTONS, Bindings
 from .controller import BUTTONS
 from .mapper import SPECIAL_ACTIONS, Timing, default_bindings
 from .movement import MovementTuning
+from .npc import NPC_ACTIONS, default_npc_bindings
 from .shop import SHOP_ACTIONS, default_shop_bindings
 
 CONFIG_DIR = Path(os.environ.get("APPDATA", Path.home())) / "ToontownControllerModule"
@@ -35,6 +36,8 @@ HELP = {
               "Actions: " + "; ".join(f"{name} = {desc}" for name, desc in BATTLE_ACTIONS.items()),
     "shop": "Bindings used in the gag shop, the same way. "
             "Actions: " + "; ".join(f"{name} = {desc}" for name, desc in SHOP_ACTIONS.items()),
+    "npc": "Bindings used while talking to an NPC (only the select button) and choosing a task. "
+           "Actions: " + "; ".join(f"{name} = {desc}" for name, desc in NPC_ACTIONS.items()),
 }
 
 
@@ -43,6 +46,7 @@ class Config:
     bindings: Bindings = field(default_factory=default_bindings)
     battle: Bindings = field(default_factory=default_battle_bindings)
     shop: Bindings = field(default_factory=default_shop_bindings)
+    npc: Bindings = field(default_factory=default_npc_bindings)
     movement: MovementTuning = field(default_factory=MovementTuning)
     timing: Timing = field(default_factory=Timing)
 
@@ -55,6 +59,7 @@ def to_json(config: Config) -> dict:
             "hold": config.bindings.hold,
             "battle": {"press": config.battle.press, "hold": config.battle.hold},
             "shop": {"press": config.shop.press, "hold": config.shop.hold},
+            "npc": {"press": config.npc.press, "hold": config.npc.hold},
         },
         "movement": asdict(config.movement),
         "timing": asdict(config.timing),
@@ -95,6 +100,7 @@ def parse(data: dict) -> tuple[Config, list[str]]:
     bindings = data.get("bindings", {})
     battle = bindings.get("battle", {})
     shop = bindings.get("shop", {})
+    npc = bindings.get("npc", {})
     config = Config(
         bindings=Bindings(
             press=_merge_bindings(defaults.bindings.press, bindings.get("press", {}), warnings, "press"),
@@ -107,6 +113,10 @@ def parse(data: dict) -> tuple[Config, list[str]]:
         shop=Bindings(
             press=_merge_bindings(defaults.shop.press, shop.get("press", {}), warnings, "shop.press"),
             hold=_merge_bindings(defaults.shop.hold, shop.get("hold", {}), warnings, "shop.hold"),
+        ),
+        npc=Bindings(
+            press=_merge_bindings(defaults.npc.press, npc.get("press", {}), warnings, "npc.press"),
+            hold=_merge_bindings(defaults.npc.hold, npc.get("hold", {}), warnings, "npc.hold"),
         ),
         movement=_merge_numbers(defaults.movement, data.get("movement", {}), warnings, "movement"),
         timing=_merge_numbers(defaults.timing, data.get("timing", {}), warnings, "timing"),
@@ -145,6 +155,10 @@ def unknown_actions(config: Config, ttr_controls) -> list[str]:
         for button, action in bindings.items():
             if action not in SHOP_ACTIONS:
                 problems.append(f"bindings.{table}.{button}: unknown shop action {action!r}")
+    for table, bindings in (("npc.press", config.npc.press), ("npc.hold", config.npc.hold)):
+        for button, action in bindings.items():
+            if action not in NPC_ACTIONS:
+                problems.append(f"bindings.{table}.{button}: unknown NPC action {action!r}")
     return problems
 
 

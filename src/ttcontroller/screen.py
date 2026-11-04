@@ -3,6 +3,8 @@
 import ctypes
 from ctypes import wintypes
 
+import numpy as np
+
 RGB = tuple[int, int, int]
 
 _user32 = ctypes.WinDLL("user32")
@@ -47,6 +49,11 @@ class Frame:
         i = (y * self.width + x) * 4
         b, g, r = self._bgra[i:i + 3]
         return r, g, b
+
+    def rgb(self) -> np.ndarray:
+        """The whole snapshot as an RGB array (rows, columns, 3), for searching all of it."""
+        bgra = np.frombuffer(self._bgra, dtype=np.uint8).reshape(self.height, self.width, 4)
+        return bgra[..., 2::-1]
 
 
 def grab(left: int, top: int, width: int, height: int) -> Frame:

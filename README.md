@@ -15,6 +15,7 @@ Working now:
 - **Friends list and speedchat:** open and close them with one button. The module checks the screen to see what's open, then clicks the right on-screen button and puts your mouse back.
 - **Battles:** move a highlight across your gags with the D-pad or stick, pick a cog or toon, hover teammates' gags (LB, then left/right), pass, and hold B to run (A/B answer the "are you sure" prompt). Your last gag stays highlighted between rounds and battles.
 - **Gag shop:** move across the gags, buy one or as many as fit, delete mode, and save/load your usual set.
+- **Talking to NPCs:** A clicks through speech bubbles; pick a ToonTask with the D-pad.
 - **Trunk:** SOS cards (scrolling the list as you go, and filtering them from the dropdown or with L3), pink slips, remotes and doodle tricks, all with the D-pad or stick.
 - **Remapping:** a config file lets you rebind any button.
 - Uses your TTR keybinds automatically, works at any window size, and never blocks your keyboard or mouse.
@@ -60,13 +61,16 @@ Working now:
 | Delete mode | A delete one · Y delete all of that gag · X or B back to buying |
 | Preset prompt | A OK · B cancel |
 
+| Talking to NPCs | Controls |
+|---|---|
+| Speech bubble | A continue (or close the last one) |
+| Choosing a ToonTask | Stick/D-pad up/down choose · A pick · B cancel |
+
 Planned:
 
 | State | Controls |
 |---|---|
 | Menus | Stick/D-pad move · A select · B back |
-| Dialogue | A continue |
-| Task choice | D-pad up/left/right/down pick option 1–4 · B cancel |
 | VP / CJ | Hold RT to charge a throw, release to throw |
 | CFO | Left stick move crane · hold X magnet · B leave |
 | CEO | Left stick turn · hold X charge, release to fire · B leave |
