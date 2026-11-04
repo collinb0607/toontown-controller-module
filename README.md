@@ -4,7 +4,7 @@ Play **Toontown Rewritten** with a controller.
 
 Toontown Rewritten's own controller support is experimental: it covers movement and a virtual mouse, but has no menu navigation and no remapping. This module runs alongside the game, reads your controller, and turns its input into the keyboard and mouse actions the game expects. Controller buttons press on-screen buttons for you directly, so you never have to steer a mouse cursor around. Every button can be remapped.
 
-> **Status:** early development. Overworld controls, battles, the gag shop, NPCs, speedchat menus and the friends list work. The shticker book is next. See [plan.md](plan.md) for the full design.
+> **Status:** early development. Overworld controls, battles, the gag shop, NPCs, speedchat menus and the friends list work. The shticker book is next (M6). See [plan.md](plan.md) for the full design.
 
 ## Features
 
@@ -119,7 +119,7 @@ If something in the file is wrong, the console prints `Config problem: ...` and 
 2. ~~Overworld movement~~
 3. ~~Overworld hotkeys, friends list, speedchat open/close, config file~~
 4. ~~Battles~~ (including teammate hover, Toon-Up targets and the trunk)
-5. Gag shop, NPC dialogue and task choice, speedchat menus, friends list
+5. ~~Gag shop, NPC dialogue and task choice, speedchat menus, friends list~~ (plus the Unite hotkey, hidden cursor and auto-sprint)
 6. Shticker book
 7. Settings window
 8. Boss fights
