@@ -22,6 +22,10 @@ Pages with controls of their own:
   with your current district (green name) chosen; clicking another chooses it
   (orange name) and lights up Teleport Here!. A SpeedChat-only district asks to
   confirm with an OK/Cancel dialog.
+- Map: each place shows "Go To <place>" when hovered and teleports when clicked
+  (if you have its teleport access). Places you haven't found yet are under
+  clouds, and hovering them does nothing. Go Home and Back to Playground buttons
+  sit below the map, each missing while you're already there.
 """
 
 from collections.abc import Callable
@@ -109,6 +113,25 @@ def _is_current_green(c: RGB) -> bool:
     return c[1] > 170 and c[0] < 170 and c[2] < 170
 
 
+def _is_cloud(c: RGB) -> bool:
+    return min(c) > 195 and c[2] >= c[0] - 5 and max(c) - min(c) < 60
+
+
+def _is_button_yellow(c: RGB) -> bool:
+    return c[0] > 200 and c[1] > 200 and c[2] < 80
+
+
+def _read_map(width: int, height: int, get_pixel: PixelReader) -> tuple[tuple[tuple[str, ui.UIPoint], ...],
+                                                                        bool, bool]:
+    def shows(probes) -> bool:
+        return all(_is_button_yellow(get_pixel(*p.to_client(width, height))) for p in probes)
+
+    places = tuple((name, point) for name, point in MAP_PLACES
+                   if sum(_is_cloud(get_pixel(*point.offset(dx, dy).to_client(width, height)))
+                          for dx, dy in _CLOUD_SAMPLES) < _CLOUD_MIN)
+    return places, shows(_GO_HOME_PROBES), shows(_PLAYGROUND_PROBES)
+
+
 def _read_districts(width: int, height: int, get_pixel: PixelReader) -> tuple[tuple[ui.UIPoint, ...], int | None,
                                                                               int | None]:
     def at(x: float, y: float) -> RGB:
@@ -152,6 +175,28 @@ _NAME_XS = tuple(-0.367 + 0.004 * k for k in range(50))
 _NAME_DYS = (-0.004, 0.0, 0.004)
 TELEPORT = _center(0.2101, 0.1938)
 
+# The map, measured at 1920x1009: where each place's "Go To" label shows when hovered.
+MAP_PLACES = (
+    ("Toontown Central", _center(-0.001, -0.0352)),
+    ("Donald's Dock", _center(0.2874, -0.0481)),
+    ("Daisy Gardens", _center(-0.1467, 0.0976)),
+    ("Minnie's Melodyland", _center(0.0476, -0.1432)),
+    ("The Brrrgh", _center(0.2299, -0.2056)),
+    ("Donald's Dreamland", _center(-0.0436, -0.2988)),
+    ("Goofy Speedway", _center(-0.2676, -0.0837)),
+    ("Chip 'n Dale's Acorn Acres", _center(0.0961, 0.1472)),
+    ("Sellbot HQ", _center(-0.3399, 0.1581)),
+    ("Cashbot HQ", _center(-0.336, -0.3266)),
+    ("Lawbot HQ", _center(0.3389, -0.3404)),
+    ("Bossbot HQ", _center(0.336, 0.1452)),
+)
+_CLOUD_SAMPLES = tuple((0.005 * i, 0.005 * j) for i in range(-4, 5) for j in range(-4, 5))
+_CLOUD_MIN = 30  # of the 81 samples; an open place has at most a dozen (the Brrrgh's snow)
+GO_HOME = _center(0.0723, 0.2711)
+BACK_TO_PLAYGROUND = _center(0.2676, 0.2711)
+_GO_HOME_PROBES = (_center(0.0297, 0.2552), _center(0.1140, 0.2552))
+_PLAYGROUND_PROBES = (_center(0.1784, 0.2552), _center(0.3568, 0.2552))
+
 
 @dataclass(frozen=True)
 class BookScreen:
@@ -164,6 +209,9 @@ class BookScreen:
     districts: tuple[ui.UIPoint, ...] = ()  # on the Districts page: each district's name
     district_chosen: int | None = None  # the one clicked (orange), if not the current one
     district_current: int | None = None  # the one you're in (green)
+    places: tuple[tuple[str, ui.UIPoint], ...] = ()  # on the Map page: the places not under clouds
+    go_home: bool = False  # the Map page's Go Home button is showing
+    back_to_playground: bool = False
 
     @property
     def is_open(self) -> bool:
@@ -172,7 +220,7 @@ class BookScreen:
     @property
     def hovers(self) -> bool:
         """Whether something is highlighted with the cursor (so it isn't parked)."""
-        return self.dialog is not None or self.page in PAGE_ROWS
+        return self.dialog is not None or self.page in PAGE_ROWS or bool(self.places)
 
 
 def _px(width: int, height: int, x: float, y: float) -> tuple[int, int]:
@@ -337,8 +385,10 @@ def read_book(width: int, height: int, get_pixel: PixelReader) -> BookScreen:
     tabs = tuple(_center(_TAB_X, _TAB0_Y + _TAB_STEP * i) for i in range(len(kinds)))
     districts, chosen, current_district = (_read_districts(width, height, get_pixel) if page == "districts"
                                            else ((), None, None))
+    places, go_home, playground = _read_map(width, height, get_pixel) if page == "map" else ((), False, False)
     return BookScreen(tabs, current, page, top_tabs, top_current, districts=districts, district_chosen=chosen,
-                      district_current=current_district)
+                      district_current=current_district, places=places, go_home=go_home,
+                      back_to_playground=playground)
 
 
 def read_pages(width: int, height: int, get_pixel: PixelReader) -> list[str | None]:
@@ -359,17 +409,41 @@ BOOK_ACTIONS = {
     "select": "press the highlighted button (Teleport Here! on Districts, OK in a dialog)",
     "up": "move up a page's buttons (or choose the district above)",
     "down": "move down a page's buttons (or choose the district below)",
-    "left": "change a setting (the SpeedChat color)", "right": "change a setting (the SpeedChat color)",
+    "left": "change a setting (the SpeedChat color), or the next place left on the map",
+    "right": "change a setting (the SpeedChat color), or the next place right on the map",
+    "goHome": "the map's Go Home button", "backToPlayground": "the map's Back to Playground button",
 }
 
 
 def default_book_bindings() -> Bindings:
-    press = {"lb": "prevPage", "rb": "nextPage", "lt": "prevTab", "rt": "nextTab", "b": "close", "a": "select"}
+    press = {"lb": "prevPage", "rb": "nextPage", "lt": "prevTab", "rt": "nextTab", "b": "close", "a": "select",
+             "y": "goHome", "x": "backToPlayground"}
     # The left stick too: the toon can't walk while the book is open.
     for direction in ("up", "down", "left", "right"):
         press[f"dpad_{direction}"] = direction
         press[f"ls_{direction}"] = direction
     return Bindings(press=press)
+
+
+_DIRECTIONS = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}
+
+
+def _nearest(here: tuple[str, ui.UIPoint], places, direction: tuple[int, int]) -> tuple[str, ui.UIPoint] | None:
+    """The closest place roughly in a direction (within 60 degrees of it), favoring
+    ones straight that way."""
+    best, best_score = None, float("inf")
+    for name, point in places:
+        dx, dy = point.x - here[1].x, point.y - here[1].y
+        dist = (dx * dx + dy * dy) ** 0.5
+        if name == here[0] or dist == 0:
+            continue
+        cos = (dx * direction[0] + dy * direction[1]) / dist
+        if cos < 0.5:
+            continue
+        score = dist * (1 + 2 * (1 - cos))
+        if score < best_score:
+            best, best_score = (name, point), score
+    return best
 
 
 # Each page with controls: its buttons, top to bottom.
@@ -395,6 +469,7 @@ class BookMapper:
         self._shown: tuple | None = None  # what was last hovered for: (page, dialog showing)
         self._page: str | None = None
         self._district: int | None = None  # the district last clicked, before the page shows it
+        self._place: str | None = None  # the map place hovered
 
     def set_bindings(self, bindings: Bindings) -> None:
         self.bindings = bindings
@@ -428,6 +503,7 @@ class BookMapper:
                     self._page = screen.page
                     self.row = 0
                     self._district = None
+                    self._place = None
                 commands += self._hover(screen)
         for action in fired:
             if screen.dialog is not None:
@@ -449,9 +525,41 @@ class BookMapper:
             return [PointerCommand("click", TELEPORT, "teleport here")]
         return []
 
+    def _map_place(self, screen: BookScreen) -> tuple[str, ui.UIPoint] | None:
+        """The hovered place, or Toontown Central (or the first open place) to start."""
+        places = dict(screen.places)
+        for name in (self._place, MAP_PLACES[0][0]):
+            if name in places:
+                return name, places[name]
+        return screen.places[0] if screen.places else None
+
+    def _run_map(self, action: str, screen: BookScreen, now: float) -> list[PointerCommand]:
+        if action == "goHome" and screen.go_home:
+            return self._click(GO_HOME, "go home", now)
+        if action == "backToPlayground" and screen.back_to_playground:
+            return self._click(BACK_TO_PLAYGROUND, "back to playground", now)
+        here = self._map_place(screen)
+        if here is None:
+            return []
+        if action == "select":
+            # Clicked either way: without teleport access it just does nothing.
+            return self._click(here[1], f"go to {here[0]}", now)
+        if action in _DIRECTIONS:
+            nearest = _nearest(here, screen.places, _DIRECTIONS[action])
+            if nearest is not None:
+                self._place = nearest[0]
+                return [PointerCommand("hover", nearest[1], nearest[0])]
+        return []
+
     def _hover(self, screen: BookScreen) -> list[PointerCommand]:
         if screen.dialog is not None:
             return [PointerCommand("hover", screen.dialog[0], "OK")]
+        if screen.page == "map":
+            here = self._map_place(screen)
+            if here is None:
+                return []
+            self._place = here[0]
+            return [PointerCommand("hover", here[1], here[0])]
         rows = PAGE_ROWS.get(screen.page)
         if not rows:
             return []
@@ -475,6 +583,8 @@ class BookMapper:
     def _run(self, action: str, screen: BookScreen, now: float) -> list[PointerCommand]:
         if screen.page == "districts" and action in ("up", "down", "select"):
             return self._run_districts(action, screen)
+        if screen.page == "map":
+            return self._run_map(action, screen, now)
         rows = PAGE_ROWS.get(screen.page)
         if rows and action in ("up", "down"):
             self.row = max(0, min(len(rows) - 1, self.row + (-1 if action == "up" else 1)))

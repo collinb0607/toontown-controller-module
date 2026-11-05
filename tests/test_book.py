@@ -203,3 +203,55 @@ def test_districts_start_from_the_current_one_each_visit():
     mapper.update(frozenset(), 3.0, districts(current=1))
     [c] = press(mapper, "dpad_up", 4.0, districts(current=1))
     assert c.point == districts().districts[0]
+
+
+@pytest.mark.parametrize("name,open_places,playground", [
+    ("book_map_1920x1009", 12, True), ("book_hover_ttc_1920x1009", 12, True),
+    # Clouds over the places not found yet; in a playground there's no Back to Playground.
+    ("book_clouds_blocking_locations_1920x1009", 4, False),
+])
+def test_map_page(name, open_places, playground):
+    screen = replay(name)
+    assert screen.page == "map" and screen.hovers
+    assert len(screen.places) == open_places
+    assert screen.go_home and screen.back_to_playground == playground
+
+
+def test_map_clouds_hide_the_places_not_found():
+    names = [n for n, _ in replay("book_clouds_blocking_locations_1920x1009").places]
+    assert names == ["Toontown Central", "Minnie's Melodyland", "Donald's Dreamland", "Goofy Speedway"]
+
+
+def map_screen(places=b.MAP_PLACES, playground=True):
+    tabs = tuple(b._center(0.46, 0.04 * i) for i in range(4))
+    return BookScreen(tabs, 2, "map", places=tuple(places), go_home=True, back_to_playground=playground)
+
+
+def test_map_moves_to_the_nearest_place_that_way():
+    mapper = BookMapper()
+    [hover] = mapper.update(frozenset(), 0.0, map_screen())
+    assert hover.name == "Toontown Central"
+    assert [c.name for c in press(mapper, "dpad_up", 1.0, map_screen())] == ["Minnie's Melodyland"]
+    assert [c.name for c in press(mapper, "dpad_right", 2.0, map_screen())] == ["The Brrrgh"]
+    assert [c.name for c in press(mapper, "ls_down", 3.0, map_screen())] == ["Donald's Dock"]
+    [click] = press(mapper, "a", 4.0, map_screen())
+    assert (click.kind, click.name) == ("click", "go to Donald's Dock")
+
+
+def test_map_skips_clouded_places_and_stops_at_the_edge():
+    places = [p for p in b.MAP_PLACES if p[0] in ("Toontown Central", "Goofy Speedway", "Donald's Dreamland")]
+    mapper = BookMapper()
+    mapper.update(frozenset(), 0.0, map_screen(places))
+    assert [c.name for c in press(mapper, "dpad_left", 1.0, map_screen(places))] == ["Goofy Speedway"]
+    assert not press(mapper, "dpad_left", 2.0, map_screen(places))  # nothing further left
+
+
+def test_map_home_and_playground_buttons():
+    mapper = BookMapper()
+    mapper.update(frozenset(), 0.0, map_screen())
+    def clicks(button, t, screen):
+        return [c.point for c in press(mapper, button, t, screen) if c.kind == "click"]
+
+    assert clicks("y", 1.0, map_screen()) == [b.GO_HOME]
+    assert clicks("x", 2.0, map_screen()) == [b.BACK_TO_PLAYGROUND]
+    assert clicks("x", 3.0, map_screen(playground=False)) == []
