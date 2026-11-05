@@ -148,7 +148,7 @@ If something in the file is wrong, the console prints `Config problem: ...` and 
 10. On-screen hints overlay
 11. First release
 
-**Later:** Toontown Corporate Clash, PlayStation/Switch controllers, Mac, borderless fullscreen, multi-toon.
+**After 1.0:** two toons on one machine (one on keyboard and mouse, one on a controller), minigames, Toontown Corporate Clash, PlayStation/Switch controllers, Mac, borderless fullscreen.
 
 ## Development
 

@@ -9,7 +9,10 @@ and sends keyboard keys and real mouse clicks (SendInput) to drive the game.
 - Milestones done: M0 to M6 (overworld, hotkeys, battles, menus, the whole shticker book).
   M7 is in progress: start-up and toon selection are built; **TTR's own Options window is
   next**. Then M8 auto-detection, M9 boss fights, M10 Make-a-Toon, M11 hints overlay,
-  M12 settings window, M13 release (1.0). Minigames are in Future, not 1.0. M3 no longer
+  M12 settings window, M13 release (1.0). Minigames are in Future, not 1.0. After 1.0:
+  two toons on one machine (keyboard-and-mouse toon plus a controller toon driven by posted
+  window messages: paced clicks, hover by a middle-button press since TTR ignores posted
+  mouse moves; findings and experiments are in plan.md and tools/background_*). M3 no longer
   exists (the hints overlay was M3); done milestones keep their numbers because commit
   messages use them.
 

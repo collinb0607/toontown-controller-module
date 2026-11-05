@@ -27,6 +27,11 @@ _PADDING = 0.0087  # top and bottom padding together
 _TOP_MARGIN_X = 0.138  # inside the top menu's left edge
 _TOP_PROBE_Y = -0.43  # from the window's center; inside the top menu at any size
 _HOVER_X = 0.025  # from a menu's left edge
+# Where the top menu really is: its left edge (0.1336 to 0.1368 measured) and its top
+# (0.485 to 0.505 above the center). A light gray backdrop, like a cog building's walls
+# in battle, passes the margin check too, but runs on past the menu's edge.
+_TOP_LEFT_RANGE = (0.125, 0.145)
+_TOP_TOP_RANGE = (-0.53, -0.46)
 
 # The UNITE! row's shape, to find it wherever it is in the top menu (which rows
 # show depends on the toon and where they are): how many of 9 points down the row
@@ -118,6 +123,12 @@ def _menu(width: int, height: int, get_pixel: PixelReader, left: int, y0: int, u
     return Menu(ui.UIPoint("left", left / unit, top / unit), rows, highlighted), (top, bottom), ys
 
 
+def _where_speedchat_opens(menu: Menu, width: int, height: int, unit: int) -> bool:
+    top = menu.left.y - height / 2 / unit
+    return (_TOP_LEFT_RANGE[0] <= menu.left.x <= _TOP_LEFT_RANGE[1]
+            and _TOP_TOP_RANGE[0] <= top <= _TOP_TOP_RANGE[1])
+
+
 def _find_child(width: int, height: int, get_pixel: PixelReader, left: int, y: int, unit: int,
                 parent_span: tuple[int, int]):
     """The submenu open beside a highlighted row: where its left edge is, or None."""
@@ -185,6 +196,8 @@ def read_speedchat(width: int, height: int, get_pixel: PixelReader, look_for_uni
         if found is None:
             break
         menu, span, ys = found
+        if not menus and not _where_speedchat_opens(menu, width, height, unit):
+            return SpeedchatScreen()
         menus.append(menu)
         if menu.highlighted is None:
             break

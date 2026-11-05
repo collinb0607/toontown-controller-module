@@ -141,3 +141,10 @@ def test_unite_hotkey_without_a_unite_menu_just_opens_speedchat():
     m.go_to_unite(0.0)
     top = menu(0.1, 6)
     assert [c.point for c in m.update(frozenset(), 0.2, SpeedchatScreen((top,), looked_for_unite=True))] == [top.rows[0]]
+
+
+def test_a_light_gray_backdrop_isnt_speedchat():
+    # Cog building walls in battle: light gray all the way to the window's edge, which
+    # passes the margin check but isn't where the menu opens.
+    from ttcontroller.speedchat import read_speedchat
+    assert not read_speedchat(1920, 1009, lambda x, y: (200, 200, 205)).is_open
