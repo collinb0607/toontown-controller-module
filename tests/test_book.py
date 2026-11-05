@@ -159,3 +159,47 @@ def test_left_stick_moves_like_the_dpad():
     assert hover.point == b.SPEEDCHAT_COLOR
     click, _ = press(mapper, "ls_right", 2.0, options())
     assert click.point == b.COLOR_RIGHT
+
+
+@pytest.mark.parametrize("name,chosen", [("book_districts_1920x1009", None),
+                                         ("book_districts_clicked_one_1920x1009", 8)])
+def test_districts_page(name, chosen):
+    screen = replay(name)
+    assert screen.page == "districts" and not screen.hovers
+    assert len(screen.districts) == 15
+    assert screen.district_current == 12 and screen.district_chosen == chosen
+
+
+def test_speedchat_only_district_confirm():
+    screen = replay("book_districts_speedchat_only_confirm_1920x1009")
+    assert screen.dialog is not None
+
+
+def districts(chosen=None, current=2):
+    tabs = tuple(b._center(0.46, 0.04 * i) for i in range(4))
+    names = tuple(b._center(-0.337, 0.03 * i) for i in range(4))
+    return BookScreen(tabs, 1, "districts", districts=names, district_chosen=chosen, district_current=current)
+
+
+def test_districts_click_up_and_down_wrapping_then_teleport():
+    mapper = BookMapper()
+    assert mapper.update(frozenset(), 0.0, districts()) == []  # nothing to hover
+    [c] = press(mapper, "dpad_down", 1.0, districts())
+    assert c.kind == "click" and c.point == districts().districts[3]
+    # Straight away, before the page shows the new choice: still counts from it, and wraps.
+    [c] = press(mapper, "dpad_down", 1.1, districts())
+    assert c.point == districts().districts[0]
+    [c] = press(mapper, "dpad_up", 1.2, districts(chosen=0))
+    assert c.point == districts().districts[3]
+    [c] = press(mapper, "a", 2.0, districts(chosen=3))
+    assert c.kind == "click" and c.point == b.TELEPORT
+
+
+def test_districts_start_from_the_current_one_each_visit():
+    mapper = BookMapper()
+    mapper.update(frozenset(), 0.0, districts())
+    press(mapper, "dpad_down", 1.0, districts())
+    mapper.update(frozenset(), 2.0, BookScreen())  # book closed
+    mapper.update(frozenset(), 3.0, districts(current=1))
+    [c] = press(mapper, "dpad_up", 4.0, districts(current=1))
+    assert c.point == districts().districts[0]

@@ -78,6 +78,7 @@ Working now:
 | A toon's panel | D-pad up/down move between its buttons · A press · X Go To (teleport) · Y Whisper · B close Toon Details, then the panel |
 | Shticker book | LB/RB previous/next page · LT/RT previous/next tab along the page's top · B close |
 | Options & Codes page | Stick/D-pad up/down move · left/right change the SpeedChat color · A press · Exit Toontown's dialog: A OK · B cancel |
+| Districts page | Stick/D-pad up/down choose the district above/below (wraps around) · A Teleport Here! · SpeedChat-only confirm: A OK · B cancel |
 
 Planned:
 

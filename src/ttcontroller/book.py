@@ -18,6 +18,10 @@ Pages with controls of their own:
 - Options & Codes: Submit, the SpeedChat color (hovering its box previews it, with
   arrows either side to change it), Open Options and Exit Toontown. The code box
   is skipped, since there's no way to type.
+- Districts: a list of districts, each with a colored dot on its right. It opens
+  with your current district (green name) chosen; clicking another chooses it
+  (orange name) and lights up Teleport Here!. A SpeedChat-only district asks to
+  confirm with an OK/Cancel dialog.
 """
 
 from collections.abc import Callable
@@ -93,6 +97,37 @@ def is_dim_backdrop(c: RGB) -> bool:
     return sum(abs(p - q) for p, q in zip(c, DIM_BACKDROP)) < 25
 
 
+def _is_dot(c: RGB) -> bool:
+    return max(c) - min(c) > 80
+
+
+def _is_chosen_orange(c: RGB) -> bool:
+    return c[0] > 200 and 120 < c[1] < 200 and c[2] < 160
+
+
+def _is_current_green(c: RGB) -> bool:
+    return c[1] > 170 and c[0] < 170 and c[2] < 170
+
+
+def _read_districts(width: int, height: int, get_pixel: PixelReader) -> tuple[tuple[ui.UIPoint, ...], int | None,
+                                                                              int | None]:
+    def at(x: float, y: float) -> RGB:
+        return get_pixel(*_px(width, height, x, y))
+
+    names, chosen, current = [], None, None
+    for i in range(_MAX_DISTRICTS):
+        y = _DISTRICT0_Y + _DISTRICT_STEP * i
+        if not any(_is_dot(at(_DISTRICT_DOT_X, y + dy)) for dy in _NAME_DYS):
+            break
+        names.append(_center(_DISTRICT_X, y))
+        colors = [at(x, y + dy) for x in _NAME_XS for dy in _NAME_DYS]
+        if sum(map(_is_chosen_orange, colors)) >= 10:
+            chosen = i
+        elif sum(map(_is_current_green, colors)) >= 10:
+            current = i
+    return tuple(names), chosen, current
+
+
 def _is_face(c: RGB) -> bool:
     return all(194 <= v <= 214 for v in c) and max(c) - min(c) < 8
 
@@ -107,6 +142,16 @@ EXIT_TOONTOWN = _center(0.2270, 0.2448)
 OPTIONS_ROWS = ((SUBMIT, "submit"), (SPEEDCHAT_COLOR, "speedchat color"), (OPEN_OPTIONS, "open options"),
                 (EXIT_TOONTOWN, "exit toontown"))
 
+# Districts, measured at 1920x1009. The list doesn't scroll with today's district count.
+_DISTRICT_X = -0.337  # click here, inside even the shortest name
+_DISTRICT_DOT_X = -0.0704
+_DISTRICT0_Y = -0.2265
+_DISTRICT_STEP = 0.0325
+_MAX_DISTRICTS = 20
+_NAME_XS = tuple(-0.367 + 0.004 * k for k in range(50))
+_NAME_DYS = (-0.004, 0.0, 0.004)
+TELEPORT = _center(0.2101, 0.1938)
+
 
 @dataclass(frozen=True)
 class BookScreen:
@@ -116,6 +161,9 @@ class BookScreen:
     top_tabs: tuple[ui.UIPoint, ...] = ()
     top_current: int | None = None
     dialog: tuple[ui.UIPoint, ui.UIPoint] | None = None  # an OK/Cancel dialog over the book
+    districts: tuple[ui.UIPoint, ...] = ()  # on the Districts page: each district's name
+    district_chosen: int | None = None  # the one clicked (orange), if not the current one
+    district_current: int | None = None  # the one you're in (green)
 
     @property
     def is_open(self) -> bool:
@@ -287,7 +335,10 @@ def read_book(width: int, height: int, get_pixel: PixelReader) -> BookScreen:
     page = _page(width, height, get_pixel, current, *edges) if current is not None else None
     top_tabs, top_current = _top_tabs(width, height, get_pixel)
     tabs = tuple(_center(_TAB_X, _TAB0_Y + _TAB_STEP * i) for i in range(len(kinds)))
-    return BookScreen(tabs, current, page, top_tabs, top_current)
+    districts, chosen, current_district = (_read_districts(width, height, get_pixel) if page == "districts"
+                                           else ((), None, None))
+    return BookScreen(tabs, current, page, top_tabs, top_current, districts=districts, district_chosen=chosen,
+                      district_current=current_district)
 
 
 def read_pages(width: int, height: int, get_pixel: PixelReader) -> list[str | None]:
@@ -305,8 +356,9 @@ BOOK_ACTIONS = {
     "prevTab": "the tab to the left along the page's top",
     "nextTab": "the tab to the right along the page's top",
     "close": "close the book, or cancel a dialog over it",
-    "select": "press the highlighted button (OK in a dialog)",
-    "up": "move up a page's buttons", "down": "move down a page's buttons",
+    "select": "press the highlighted button (Teleport Here! on Districts, OK in a dialog)",
+    "up": "move up a page's buttons (or choose the district above)",
+    "down": "move down a page's buttons (or choose the district below)",
     "left": "change a setting (the SpeedChat color)", "right": "change a setting (the SpeedChat color)",
 }
 
@@ -342,6 +394,7 @@ class BookMapper:
         self.row = 0
         self._shown: tuple | None = None  # what was last hovered for: (page, dialog showing)
         self._page: str | None = None
+        self._district: int | None = None  # the district last clicked, before the page shows it
 
     def set_bindings(self, bindings: Bindings) -> None:
         self.bindings = bindings
@@ -374,6 +427,7 @@ class BookMapper:
                 if screen.dialog is None and screen.page != self._page:
                     self._page = screen.page
                     self.row = 0
+                    self._district = None
                 commands += self._hover(screen)
         for action in fired:
             if screen.dialog is not None:
@@ -383,6 +437,17 @@ class BookMapper:
             elif now >= self._settle_until:
                 commands += self._run(action, screen, now)
         return commands
+
+    def _run_districts(self, action: str, screen: BookScreen) -> list[PointerCommand]:
+        if action in ("up", "down") and screen.districts:
+            # From the one last clicked: the page can take a moment to show it.
+            base = next((i for i in (self._district, screen.district_chosen, screen.district_current)
+                         if i is not None), 0)
+            self._district = (base + (-1 if action == "up" else 1)) % len(screen.districts)
+            return [PointerCommand("click", screen.districts[self._district], f"district {self._district + 1}")]
+        if action == "select":
+            return [PointerCommand("click", TELEPORT, "teleport here")]
+        return []
 
     def _hover(self, screen: BookScreen) -> list[PointerCommand]:
         if screen.dialog is not None:
@@ -408,6 +473,8 @@ class BookMapper:
         return [PointerCommand("click", point, name)]
 
     def _run(self, action: str, screen: BookScreen, now: float) -> list[PointerCommand]:
+        if screen.page == "districts" and action in ("up", "down", "select"):
+            return self._run_districts(action, screen)
         rows = PAGE_ROWS.get(screen.page)
         if rows and action in ("up", "down"):
             self.row = max(0, min(len(rows) - 1, self.row + (-1 if action == "up" else 1)))
