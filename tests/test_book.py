@@ -449,3 +449,15 @@ def test_cancelling_a_task_delete_goes_back_to_that_task():
 def test_the_book_takes_the_trunks_buttons_too():
     # LS is the SOS filter on the Trunk tab, so it mustn't also toggle sprint.
     assert "ls" in BookMapper().buttons
+
+
+def test_resistance_rank_pages_turn_with_left_and_right():
+    assert replay("book_resistance_rank_1920x1009").page == "resistance rank"
+    rank = BookScreen(tuple(b._center(0.46, 0.04 * i) for i in range(6)), 5, "resistance rank")
+    mapper = BookMapper()
+    assert mapper.update(frozenset(), 0.0, rank) == []  # just to look at
+    [click] = press(mapper, "dpad_right", 1.0, rank)
+    assert click.kind == "click" and click.point == b.RANK_PAGE_ARROWS["right"]
+    [click] = press(mapper, "ls_left", 2.0, rank)
+    assert click.point == b.RANK_PAGE_ARROWS["left"]
+    assert not press(mapper, "dpad_up", 3.0, rank)

@@ -32,6 +32,8 @@ Pages with controls of their own:
 - ToonTasks: up to four task scrolls, two by two; a blank scroll has no task.
   Hovering a scroll lifts it a little and shows its reward. A task you can drop
   has a trash can in its top right, which asks to confirm with an OK/Cancel dialog.
+- Resistance Rank: just to look at, a few pages of it turned by the small blue
+  arrows either side of "Page 1/4" at the bottom.
 """
 
 from collections.abc import Callable
@@ -318,6 +320,9 @@ _TASK_TITLE_MIN = 5  # dark title pixels for a scroll to have a task
 _TRASH_DX = 0.1606
 _TRASH_DYS = tuple(-0.095 + 0.004 * i for i in range(11))  # covers the lifted scroll too
 _TRASH_MIN = 3
+
+# Resistance Rank, measured at 1920x1009: the arrows either side of its page number.
+RANK_PAGE_ARROWS = {"left": _center(-0.0545, 0.2349), "right": _center(0.0471, 0.2339)}
 
 GO_HOME = _center(0.0723, 0.2711)
 BACK_TO_PLAYGROUND = _center(0.2676, 0.2711)
@@ -837,6 +842,8 @@ class BookMapper:
             return self._run_districts(action, screen)
         if screen.page == "map":
             return self._run_map(action, screen, now)
+        if screen.page == "resistance rank" and action in RANK_PAGE_ARROWS:
+            return self._click(RANK_PAGE_ARROWS[action], f"rank page {action}", now)
         if screen.tasks and action in ("up", "down", "left", "right", "pageAction"):
             return self._run_tasks(action, screen, now)
         if screen.gags is not None and action in ("up", "down", "left", "right"):

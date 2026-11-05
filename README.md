@@ -83,6 +83,7 @@ Working now:
 | Map page | Stick/D-pad move to the nearest place that way (clouded places are skipped) · A go there · Y Go Home · X Back to Playground |
 | Gags page | Gags tab: Stick/D-pad hover gags for their info (starts on the cupcake) · Trunk tab: like the battle trunk (Stick/D-pad move, A pick a tab or filter, LS next SOS filter, right stick up/down scroll the SOS cards), for hovering info |
 | ToonTasks page | Stick/D-pad hover tasks (blank scrolls are skipped) · X delete the hovered task, if it has a trash can · its confirm: A Delete · B cancel |
+| Resistance Rank page | Stick/D-pad left/right turn its pages |
 
 Planned:
 
