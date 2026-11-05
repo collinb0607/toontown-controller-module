@@ -87,6 +87,7 @@ Working now:
 | Cog Gallery page | Right stick up/left/right/down: the tie/gavel/dollar sign/bar graph suits · Stick/D-pad move between summon buttons · A open Issue a Cog Summons · there: up/down move · A summon · B close |
 | Fishing page | Bucket: Stick/D-pad up/down pick the fish above/below (scrolls at the ends) · X release it (A OK · B cancel) · Album: up/down flip through species · Trophies: just to look at |
 | Racing page | Customize: right stick left/right turn the kart · Stick/D-pad left/right hover the accessory icons · A pick one · Records: just to look at · Trophy: Stick/D-pad hover the trophies |
+| Cog Disguise page | Stick/D-pad up/down pick the suit tab (Bossbot, Lawbot, Cashbot, Sellbot) · Stick/D-pad left/right click the blue arrows, where a suit has them |
 | Golf page | Records: just to look at · Trophy: Stick/D-pad hover the trophies |
 
 Planned:

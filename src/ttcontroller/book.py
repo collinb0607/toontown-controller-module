@@ -48,8 +48,10 @@ Pages with controls of their own:
   accessory icons at the bottom), Records (just to look at) and Trophy. Golf has
   Records and Trophy. A Trophy tab is 30 small trophies, ten by three, and three
   big ones below; one not earned yet is a gray card with a "?" (nothing to hover),
-  and hovering an earned one tints it yellow and shows what it took. Album flips through species with its own triangles. Trophies is
-  just to look at.
+  and hovering an earned one tints it yellow and shows what it took.
+- Cog Disguise: a tab per suit down its right side, written sideways (Bossbot,
+  Lawbot, Cashbot, Sellbot); the current one's lettering is red. Some suits have
+  blue arrows either side of their name plate to flip between versions.
 """
 
 from collections.abc import Callable
@@ -198,6 +200,26 @@ def cog_cell(col: int, row: int) -> ui.UIPoint:
 
 def summon_button(cog: tuple[int, int]) -> ui.UIPoint:
     return cog_cell(*cog).offset(*SUMMON_OFFSET)
+
+
+def _read_disguise(width: int, height: int, get_pixel: PixelReader) -> tuple[int | None, tuple[str, ...]]:
+    """Cog Disguise's current suit (the tab with red lettering) and its arrows showing."""
+    reds = [sum(_is_red_ink(get_pixel(*tab.offset(x - tab.x, dy).to_client(width, height)))
+                for x in _SUIT_INK_XS for dy in _SUIT_INK_DYS) for tab in SUIT_TABS]
+    current = max(range(len(reds)), key=reds.__getitem__) if max(reds) >= 5 else None
+    arrows = tuple(side for side, p in DISGUISE_ARROWS.items()
+                   if _is_arrow_blue(get_pixel(*p.to_client(width, height))))
+    return current, arrows
+
+
+def _is_red_ink(c: RGB) -> bool:
+    r, g, b = c
+    return r > 150 and g < 90 and b < 90
+
+
+def _is_arrow_blue(c: RGB) -> bool:
+    r, g, b = c
+    return b > 150 and b - r > 80
 
 
 def _is_summon_blue(c: RGB) -> bool:
@@ -472,6 +494,13 @@ _TROPHY_CARD = (-0.025, 0.035)  # a spot on a trophy's card clear of the trophy 
 _CUSTOMIZE_TAB = {"racing": 0}
 _TROPHY_TAB = {"racing": 2, "golf": 1}
 
+# Cog Disguise, measured at 1920x1009: the suit tabs (top to bottom) and the blue arrows.
+SUIT_TABS = tuple(_center(0.3845, y) for y in (-0.2265, -0.0798, 0.0610, 0.1948))
+SUIT_NAMES = ("Bossbot", "Lawbot", "Cashbot", "Sellbot")
+_SUIT_INK_XS = tuple(0.3746 + 0.002 * i for i in range(11))
+_SUIT_INK_DYS = tuple(-0.042 + 0.006 * i for i in range(15))
+DISGUISE_ARROWS = {"left": _center(-0.3409, 0.2126), "right": _center(-0.0793, 0.2126)}
+
 GO_HOME = _center(0.0723, 0.2711)
 BACK_TO_PLAYGROUND = _center(0.2676, 0.2711)
 _GO_HOME_PROBES = (_center(0.0297, 0.2552), _center(0.1140, 0.2552))
@@ -500,6 +529,8 @@ class BookScreen:
     summon_cogs: tuple[tuple[int, int], ...] = ()  # on the Cog Gallery: the cells with a summon button
     fish: tuple[ui.UIPoint, ...] = ()  # on Fishing's Bucket tab: the fish names showing, top to bottom
     trophies: tuple[int, ...] = ()  # on a Trophy tab: the trophies earned (indexes into TROPHIES)
+    suit_current: int | None = None  # on Cog Disguise: the suit tab picked (into SUIT_TABS)
+    suit_arrows: tuple[str, ...] = ()  # and its blue arrows showing ("left", "right")
     summons_open: bool = False  # Issue a Cog Summons is open
     summons: tuple[ui.UIPoint, ...] = ()  # its available buttons, top to bottom (none for a message)
 
@@ -688,10 +719,12 @@ def read_book(width: int, height: int, get_pixel: PixelReader) -> BookScreen:
             else ())
     trophies = (_read_trophies(width, height, get_pixel)
                 if top_current is not None and top_current == _TROPHY_TAB.get(page) else ())
+    suit_current, suit_arrows = (_read_disguise(width, height, get_pixel) if page == "cog disguise"
+                                 else (None, ()))
     return BookScreen(tabs, current, page, top_tabs, top_current, districts=districts, district_chosen=chosen,
                       district_current=current_district, places=places, go_home=go_home,
                       back_to_playground=playground, gags=gags, trunk=trunk, tasks=tasks, summon_cogs=summon_cogs,
-                      fish=fish, trophies=trophies)
+                      fish=fish, trophies=trophies, suit_current=suit_current, suit_arrows=suit_arrows)
 
 
 def read_pages(width: int, height: int, get_pixel: PixelReader) -> list[str | None]:
@@ -966,6 +999,19 @@ class BookMapper:
         return [PointerCommand("hover", _accessory(self._accessory), f"accessory {self._accessory + 1}",
                                size=ACCESSORY_SIZE)]
 
+    def _run_disguise(self, action: str, screen: BookScreen, now: float) -> list[PointerCommand]:
+        if action in DISGUISE_ARROWS:
+            if action not in screen.suit_arrows:
+                return []
+            return self._click(DISGUISE_ARROWS[action], f"disguise {action}", now)
+        if screen.suit_current is None:
+            return []
+        # Like Districts, each suit tab is clicked as you go.
+        suit = screen.suit_current + (-1 if action == "up" else 1)
+        if not 0 <= suit < len(SUIT_TABS):
+            return []
+        return self._click(SUIT_TABS[suit], SUIT_NAMES[suit], now)
+
     def _run_trophies(self, action: str, screen: BookScreen) -> list[PointerCommand]:
         # Only trophies earned: a "?" has nothing to hover.
         if action not in _DIRECTIONS or not screen.trophies:
@@ -1158,6 +1204,8 @@ class BookMapper:
             # Its confirm is the usual OK/Cancel dialog.
             self._releasing = True
             return self._click(RELEASE_FISH, "release fish", now)
+        if screen.page == "cog disguise" and action in ("up", "down", "left", "right"):
+            return self._run_disguise(action, screen, now)
         if screen.page == "resistance rank" and action in RANK_PAGE_ARROWS:
             return self._click(RANK_PAGE_ARROWS[action], f"rank page {action}", now)
         if screen.tasks and action in ("up", "down", "left", "right", "pageAction"):

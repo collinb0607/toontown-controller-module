@@ -723,3 +723,30 @@ def test_leaving_customize_lets_go_of_the_kart():
     mapper.update(frozenset({"rs_left"}), 0.0, racing(0))
     [release] = mapper.update(frozenset({"rs_left"}), 1.0, racing(1))
     assert release.kind == "release"
+
+
+def test_cog_disguise_reads_the_red_suit_tab_and_arrows():
+    screen = replay("book_disguise_1920x1009")
+    assert screen.page == "cog disguise" and screen.suit_current == 3  # Sellbot
+    assert screen.suit_arrows == ("left", "right") and not screen.hovers
+
+
+def disguise(suit, arrows=("left", "right")):
+    return BookScreen(tuple(b._center(0.46, 0.04 * i) for i in range(11)), 9, "cog disguise",
+                      suit_current=suit, suit_arrows=arrows)
+
+
+def test_cog_disguise_clicks_suit_tabs_up_and_down_and_its_arrows():
+    mapper = BookMapper()
+    assert mapper.update(frozenset(), 0.0, disguise(3)) == []
+    [c] = press(mapper, "dpad_up", 1.0, disguise(3))
+    assert c.kind == "click" and c.point == b.SUIT_TABS[2]  # Cashbot
+    [c] = press(mapper, "ls_down", 2.0, disguise(2))
+    assert c.point == b.SUIT_TABS[3]
+    assert not press(mapper, "dpad_down", 3.0, disguise(3))  # no wrap past Sellbot
+    assert not press(mapper, "dpad_up", 4.0, disguise(0))  # or above Bossbot
+    [c] = press(mapper, "dpad_left", 5.0, disguise(3))
+    assert c.point == b.DISGUISE_ARROWS["left"]
+    [c] = press(mapper, "ls_right", 6.0, disguise(3))
+    assert c.point == b.DISGUISE_ARROWS["right"]
+    assert not press(mapper, "dpad_left", 7.0, disguise(1, arrows=()))  # a suit without arrows
