@@ -431,6 +431,9 @@ class PointerCommand:
     name: str
     notches: int = 0  # scroll: positive is up
     delay: float = 0.0  # click: seconds to wait after the previous command
+    # hover: the item's width and height (units of the window's shorter side), for
+    # the highlight frame drawn around it. None draws no frame.
+    size: tuple[float, float] | None = None
 
 
 @dataclass

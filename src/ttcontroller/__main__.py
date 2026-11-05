@@ -1,4 +1,5 @@
 import argparse
+import ctypes
 from pathlib import Path
 
 from .app import run
@@ -10,6 +11,8 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="print keys instead of sending them, even when TTR isn't focused")
     parser.add_argument("--debug", action="store_true", help="log button presses and every key sent")
     args = parser.parse_args()
+    # So it's easy to find in Task Manager (the console window's title names it there).
+    ctypes.WinDLL("kernel32").SetConsoleTitleW("Toontown Controller Module")
     run(ttr_dir=args.ttr_dir, dry_run=args.dry_run, debug=args.debug)
 
 

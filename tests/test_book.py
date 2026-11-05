@@ -255,3 +255,132 @@ def test_map_home_and_playground_buttons():
     assert clicks("y", 1.0, map_screen()) == [b.GO_HOME]
     assert clicks("x", 2.0, map_screen()) == [b.BACK_TO_PLAYGROUND]
     assert clicks("x", 3.0, map_screen(playground=False)) == []
+
+
+def test_gags_tab_reads_the_gags_you_have():
+    screen = replay("book_gags_1920x1009")
+    assert screen.trunk is None and screen.gags is not None
+    assert [any(row) for row in screen.gags] == [True, False, True, True, True, True, True]  # no Trap
+    assert all(screen.gags[4])  # Throw
+
+
+@pytest.mark.parametrize("name,tab,cards", [
+    ("book_gags_sos_1920x1009", "SOS", 8), ("book_trunk_1920x1009", "SOS", 8),
+    ("book_gags_sos_scrolled_1920x1009", "SOS", 4),  # rows cut off at the edges don't count
+    ("book_gags_remote_controls_1920x1009", "remotes", 0), ("book_gags_doodle_1920x1009", "doodle", 0),
+])
+def test_trunk_tab_reads_like_the_battle_trunk(name, tab, cards):
+    screen = replay(name)
+    assert screen.gags is None and screen.trunk.tab == tab
+    assert sum(i.name.startswith("SOS card") for i in screen.trunk.items) == cards
+
+
+def test_every_remote_can_be_hovered_even_ones_you_dont_have():
+    screen = replay("book_gags_remote_controls_1920x1009")  # only one healing remote is owned
+    remotes = sorted(b.to_book(i.point).to_client(1920, 1009) for i in screen.trunk.items if not i.tab and "remote" in i.name)
+    assert len(remotes) == 6
+    assert (805, 488) in remotes  # the one you have, where it shows
+
+
+def test_trunk_cards_are_where_they_show_in_the_book():
+    screen = replay("book_gags_sos_1920x1009")
+    centers = sorted(b.to_book(i.point).to_client(1920, 1009) for i in screen.trunk.items
+                     if i.name.startswith("SOS card"))
+    assert centers[:2] == [(824, 298), (824, 460)]
+
+
+def test_trunk_filter_list():
+    screen = replay("book_gags_sos_filter_1920x1009")
+    assert screen.trunk.filter_open
+    assert sum(i.name.startswith("filter ") for i in screen.trunk.items) == 10
+
+
+def gags_screen(owned=None):
+    owned = owned or tuple(tuple(r != 1 for _ in range(7)) for r in range(7))
+    return BookScreen(tuple(b._center(0.46, 0.04 * i) for i in range(4)), 3, "gags", gags=owned)
+
+
+def test_gags_start_on_nothing_then_the_cupcake():
+    mapper = BookMapper()
+    assert mapper.update(frozenset(), 0.0, gags_screen()) == []
+    assert not mapper.hovering(gags_screen())  # so the cursor parks
+    [hover] = press(mapper, "ls_right", 1.0, gags_screen())
+    assert hover.point == b.gag_point(*b.CUPCAKE) and hover.size == b.GAG_SIZE
+    assert mapper.hovering(gags_screen())
+    [hover] = press(mapper, "dpad_right", 2.0, gags_screen())
+    assert hover.point == b.gag_point(4, 1)
+    # Up from Lure skips the empty Trap row.
+    press(mapper, "dpad_up", 3.0, gags_screen())
+    press(mapper, "dpad_up", 4.0, gags_screen())
+    [hover] = press(mapper, "dpad_up", 5.0, gags_screen())
+    assert hover.point == b.gag_point(0, 1)
+    assert not press(mapper, "a", 6.0, gags_screen())  # nothing to click
+    # Back to nothing after leaving the tab.
+    mapper.update(frozenset(), 7.0, BookScreen(gags_screen().tabs, 3, "gags"))
+    [hover] = press(mapper, "dpad_down", 8.0, gags_screen())
+    assert hover.point == b.gag_point(*b.CUPCAKE)
+
+
+def test_trunk_tab_moves_with_the_battle_mapper_in_book_places():
+    screen = replay("book_gags_sos_1920x1009")
+    mapper = BookMapper()
+    commands = mapper.update(frozenset(), 0.0, screen)
+    assert commands and all(c.kind == "hover" for c in commands)
+    first = commands[-1]
+    assert first.size is not None
+    # Points are the book's: inside the book's trunk panel, not the battle's.
+    x, y = first.point.to_client(1920, 1009)
+    assert 570 < x < 1360 and 140 < y < 600
+    # B isn't the trunk's: it still closes the book.
+    press(mapper, "b", 1.0, screen)
+    assert mapper.take_taps() == ["stickerBook"]
+
+
+def test_doodle_tricks_click_their_blue_button():
+    screen = replay("book_gags_doodle_1920x1009")
+    mapper = BookMapper()
+    mapper.update(frozenset(), 0.0, screen)
+    press(mapper, "dpad_down", 1.0, screen)
+    [click] = press(mapper, "a", 2.0, screen)
+    # The blue button at the trick's left end (1020 to 1085 across), not the colored bar.
+    assert click.kind == "click" and click.name.startswith("doodle trick")
+    x, y = click.point.to_client(1920, 1009)
+    assert 1025 < x < 1080
+
+
+def test_right_stick_scrolls_the_sos_cards():
+    screen = replay("book_gags_sos_1920x1009")  # at the top: can scroll down only
+    mapper = BookMapper()
+    mapper.update(frozenset(), 0.0, screen)
+    [scroll] = press(mapper, "rs_down", 1.0, screen)
+    assert scroll.kind == "scroll" and scroll.notches == -1
+    x, y = scroll.point.to_client(1920, 1009)
+    assert 740 < x < 1290 and 220 < y < 560  # over the list
+    def scrolls(button, t, s):
+        return [c for c in press(mapper, button, t, s) if c.kind == "scroll"]
+
+    assert not scrolls("rs_up", 2.0, screen)  # already at the top
+    [scroll] = scrolls("rs_up", 3.0, replay("book_gags_sos_scrolled_1920x1009"))
+    assert scroll.notches == 1
+
+
+@pytest.mark.parametrize("button", ["lb", "rb", "lt", "rt", "b", "start"])
+def test_leaving_the_page_drops_the_highlight(button):
+    mapper = BookMapper()
+    mapper.update(frozenset(), 0.0, gags_screen())
+    press(mapper, "dpad_right", 1.0, gags_screen())
+    assert not mapper.take_left_page()  # moving around the page keeps it
+    press(mapper, button, 2.0, gags_screen())
+    assert mapper.take_left_page() and not mapper.take_left_page()
+
+
+def test_after_scrolling_the_card_under_the_cursor_is_highlighted():
+    top = replay("book_gags_sos_1920x1009")
+    scrolled = replay("book_gags_sos_scrolled_1920x1009")
+    mapper = BookMapper()
+    mapper.update(frozenset(), 0.0, top)
+    press(mapper, "rs_down", 1.0, top)
+    assert mapper.update(frozenset(), 1.1, scrolled) == []  # still moving
+    [hover] = mapper.update(frozenset(), 1.3, scrolled)
+    assert hover.kind == "hover" and hover.name.startswith("SOS card") and hover.size is not None
+    assert mapper._trunk.trunk_item.name == hover.name  # moving on starts from it

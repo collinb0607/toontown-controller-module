@@ -11,11 +11,12 @@ from .cursor import MOVE_TOLERANCE, CursorHider
 from .book import BookMapper, BookScreen, read_book
 from .friends import FriendsMapper, FriendsScreen, read_friends
 from .mapper import OverworldMapper, controller_buttons
+from .overlay import Highlighter
 from .output import KeyboardOutput, MouseClicker, cursor_pos, mouse_button_down, send_key
 from .npc import NpcMapper, NpcScreen, read_npc
 from .shop import ShopMapper, ShopScreen, read_shop
 from .speedchat import SpeedchatMapper, SpeedchatScreen, read_speedchat
-from .window import ForegroundWatcher, TTRView, make_dpi_aware
+from .window import ForegroundWatcher, TTRView, client_rect, make_dpi_aware
 
 FRAME_SECONDS = 1 / 120
 SETTINGS_CHECK_SECONDS = 1.0
@@ -117,14 +118,29 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     output = KeyboardOutput(logged_send if dry_run or debug else send_key)
     clicker = MouseClicker()
     hider = CursorHider()
+    highlighter = None if dry_run else Highlighter()
+    if highlighter is not None and not highlighter.excluded:
+        # A frame the module's own screen reading could see would throw it off.
+        log("Note: this version of Windows can't keep the highlight frame out of screen captures, "
+            "so it's turned off (it needs Windows 10 version 2004 or later).")
+        highlighter.close()
+        highlighter = None
+    # What the frame goes around: the hovered point and the item's size, if it has one.
+    highlight = None
     last_buttons = frozenset()
     foreground = ForegroundWatcher()
 
     def point(kind: str, target, name: str, view, restore: bool = True, notches: int = 0,
-              delay: float = 0.0) -> None:
+              delay: float = 0.0, size=None) -> None:
         """Hover or click an on-screen point (a ui.UIPoint) in the TTR window."""
+        nonlocal highlight
         if view is None:
             return
+        if kind == "hover":
+            highlight = (target, size) if size is not None else None
+        elif kind == "scroll":
+            # What was highlighted is moving; the next hover puts the frame back.
+            highlight = None
         x, y = view.to_screen(target)
         if dry_run or debug:
             log(f"{kind.capitalize()} {name} at screen {x},{y}" + (" (dry run, not moved)" if dry_run else ""))
@@ -270,7 +286,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 if in_shop:
                     buttons = controller_buttons(state, config.timing.stick_button_threshold)
                     for command in shop_mapper.update(buttons, now, shop_screen):
-                        point(command.kind, command.point, command.name, view, restore=False)
+                        point(command.kind, command.point, command.name, view, size=command.size, restore=False)
                 else:
                     shop_mapper.reset_buttons()
                 # NPC screens come and go with the conversation, so no grace period.
@@ -278,7 +294,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 if in_npc:
                     buttons = controller_buttons(state, config.timing.stick_button_threshold)
                     for command in npc_mapper.update(buttons, now, npc_screen):
-                        point(command.kind, command.point, command.name, view, restore=False)
+                        point(command.kind, command.point, command.name, view, size=command.size, restore=False)
                 else:
                     npc_mapper.reset_buttons()
                 # Speedchat first when both are open: it closes as soon as a phrase is said.
@@ -294,8 +310,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     if menu_open:
                         buttons = controller_buttons(state, config.timing.stick_button_threshold)
                         for command in menu_mapper.update(buttons, now, menu_screen):
-                            point(command.kind, command.point, command.name, view, restore=False,
-                                  delay=command.delay)
+                            point(command.kind, command.point, command.name, view, size=command.size, restore=False,
+                                  notches=command.notches, delay=command.delay)
                     else:
                         menu_mapper.reset_buttons()
                 if in_battle and was_in_menu and not in_menu:
@@ -305,7 +321,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     buttons = controller_buttons(state, config.timing.stick_button_threshold)
                     for command in battle_mapper.update(buttons, now, battle_screen):
                         # Battle clicks leave the cursor on the button, where the highlight is.
-                        point(command.kind, command.point, command.name, view, restore=False,
+                        point(command.kind, command.point, command.name, view, size=command.size, restore=False,
                               notches=command.notches, delay=command.delay)
                 else:
                     battle_mapper.reset_buttons()
@@ -332,6 +348,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 walk = not (in_battle or in_shop or in_book or npc_screen.kind == "tasks")
                 for control in book_mapper.take_taps():
                     mapper.tap(control, now)
+                if book_mapper.take_left_page():
+                    highlight = None
                 controls = mapper.update(state, now, view, blocked=blocked, movement=walk)
                 output.sync(controls_to_keys(controls, watcher.settings))
                 for button in mapper.take_clicks():
@@ -339,13 +357,15 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 # Nothing to hover: while the cursor is hidden, leave it off the game area.
                 # Book pages without controls of their own don't hover anything.
                 idle = not (in_battle or in_shop or in_speedchat or in_friends or npc_screen.kind == "tasks"
-                            or (in_book and book_screen.hovers))
+                            or (in_book and book_mapper.hovering(book_screen)))
                 if idle and hider.hidden and view is not None and not clicker.busy and not dry_run:
                     spot = view.park_spot()
                     # Checked against where the cursor really is: the mouse may have moved it.
                     pos = cursor_pos()
                     if spot is not None and max(abs(pos[0] - spot[0]), abs(pos[1] - spot[1])) > MOVE_TOLERANCE:
                         clicker.hover(*spot)
+                if idle:
+                    highlight = None
                 if mapper.take_sprint_toggle():
                     log(f"Auto-sprint {'on' if mapper.auto_sprint else 'off'}.")
                     config_watcher.save_auto_sprint(mapper.auto_sprint)
@@ -366,11 +386,25 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     mouse_paused = True
                     log("Mouse in use: controller paused. Press any controller button to resume."
                         + (f" ({'moved' if mouse_moved else 'button'})" if debug else ""))
+            if highlighter is not None:
+                view = TTRView(foreground.ttr_hwnd) if active and foreground.ttr_hwnd else None
+                if highlight is not None and view is not None and hider.hidden:
+                    target, (w, h) = highlight
+                    left, top, width, height = client_rect(view.hwnd)
+                    unit = min(width, height)
+                    x, y = view.to_screen(target)
+                    w, h = round(w * unit), round(h * unit)
+                    highlighter.show((x - w // 2, y - h // 2, w, h), unit)
+                else:
+                    highlighter.hide()
+                highlighter.pump()
 
             time.sleep(max(0.0, FRAME_SECONDS - (time.monotonic() - now)))
     except KeyboardInterrupt:
         log("Quitting.")
     finally:
         hider.show()
+        if highlighter is not None:
+            highlighter.close()
         output.release_all()
         reader.close()

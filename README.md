@@ -21,6 +21,7 @@ Working now:
 - **Shticker book:** LB/RB flip through the pages and LT/RT switch a page's tabs (like Gags and Trunk). Each page's own controls are next.
 - **Trunk:** SOS cards (scrolling the list as you go, and filtering them from the dropdown or with LS), pink slips, remotes and doodle tricks, all with the D-pad or stick.
 - **Remapping:** a config file lets you rebind any button.
+- **Highlight frame:** where it's hard to tell what's hovered with the cursor hidden (the shticker book's Gags and Trunk tabs so far), a glowing frame is drawn around it, like a console game.
 - **Hidden cursor:** the cursor disappears while you use the controller and comes back as soon as you move the mouse. When nothing needs hovering it waits on the window's title bar, out of the way. TTR's custom cursor can't be hidden and has no switch in TTR's Options, so set `"hide_cursor": true` in the config and the module turns it off in TTR's settings.json for you (it takes effect the next time TTR starts).
 - **Mouse pauses the controller:** move or click the mouse in TTR and the controller pauses, like switching away from TTR. Press any controller button to resume (that press only resumes; it isn't sent).
 - Uses your TTR keybinds automatically, works at any window size, and never blocks your keyboard or mouse.
@@ -80,6 +81,7 @@ Working now:
 | Options & Codes page | Stick/D-pad up/down move · left/right change the SpeedChat color · A press · Exit Toontown's dialog: A OK · B cancel |
 | Districts page | Stick/D-pad up/down choose the district above/below (wraps around) · A Teleport Here! · SpeedChat-only confirm: A OK · B cancel |
 | Map page | Stick/D-pad move to the nearest place that way (clouded places are skipped) · A go there · Y Go Home · X Back to Playground |
+| Gags page | Gags tab: Stick/D-pad hover gags for their info (starts on the cupcake) · Trunk tab: like the battle trunk (Stick/D-pad move, A pick a tab or filter, LS next SOS filter, right stick up/down scroll the SOS cards), for hovering info |
 
 Planned:
 
@@ -144,13 +146,13 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 
 # Run it (controls only work while the TTR window is focused)
-.\.venv\Scripts\python.exe -m ttcontroller
+.\.venv\Scripts\ToontownControllerModule.exe
 
 # Print the keys it would send instead of sending them
-.\.venv\Scripts\python.exe -m ttcontroller --dry-run
+.\.venv\Scripts\ToontownControllerModule.exe --dry-run
 
 # Log every button press, key and click while playing
-.\.venv\Scripts\python.exe -m ttcontroller --debug
+.\.venv\Scripts\ToontownControllerModule.exe --debug
 
 # Run the tests
 .\.venv\Scripts\python.exe -m pytest

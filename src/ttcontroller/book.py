@@ -26,13 +26,17 @@ Pages with controls of their own:
   (if you have its teleport access). Places you haven't found yet are under
   clouds, and hovering them does nothing. Go Home and Back to Playground buttons
   sit below the map, each missing while you're already there.
+- Gags: the Gags tab is a grid of the gags you have, one track a row, to hover for
+  their info (nothing to click). The Trunk tab is the battle's trunk, shrunk and
+  moved (see _TRUNK_SCALE), except SOS cards have no Call button.
 """
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from . import ui
-from .battle import PointerCommand
+from .battle import DIRECTIONS as BATTLE_DIRECTIONS
+from .battle import _REMOTE_ROWS, _REMOTE_XS, BattleMapper, BattleScreen, Item, PointerCommand, _read_trunk, move
 from .bindings import Bindings, ButtonActions
 from .dialog import find_ok_cancel
 
@@ -132,6 +136,68 @@ def _read_map(width: int, height: int, get_pixel: PixelReader) -> tuple[tuple[tu
     return places, shows(_GO_HOME_PROBES), shows(_PLAYGROUND_PROBES)
 
 
+def gag_point(row: int, col: int) -> ui.UIPoint:
+    return _center(_GAG_X0 + _GAG_STEP_X * col, _GAG_Y0 + _GAG_STEP_Y * row)
+
+
+def _is_gag_blue(c: RGB) -> bool:
+    return c[2] > 200 and c[0] < 120 and c[1] > 100
+
+
+def _read_gags(width: int, height: int, get_pixel: PixelReader) -> tuple[tuple[bool, ...], ...] | None:
+    owned = tuple(tuple(any(_is_gag_blue(get_pixel(*gag_point(r, c).offset(dx, dy).to_client(width, height)))
+                            for dx, dy in _GAG_PROBES) for c in range(GAG_COLS)) for r in range(GAG_ROWS))
+    return owned if any(map(any, owned)) else None
+
+
+def to_book(point: ui.UIPoint) -> ui.UIPoint:
+    """A point on the battle trunk to where it is on the book's Trunk tab."""
+    return _center(point.x * _TRUNK_SCALE + _TRUNK_OFFSET[0], point.y * _TRUNK_SCALE + _TRUNK_OFFSET[1])
+
+
+def to_battle(point: ui.UIPoint) -> ui.UIPoint:
+    return _center((point.x - _TRUNK_OFFSET[0]) / _TRUNK_SCALE, (point.y - _TRUNK_OFFSET[1]) / _TRUNK_SCALE)
+
+
+def _read_book_trunk(width: int, height: int, get_pixel: PixelReader) -> BattleScreen | None:
+    unit = min(width, height)
+
+    def battle_pixel(x: int, y: int) -> RGB:
+        # A pixel where the battle trunk would have it, read from where the book has it.
+        return get_pixel(round(width / 2 + _TRUNK_SCALE * (x - width / 2) + _TRUNK_OFFSET[0] * unit),
+                         round(height / 2 + _TRUNK_SCALE * (y - height / 2) + _TRUNK_OFFSET[1] * unit))
+
+    trunk = _read_trunk(width, height, battle_pixel)
+    if trunk.tab is None:
+        return None
+    if trunk.tab == "remotes":
+        # Unlike in battle, remotes you don't have can be hovered too, for their info.
+        tabs = tuple(i for i in trunk.items if i.tab)
+        slots = tuple(Item(f"{kind} remote {i + 1}", _center(x, y))
+                      for kind, y in _REMOTE_ROWS for i, x in enumerate(_REMOTE_XS))
+        return BattleScreen("trunk", tab=trunk.tab, items=tabs + slots)
+    if trunk.tab != "SOS" or trunk.filter_open:
+        return trunk
+    # Cards fully in view, down each column.
+    cards = []
+    top, bottom = (round(height / 2 + y * unit) for y in (_CARD_LIST_TOP, _CARD_LIST_BOTTOM))
+    for col, margin in enumerate(_CARD_MARGIN_XS):
+        px = round(width / 2 + margin * unit)
+        whites = [py for py in range(top, bottom + 1) if min(get_pixel(px, py)) > 235]
+        # A card's lettering can reach the margin, so small gaps don't end it.
+        runs: list[list[int]] = []
+        for py in whites:
+            if runs and py - runs[-1][-1] <= _CARD_GAP * unit:
+                runs[-1].append(py)
+            else:
+                runs.append([py])
+        for run in runs:
+            if run[0] > top and run[-1] < bottom and run[-1] - run[0] >= _CARD_MIN_HEIGHT * unit:
+                y = ((run[0] + run[-1]) / 2 - height / 2) / unit
+                cards.append(Item(f"SOS card {col + 1} at {y:.2f}", to_battle(_center(margin + _CARD_CENTER_DX, y))))
+    return BattleScreen("trunk", tab=trunk.tab, items=trunk.items + tuple(cards), can_scroll=trunk.can_scroll)
+
+
 def _read_districts(width: int, height: int, get_pixel: PixelReader) -> tuple[tuple[ui.UIPoint, ...], int | None,
                                                                               int | None]:
     def at(x: float, y: float) -> RGB:
@@ -192,6 +258,34 @@ MAP_PLACES = (
 )
 _CLOUD_SAMPLES = tuple((0.005 * i, 0.005 * j) for i in range(-4, 5) for j in range(-4, 5))
 _CLOUD_MIN = 30  # of the 81 samples; an open place has at most a dozen (the Brrrgh's snow)
+# Gags, measured at 1920x1009: the gag buttons, one track a row (Toon-Up to Drop).
+_GAG_X0, _GAG_STEP_X = -0.1838, 0.0869
+_GAG_Y0, _GAG_STEP_Y = -0.3221, 0.0644
+GAG_ROWS = GAG_COLS = 7
+GAG_SIZE = (0.077, 0.055)
+_GAG_PROBES = ((-0.022, 0.020), (0.022, 0.020))  # blue fill at the bottom corners of a gag you have
+CUPCAKE = (4, 0)  # Throw's first gag: every toon has it
+
+# The Trunk tab is the battle trunk (battle.py) at this scale, moved by this much:
+# a point there maps here as book = battle * scale + offset, in units from the center.
+_TRUNK_SCALE = 0.910
+_TRUNK_OFFSET = (0.1245, -0.1128)
+# SOS cards (no Call buttons here, so they're found by their white faces): the left
+# margin of each column of cards, and the list's top and bottom.
+_CARD_MARGIN_XS = tuple(-0.1893 + 0.1239 * i for i in range(4))
+_CARD_CENTER_DX = 0.0549
+_CARD_LIST_TOP, _CARD_LIST_BOTTOM = -0.280, 0.051
+_CARD_MIN_HEIGHT = 0.12
+_CARD_LIST_MIDDLE = _center(0.0485, -0.115)  # where to turn the wheel when no card is hovered
+# After scrolling the cards with the right stick, once they've stopped moving for this
+# long, the card under the cursor is highlighted.
+_SCROLL_SETTLE_SECONDS = 0.2
+_CARD_GAP = 0.013  # (the gap between rows of cards is 0.015) the most a card's white margin is broken by its lettering
+# Frame sizes for the trunk's items, by the start of their names.
+_TRUNK_SIZES = (("tab ", (0.083, 0.083)), ("SOS card", (0.112, 0.146)), ("SOS filter", (0.112, 0.027)),
+                ("filter ", (0.108, 0.026)), ("damage remote", (0.075, 0.110)), ("healing remote", (0.075, 0.110)),
+                ("doodle trick", (0.064, 0.041)))  # the trick's blue button, the part that's clicked
+
 GO_HOME = _center(0.0723, 0.2711)
 BACK_TO_PLAYGROUND = _center(0.2676, 0.2711)
 _GO_HOME_PROBES = (_center(0.0297, 0.2552), _center(0.1140, 0.2552))
@@ -212,6 +306,8 @@ class BookScreen:
     places: tuple[tuple[str, ui.UIPoint], ...] = ()  # on the Map page: the places not under clouds
     go_home: bool = False  # the Map page's Go Home button is showing
     back_to_playground: bool = False
+    gags: tuple[tuple[bool, ...], ...] | None = None  # on the Gags tab: which gags you have
+    trunk: BattleScreen | None = None  # on the Trunk tab: read as the battle trunk (in its places)
 
     @property
     def is_open(self) -> bool:
@@ -220,7 +316,8 @@ class BookScreen:
     @property
     def hovers(self) -> bool:
         """Whether something is highlighted with the cursor (so it isn't parked)."""
-        return self.dialog is not None or self.page in PAGE_ROWS or bool(self.places)
+        return (self.dialog is not None or self.page in PAGE_ROWS or bool(self.places)
+                or self.trunk is not None)
 
 
 def _px(width: int, height: int, x: float, y: float) -> tuple[int, int]:
@@ -386,9 +483,11 @@ def read_book(width: int, height: int, get_pixel: PixelReader) -> BookScreen:
     districts, chosen, current_district = (_read_districts(width, height, get_pixel) if page == "districts"
                                            else ((), None, None))
     places, go_home, playground = _read_map(width, height, get_pixel) if page == "map" else ((), False, False)
+    trunk = _read_book_trunk(width, height, get_pixel) if page == "gags" else None
+    gags = _read_gags(width, height, get_pixel) if page == "gags" and trunk is None else None
     return BookScreen(tabs, current, page, top_tabs, top_current, districts=districts, district_chosen=chosen,
                       district_current=current_district, places=places, go_home=go_home,
-                      back_to_playground=playground)
+                      back_to_playground=playground, gags=gags, trunk=trunk)
 
 
 def read_pages(width: int, height: int, get_pixel: PixelReader) -> list[str | None]:
@@ -412,12 +511,13 @@ BOOK_ACTIONS = {
     "left": "change a setting (the SpeedChat color), or the next place left on the map",
     "right": "change a setting (the SpeedChat color), or the next place right on the map",
     "goHome": "the map's Go Home button", "backToPlayground": "the map's Back to Playground button",
+    "scrollUp": "scroll the Trunk's SOS cards up", "scrollDown": "scroll the Trunk's SOS cards down",
 }
 
 
 def default_book_bindings() -> Bindings:
     press = {"lb": "prevPage", "rb": "nextPage", "lt": "prevTab", "rt": "nextTab", "b": "close", "a": "select",
-             "y": "goHome", "x": "backToPlayground"}
+             "y": "goHome", "x": "backToPlayground", "rs_up": "scrollUp", "rs_down": "scrollDown"}
     # The left stick too: the toon can't walk while the book is open.
     for direction in ("up", "down", "left", "right"):
         press[f"dpad_{direction}"] = direction
@@ -452,6 +552,23 @@ PAGE_ROWS = {"options": OPTIONS_ROWS}
 _ARROWS = {SPEEDCHAT_COLOR: (COLOR_LEFT, COLOR_RIGHT)}
 
 
+def _trunk_bindings() -> Bindings:
+    """The battle trunk's bindings that apply in the book (B still closes the book)."""
+    press = {"a": "select", "ls": "sos_filter"}
+    for direction in ("up", "down", "left", "right"):
+        press[f"dpad_{direction}"] = direction
+        press[f"ls_{direction}"] = direction
+    return Bindings(press=press)
+
+
+def _trunk_size(name: str) -> tuple[float, float] | None:
+    return next((size for start, size in _TRUNK_SIZES if name.startswith(start)), None)
+
+
+# Buttons that change the page or tab, or close the book (Start is the book key), so
+# whatever was highlighted is gone.
+_LEAVES_PAGE = frozenset({"lb", "rb", "lt", "rt", "b", "start"})
+
 # Actions that are just a tap of a TTR control.
 _TAPS = {"prevPage": "left", "nextPage": "right", "close": "stickerBook"}
 
@@ -465,16 +582,22 @@ class BookMapper:
         self.set_bindings(self.bindings)
         self._settle_until = 0.0
         self._taps: list[str] = []
+        self._held: frozenset[str] = frozenset()
+        self._scrolled: tuple[float, ui.UIPoint] | None = None  # when and where the cards were last scrolled
+        self._left_page = False
         self.row = 0
         self._shown: tuple | None = None  # what was last hovered for: (page, dialog showing)
         self._page: str | None = None
         self._district: int | None = None  # the district last clicked, before the page shows it
         self._place: str | None = None  # the map place hovered
+        self._gag: tuple[int, int] | None = None  # the gag hovered on the Gags tab (none at first)
+        # The Trunk tab works like the battle trunk, so it's run by a battle mapper.
+        self._trunk = BattleMapper(_trunk_bindings())
 
     def set_bindings(self, bindings: Bindings) -> None:
         self.bindings = bindings
         self._actions = ButtonActions(bindings, 0.5, is_oneshot=lambda action: True,
-                                      repeats=lambda action: action in ("prevPage", "nextPage", "up", "down"))
+                                      repeats=lambda action: action in ("prevPage", "nextPage", "up", "down", "scrollUp", "scrollDown"))
 
     @property
     def buttons(self) -> set[str]:
@@ -483,6 +606,17 @@ class BookMapper:
     def reset_buttons(self) -> None:
         self._actions.reset(ignore_held=True)
         self._shown = None
+        self._trunk.reset_buttons()
+
+    def hovering(self, screen: BookScreen) -> bool:
+        """Whether something on the book is hovered (so the cursor isn't parked)."""
+        return screen.hovers or (screen.gags is not None and self._gag is not None)
+
+    def take_left_page(self) -> bool:
+        """Whether a button that leaves the page (or closes the book) was pressed since
+        the last call, so the highlight frame should go."""
+        left, self._left_page = self._left_page, False
+        return left
 
     def take_taps(self) -> list[str]:
         """TTR controls to tap, asked for since the last call: the turn keys flip pages
@@ -492,7 +626,28 @@ class BookMapper:
 
     def update(self, buttons: frozenset[str], now: float, screen: BookScreen) -> list[PointerCommand]:
         _, fired = self._actions.update(buttons, now)
+        if (buttons - self._held) & _LEAVES_PAGE:
+            self._left_page = True
+        self._held = buttons
         commands: list[PointerCommand] = []
+        if screen.gags is None:
+            self._gag = None
+        if screen.trunk is not None and screen.dialog is None:
+            # The battle mapper moves around the trunk; its points are turned into the book's.
+            for c in self._trunk.update(buttons, now, screen.trunk):
+                size = _trunk_size(c.name) if c.kind == "hover" else None
+                commands.append(PointerCommand(c.kind, to_book(c.point), c.name, c.notches, c.delay, size))
+            fired = [a for a in fired if a not in ("up", "down", "left", "right", "select")]
+            for action in [a for a in fired if a in ("scrollUp", "scrollDown")]:
+                scroll = self._scroll_trunk(screen.trunk, action == "scrollUp")
+                if scroll:
+                    self._scrolled = (now, scroll[0].point)
+                commands += scroll
+            if self._scrolled is not None and now - self._scrolled[0] >= _SCROLL_SETTLE_SECONDS:
+                commands += self._hover_card_at(screen.trunk, self._scrolled[1])
+                self._scrolled = None
+        else:
+            self._trunk.reset_buttons()
         if now >= self._settle_until:
             shown = (screen.page, screen.dialog is not None)
             if shown != self._shown:
@@ -524,6 +679,29 @@ class BookMapper:
         if action == "select":
             return [PointerCommand("click", TELEPORT, "teleport here")]
         return []
+
+    def _scroll_trunk(self, trunk: BattleScreen, up: bool) -> list[PointerCommand]:
+        """A wheel notch over the SOS cards, where the hovered card is (so the cursor
+        stays on the list), or the middle of the list."""
+        if trunk.tab != "SOS" or trunk.filter_open or not trunk.can_scroll[0 if up else 1]:
+            return []
+        item = self._trunk.trunk_item
+        point = to_book(item.point) if item is not None and item.name.startswith("SOS card") else _CARD_LIST_MIDDLE
+        return [PointerCommand("scroll", point, "scroll SOS cards", notches=1 if up else -1)]
+
+    def _hover_card_at(self, trunk: BattleScreen, point: ui.UIPoint) -> list[PointerCommand]:
+        """Highlight the card nearest a point (after scrolling, the one under the cursor)."""
+        cards = [i for i in trunk.items if i.name.startswith("SOS card")]
+        if not cards:
+            return []
+
+        def distance(item: Item) -> float:
+            p = to_book(item.point)
+            return (p.x - point.x) ** 2 + (p.y - point.y) ** 2
+
+        card = min(cards, key=distance)
+        self._trunk.trunk_item = card
+        return [PointerCommand("hover", to_book(card.point), card.name, size=_trunk_size(card.name))]
 
     def _map_place(self, screen: BookScreen) -> tuple[str, ui.UIPoint] | None:
         """The hovered place, or Toontown Central (or the first open place) to start."""
@@ -585,6 +763,16 @@ class BookMapper:
             return self._run_districts(action, screen)
         if screen.page == "map":
             return self._run_map(action, screen, now)
+        if screen.gags is not None and action in ("up", "down", "left", "right"):
+            if self._gag is None or not screen.gags[self._gag[0]][self._gag[1]]:
+                # Start on the cupcake (or the first gag you have, just in case).
+                start = CUPCAKE if screen.gags[CUPCAKE[0]][CUPCAKE[1]] else next(
+                    (r, c) for r in range(GAG_ROWS) for c in range(GAG_COLS) if screen.gags[r][c])
+                self._gag = start
+            else:
+                self._gag = move(screen.gags, self._gag, action)
+            r, c = self._gag
+            return [PointerCommand("hover", gag_point(r, c), f"gag {r + 1},{c + 1}", size=GAG_SIZE)]
         rows = PAGE_ROWS.get(screen.page)
         if rows and action in ("up", "down"):
             self.row = max(0, min(len(rows) - 1, self.row + (-1 if action == "up" else 1)))
