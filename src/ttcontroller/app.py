@@ -15,6 +15,7 @@ from .mapper import OverworldMapper, controller_buttons
 from .overlay import Highlighter
 from .output import KeyboardOutput, MouseClicker, cursor_pos, mouse_button_down, send_key
 from .npc import NpcMapper, NpcScreen, read_npc
+from .pregame import PregameMapper, PregameScreen, read_pregame
 from .shop import ShopMapper, ShopScreen, read_shop
 from .speedchat import SpeedchatMapper, SpeedchatScreen, read_speedchat
 from .window import ForegroundWatcher, TTRView, client_rect, make_dpi_aware
@@ -114,6 +115,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     speedchat_screen = SpeedchatScreen()
     friends_mapper = FriendsMapper(config.friends)
     friends_screen = FriendsScreen()
+    pregame_mapper = PregameMapper()  # the start-up screen and toon selection
+    pregame_screen = PregameScreen()
     book_mapper = BookMapper(config.book)
     book_screen = BookScreen()
     output = KeyboardOutput(logged_send if dry_run or debug else send_key)
@@ -132,13 +135,13 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     foreground = ForegroundWatcher()
 
     def point(kind: str, target, name: str, view, restore: bool = True, notches: int = 0,
-              delay: float = 0.0, size=None) -> None:
+              delay: float = 0.0, size=None, frame_at=None) -> None:
         """Hover or click an on-screen point (a ui.UIPoint) in the TTR window."""
         nonlocal highlight
         if view is None:
             return
         if kind == "hover":
-            highlight = (target, size) if size is not None else None
+            highlight = (frame_at or target, size) if size is not None else None
         elif kind == "scroll":
             # What was highlighted is moving; the next hover puts the frame back.
             highlight = None
@@ -155,6 +158,11 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
             clicker.release()
         elif kind == "scroll":
             clicker.scroll(x, y, notches)
+        elif kind == "type":
+            # Typed straight away, letter by letter (a click after it waits its delay).
+            for letter in name:
+                send_key(letter, True)
+                send_key(letter, False)
         else:
             clicker.click(x, y, restore=restore, delay=delay)
 
@@ -235,6 +243,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 speedchat_mapper.reset_buttons()
                 friends_mapper.reset_buttons()
                 book_mapper.reset_buttons()
+                pregame_mapper.reset_buttons()
+                pregame_screen = PregameScreen()
                 battle_screen = BattleScreen()
                 shop_screen = ShopScreen()
                 npc_screen = NpcScreen()
@@ -251,8 +261,15 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     # rest are skipped while it's open: a blank white page looks like the
                     # battle's waiting screen, the shop takes a dialog over the book for its
                     # own, and the NPC bubble search finds false arrows in its pages.
-                    book = read_book(frame.width, frame.height, frame.get_pixel)
-                    screen = read_screen(frame.width, frame.height, frame.get_pixel) if not book.is_open else BattleScreen()
+                    # The start-up screen and toon selection come before all the rest.
+                    pregame = read_pregame(frame.width, frame.height, frame.get_pixel)
+                    if pregame.kind != pregame_screen.kind and (dry_run or debug):
+                        log(f"Pre-game screen: {pregame.kind or 'none'}")
+                    pregame_screen = pregame
+                    in_game = pregame.kind is None
+                    book = read_book(frame.width, frame.height, frame.get_pixel) if in_game else BookScreen()
+                    screen = (read_screen(frame.width, frame.height, frame.get_pixel) if in_game and not book.is_open
+                              else BattleScreen())
                     if screen.kind != battle_screen.kind and (dry_run or debug):
                         log(f"Battle screen: {screen.kind or 'none'}")
                     battle_screen = screen
@@ -262,17 +279,18 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                         log(f"Book: {'closed' if not book.is_open else 'dialog' if book.dialog else book.page or 'unknown page'}")
                     book_screen = book
                     shop = (read_shop(frame.width, frame.height, frame.get_pixel)
-                            if screen.kind is None and not book.is_open else ShopScreen())
+                            if in_game and screen.kind is None and not book.is_open else ShopScreen())
                     if shop.kind != shop_screen.kind and (dry_run or debug):
                         log(f"Gag shop screen: {shop.kind or 'none'}")
                     shop_screen = shop
                     npc = (read_npc(frame.width, frame.height, frame.get_pixel, frame.rgb())
-                           if screen.kind is None and shop.kind is None and not book.is_open else NpcScreen())
+                           if in_game and screen.kind is None and shop.kind is None and not book.is_open
+                           else NpcScreen())
                     if npc.kind != npc_screen.kind and (dry_run or debug):
                         log(f"NPC screen: {npc.kind or 'none'}")
                     npc_screen = npc
                     # Speedchat and the friends list work in battle too.
-                    menus = shop.kind is None and npc.kind != "tasks"
+                    menus = in_game and shop.kind is None and npc.kind != "tasks"
                     speedchat = (read_speedchat(frame.width, frame.height, frame.get_pixel,
                                                 look_for_unite=speedchat_mapper.wants_unite)
                                  if menus else SpeedchatScreen())
@@ -293,6 +311,13 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     last_battle_seen = now
                 if shop_screen.kind is not None:
                     last_shop_seen = now
+                in_pregame = pregame_screen.kind is not None
+                if in_pregame:
+                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
+                    for command in pregame_mapper.update(buttons, now, pregame_screen):
+                        point(command.kind, command.point, command.name, view, restore=False, delay=command.delay)
+                else:
+                    pregame_mapper.reset_buttons()
                 in_battle = now - last_battle_seen < BATTLE_GRACE_SECONDS
                 in_shop = not in_battle and now - last_shop_seen < BATTLE_GRACE_SECONDS
                 if in_shop:
@@ -323,7 +348,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                         buttons = controller_buttons(state, config.timing.stick_button_threshold)
                         for command in menu_mapper.update(buttons, now, menu_screen):
                             point(command.kind, command.point, command.name, view, size=command.size, restore=False,
-                                  notches=command.notches, delay=command.delay)
+                                  notches=command.notches, delay=command.delay, frame_at=command.frame_at)
                     else:
                         menu_mapper.reset_buttons()
                 if in_battle and was_in_menu and not in_menu:
@@ -338,7 +363,12 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 else:
                     battle_mapper.reset_buttons()
                 # In battle or the shop, their bindings own their buttons and the left stick doesn't walk.
-                if in_battle:
+                if in_pregame:
+                    # Toon selection takes every button. The start-up screen only Start and B:
+                    # any other key enters, as TTR says.
+                    blocked = (frozenset({"start", "b"}) if pregame_screen.kind == "startup"
+                               else controller_buttons(state, config.timing.stick_button_threshold))
+                elif in_battle:
                     blocked = frozenset(battle_mapper.buttons)
                     if in_speedchat:
                         blocked |= speedchat_mapper.buttons
@@ -357,7 +387,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 else:
                     blocked = frozenset()
                 # Walking still works mid-conversation (it walks away); not while choosing a task.
-                walk = not (in_battle or in_shop or in_book or npc_screen.kind == "tasks")
+                walk = not (in_battle or in_shop or in_book or npc_screen.kind == "tasks"
+                            or (in_pregame and pregame_screen.kind != "startup"))
                 for control in book_mapper.take_taps():
                     mapper.tap(control, now)
                 if book_mapper.take_left_page():
@@ -375,7 +406,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 # Nothing to hover: while the cursor is hidden, leave it off the game area.
                 # Book pages without controls of their own don't hover anything.
                 idle = not (in_battle or in_shop or in_speedchat or in_friends or npc_screen.kind == "tasks"
-                            or (in_book and book_mapper.hovering(book_screen)))
+                            or (in_book and book_mapper.hovering(book_screen))
+                            or (in_pregame and pregame_mapper.hovering(pregame_screen)))
                 if idle and hider.hidden and view is not None and not clicker.busy and not dry_run:
                     spot = view.park_spot()
                     # Checked against where the cursor really is: the mouse may have moved it.

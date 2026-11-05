@@ -61,10 +61,16 @@ Pages with controls of their own:
   arrows either side of its name to flip through them, and a trash can beside Add
   Caption. Deleting asks in a yellow Yep!/Cancel panel over the bottom right of the
   book (the book isn't dimmed, and it hides the lower page tabs).
+- Events: tabs Calendar, Hosting and Invitations. The Calendar is a month of days,
+  seven by six (days outside the month gray, today yellow), each with its number in
+  blue at the top and its events below, one line each (a long title without a time
+  can wrap onto a second). Hovering an event's text pops up what it is. Blue arrows
+  either side of the month's name change month, and triangles above and below the
+  filter in the top right (Show All...) change it.
 """
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from . import ui
 from .battle import DIRECTIONS as BATTLE_DIRECTIONS
@@ -242,6 +248,99 @@ def _read_disguise(width: int, height: int, get_pixel: PixelReader) -> tuple[int
     arrows = tuple(side for side, p in DISGUISE_ARROWS.items()
                    if _is_arrow_blue(get_pixel(*p.to_client(width, height))))
     return current, arrows
+
+
+@dataclass(frozen=True)
+class Calendar:
+    events: tuple[tuple[int, ...], ...]  # each day's events (left to right, top to bottom): their first lines
+    today: int | None = None  # the yellow day
+    first: int | None = None  # the shown month's first day (the first not gray)
+    months: tuple[str, ...] = ()  # the month arrows showing ("stickLeft", "stickRight")
+    filter_up: bool = False  # the filter's triangles that work
+    filter_down: bool = False
+
+
+def calendar_day(i: int) -> ui.UIPoint:
+    """Day i's number (left to right, top to bottom)."""
+    return _center(_DAY_X0 + _DAY_STEP_X * (i % CALENDAR_COLS), _DAY_Y0 + _DAY_STEP_Y * (i // CALENDAR_COLS))
+
+
+def calendar_event(i: int, line: int) -> ui.UIPoint:
+    """Where to hover day i's event starting on that line."""
+    return calendar_day(i).offset(_EVENT_HOVER_DX, _EVENT_DY0 + _EVENT_STEP * line)
+
+
+def _is_dark(c: RGB) -> bool:
+    return max(c) < 90
+
+
+def _read_calendar(width: int, height: int, get_pixel: PixelReader) -> Calendar:
+    unit = min(width, height)
+    events, today, first = [], None, None
+    for i in range(CALENDAR_COLS * CALENDAR_ROWS):
+        fill = [get_pixel(*calendar_day(i).offset(dx, 0.08).to_client(width, height)) for dx in (-0.045, 0.0, 0.045)]
+        if sum(c[0] > 230 and c[1] > 200 and c[2] < 80 for c in fill) >= 2:
+            today = i
+        gray = sum(170 < min(c) and max(c) < 205 for c in fill) >= 2
+        if first is None and not gray:
+            first = i
+        lines = []
+        for line in range(CALENDAR_LINES):
+            found = _read_event_line(width, height, get_pixel, i, line, unit)
+            if found is None:
+                break
+            lines.append(found)
+        events.append(_group_lines(width, height, get_pixel, i, lines, unit))
+    months = tuple(side for side, p in MONTH_ARROWS.items()
+                   if _is_arrow_blue(get_pixel(*p.to_client(width, height))))
+    up, down = (_is_triangle_on(get_pixel(*p.to_client(width, height))) for p in (FILTER_UP, FILTER_DOWN))
+    return Calendar(tuple(events), today, first, months, up, down)
+
+
+def _is_triangle_on(c: RGB) -> bool:
+    return c[2] - c[0] > 60
+
+
+def _read_event_line(width, height, get_pixel, day: int, line: int, unit: int) -> tuple[int, int, int] | None:
+    """A line of a day's text: where it starts and ends, and where its first word ends
+    (in client pixels), or None if it's blank."""
+    number = calendar_day(day)
+    y = number.offset(0, _EVENT_DY0 + _EVENT_STEP * line).to_client(width, height)[1]
+    left = number.offset(_DAY_LEFT, 0).to_client(width, height)[0]
+    right = number.offset(_DAY_RIGHT, 0).to_client(width, height)[0]
+    dys = (-round(0.003 * unit), 0, round(0.003 * unit))
+    ink = [any(_is_dark(get_pixel(x, y + dy)) for dy in dys) for x in range(left, right)]
+    if sum(ink) < 3:
+        return None
+    start = ink.index(True)
+    end = len(ink) - 1 - ink[::-1].index(True)
+    gap, word_end, blank = round(0.004 * unit), end, 0
+    for x in range(start, end + 1):
+        blank = 0 if ink[x] else blank + 1
+        if blank >= gap:
+            word_end = x - blank
+            break
+    return left + start, left + end, left + word_end
+
+
+def _group_lines(width, height, get_pixel, day: int, lines, unit: int) -> tuple[int, ...]:
+    """Each event's first line: a line carries on the one above (a wrapped title) when
+    both stop short of the edge (a line too long to fit is cut off at it, like the
+    timed ones, "12:00 AM End-Fri...") and this line's first word wouldn't have fit
+    after the one above."""
+    if len(lines) < 2:
+        return tuple(range(len(lines)))
+    left = calendar_day(day).offset(_DAY_LEFT, 0).to_client(width, height)[0]
+    right = calendar_day(day).offset(_DAY_RIGHT, 0).to_client(width, height)[0]
+    short = right - round(0.010 * unit)
+    firsts = [0]
+    for k in range(1, len(lines)):
+        above, here = lines[k - 1], lines[k]
+        wrapped = (above[1] < short and here[1] < short
+                   and (above[1] - above[0]) + round(0.005 * unit) + (here[2] - here[0]) > right - left)
+        if not wrapped:
+            firsts.append(k)
+    return tuple(firsts)
 
 
 def _read_snapshot_confirm(width: int, height: int, get_pixel: PixelReader) -> bool:
@@ -572,6 +671,25 @@ SNAPSHOT_YEP = _center(0.1744, 0.2235)
 SNAPSHOT_CANCEL = _center(0.2740, 0.2235)
 _SNAPSHOT_CONFIRM_PANEL = tuple(_center(x, y) for x in (-0.0099, 0.2200, 0.4559) for y in (0.0550, 0.1838))
 
+# The Events Calendar, measured at 1920x1009: the days' numbers, their event lines,
+# the month arrows and the filter's triangles.
+CALENDAR_TAB = 0
+_DAY_X0, _DAY_STEP_X, _DAY_Y0, _DAY_STEP_Y = -0.3721, 0.1239, -0.2924, 0.0931
+CALENDAR_COLS, CALENDAR_ROWS = 7, 6
+_EVENT_DY0, _EVENT_STEP = 0.0198, 0.01586
+CALENDAR_LINES = 4  # as many as fit in a day
+_DAY_LEFT, _DAY_RIGHT = -0.059, 0.060  # a day's text, from its number's x
+_EVENT_HOVER_DX = -0.030  # on an event's text, near its start
+DAY_NUMBER_SIZE = (0.034, 0.022)
+MONTH_ARROWS = {"stickLeft": _center(-0.1834, -0.3642), "stickRight": _center(0.1834, -0.3642)}
+FILTER_UP = _center(0.3092, -0.3979)
+FILTER_DOWN = _center(0.3092, -0.3464)
+FILTER_OPTIONS = 4  # Show All first; going back from the last takes three clicks up
+# TTR takes a moment to redraw the calendar: it's kept once it reads the same this long
+# (and, after a month or filter change, differs from before, or this long has passed).
+_CALENDAR_STEADY_SECONDS = 0.15
+_CALENDAR_CHANGE_SECONDS = 1.5
+
 GO_HOME = _center(0.0723, 0.2711)
 BACK_TO_PLAYGROUND = _center(0.2676, 0.2711)
 _GO_HOME_PROBES = (_center(0.0297, 0.2552), _center(0.1140, 0.2552))
@@ -600,6 +718,7 @@ class BookScreen:
     summon_cogs: tuple[tuple[int, int], ...] = ()  # on the Cog Gallery: the cells with a summon button
     snapshot_arrows: tuple[str, ...] = ()  # on Snapshots: its arrows showing ("left", "right")
     snapshot_trash: bool = False  # and its trash can (there's a snapshot to delete)
+    calendar: Calendar | None = None  # on Events' Calendar tab
     fish: tuple[ui.UIPoint, ...] = ()  # on Fishing's Bucket (or Gardening's Basket): the names showing
     flowers: tuple[ui.UIPoint, ...] = ()  # on Gardening's Album: the collected names, top to bottom
     trophies: tuple[int, ...] = ()  # on a Trophy tab: the trophies earned (indexes into TROPHIES)
@@ -802,11 +921,13 @@ def read_book(width: int, height: int, get_pixel: PixelReader) -> BookScreen:
     snapshot_arrows = tuple(side for side, p in SNAPSHOT_ARROWS.items()
                             if page == "snapshots" and _is_arrow_blue(get_pixel(*p.to_client(width, height))))
     snapshot_trash = page == "snapshots" and min(get_pixel(*SNAPSHOT_TRASH.to_client(width, height))) < 200
+    calendar = (_read_calendar(width, height, get_pixel) if page == "events" and top_current == CALENDAR_TAB
+                else None)
     return BookScreen(tabs, current, page, top_tabs, top_current, districts=districts, district_chosen=chosen,
                       district_current=current_district, places=places, go_home=go_home,
                       back_to_playground=playground, gags=gags, trunk=trunk, tasks=tasks, summon_cogs=summon_cogs,
                       fish=fish, flowers=flowers, trophies=trophies, suit_current=suit_current, suit_arrows=suit_arrows,
-                      snapshot_arrows=snapshot_arrows, snapshot_trash=snapshot_trash)
+                      snapshot_arrows=snapshot_arrows, snapshot_trash=snapshot_trash, calendar=calendar)
 
 
 def read_pages(width: int, height: int, get_pixel: PixelReader) -> list[str | None]:
@@ -832,16 +953,18 @@ BOOK_ACTIONS = {
     "goHome": "the map's Go Home button",
     "pageAction": "the map's Back to Playground button, delete the highlighted ToonTask (one with a trash can), "
                   "release the fish (or flower) picked, or delete the snapshot shown",
+    "filter": "press the left stick: the Events Calendar's next filter (back to the first after the last)",
     "stickUp": "right stick up: scroll the Trunk's SOS cards up, or the Cog Gallery's tie (Bossbot)",
     "stickDown": "right stick down: scroll the Trunk's SOS cards down, or the Cog Gallery's bar graph (Sellbot)",
-    "stickLeft": "right stick left: the Cog Gallery's gavel (Lawbot), or turn the kart on Racing's Customize tab",
-    "stickRight": "right stick right: the Cog Gallery's dollar sign (Cashbot), or turn the kart",
+    "stickLeft": "right stick left: the Cog Gallery's gavel (Lawbot), turn the kart on Racing's Customize tab, "
+                 "or the Events Calendar's month before",
+    "stickRight": "right stick right: the Cog Gallery's dollar sign (Cashbot), turn the kart, or the next month",
 }
 
 
 def default_book_bindings() -> Bindings:
     press = {"lb": "prevPage", "rb": "nextPage", "lt": "prevTab", "rt": "nextTab", "b": "close", "a": "select",
-             "y": "goHome", "x": "pageAction",
+             "y": "goHome", "x": "pageAction", "ls": "filter",
              "rs_up": "stickUp", "rs_down": "stickDown", "rs_left": "stickLeft", "rs_right": "stickRight"}
     # The left stick too: the toon can't walk while the book is open.
     for direction in ("up", "down", "left", "right"):
@@ -926,6 +1049,12 @@ class BookMapper:
         self._tab: tuple | None = None  # the page and top tab these are for
         self._turning: str | None = None  # the kart turn button held down ("stickLeft"/"stickRight")
         self._held_scroll = HeldScroll()  # a list's scroll triangle, held down while its direction is
+        # The Events Calendar, as read before anything was hovered (its popups cover days),
+        # and the day and event there hovered: (day, event index), None for nothing yet.
+        self._calendar: Calendar | None = None
+        self._day: tuple[int, int] | None = None
+        self._calendar_seen: tuple[Calendar, float] | None = None  # a reading not kept yet, and since when
+        self._calendar_before: tuple[Calendar, float] | None = None  # the one before a change, and when
         self._releasing = False  # the release confirm is up (or about to be)
         # The Trunk tab works like the battle trunk, so it's run by a battle mapper.
         self._trunk = BattleMapper(_trunk_bindings())
@@ -947,12 +1076,22 @@ class BookMapper:
         self._shown = None
         self._trunk.reset_buttons()
 
+    def _known(self, screen: BookScreen) -> BookScreen:
+        """The screen, with the page last seen when its tab can't be told (an Events
+        popup can cover the page tabs)."""
+        if screen.tabs and screen.page is None and self._tab is not None and self._tab[0] is not None:
+            top = screen.top_current if screen.top_current is not None else self._tab[1]
+            return replace(screen, page=self._tab[0], top_current=top)
+        return screen
+
     def hovering(self, screen: BookScreen) -> bool:
         """Whether something on the book is hovered (so the cursor isn't parked)."""
+        screen = self._known(screen)
         return (screen.hovers or (screen.gags is not None and self._gag is not None)
                 or (screen.tasks and self._task is not None)
                 or (screen.page == "cog gallery" and self._cog is not None)
-                or self._accessory is not None or self._trophy is not None)
+                or self._accessory is not None or self._trophy is not None
+                or (screen.page == "events" and self._day is not None))
 
     def take_left_page(self) -> bool:
         """Whether a button that leaves the page (or closes the book) was pressed since
@@ -968,6 +1107,7 @@ class BookMapper:
 
     def update(self, buttons: frozenset[str], now: float, screen: BookScreen) -> list[PointerCommand]:
         _, fired = self._actions.update(buttons, now)
+        screen = self._known(screen)
         if (buttons - self._held) & _LEAVES_PAGE:
             self._left_page = True
         self._held = buttons
@@ -995,8 +1135,11 @@ class BookMapper:
             self._tab = (screen.page, screen.top_current)
             self._flower = 0
             commands += self._held_scroll.stop(finish=False)
+            self._calendar, self._day, self._calendar_seen, self._calendar_before = None, None, None, None
             self._accessory = self._trophy = None
         commands += self._turn_kart(buttons, screen)
+        if self._calendar is None and screen.calendar is not None and now >= self._settle_until:
+            commands += self._settle_calendar(screen.calendar, now)
         commands += self._held_scroll.update({self.bindings.press.get(b) for b in buttons})
         if screen.trunk is not None and screen.dialog is None:
             # The battle mapper moves around the trunk; its points are turned into the book's.
@@ -1089,6 +1232,82 @@ class BookMapper:
             self._accessory = max(0, min(ACCESSORIES - 1, self._accessory + (-1 if action == "left" else 1)))
         return [PointerCommand("hover", _accessory(self._accessory), f"accessory {self._accessory + 1}",
                                size=ACCESSORY_SIZE)]
+
+    def _run_calendar(self, action: str, now: float) -> list[PointerCommand]:
+        calendar = self._calendar
+        if calendar is None:
+            return []
+        if action in MONTH_ARROWS:
+            if action not in calendar.months:
+                return []
+            self._change_calendar(now)  # read the new month afresh
+            return self._click(MONTH_ARROWS[action], f"month {action[5:].lower()}", now)
+        if action == "filter":
+            self._change_calendar(now)
+            if calendar.filter_down:
+                return self._click(FILTER_DOWN, "next filter", now)
+            # On the last: back up to the first.
+            commands = self._click(FILTER_UP, "first filter", now)
+            commands += [PointerCommand("click", FILTER_UP, "first filter", delay=0.15)
+                         for _ in range(FILTER_OPTIONS - 2)]
+            self._settle_until = now + self.settle_seconds + 0.15 * (FILTER_OPTIONS - 2)
+            return commands
+        if action not in _DIRECTIONS:
+            return []
+        days = calendar.events
+        if self._day is None:
+            return []
+        else:
+            day, event = self._day
+            if action == "up":
+                if event > 0:
+                    self._day = (day, event - 1)
+                elif day >= CALENDAR_COLS:
+                    above = day - CALENDAR_COLS
+                    self._day = (above, max(len(days[above]) - 1, 0))
+                else:
+                    return []
+            elif action == "down":
+                if event < len(days[day]) - 1:
+                    self._day = (day, event + 1)
+                elif day + CALENDAR_COLS < len(days):
+                    self._day = (day + CALENDAR_COLS, 0)
+                else:
+                    return []
+            else:
+                step = -1 if action == "left" else 1
+                if not 0 <= day + step < len(days):
+                    return []
+                self._day = (day + step, 0)
+        return [self._hover_day()]
+
+    def _change_calendar(self, now: float) -> None:
+        self._calendar_before = (self._calendar, now)
+        self._calendar, self._day, self._calendar_seen = None, None, None
+
+    def _settle_calendar(self, reading: Calendar, now: float) -> list[PointerCommand]:
+        """Keep the calendar once TTR has finished drawing it; then (arriving, or a new
+        month or filter) straight onto today's first event, or the month's first day."""
+        if self._calendar_seen is None or self._calendar_seen[0] != reading:
+            self._calendar_seen = (reading, now)
+            return []
+        if now - self._calendar_seen[1] < _CALENDAR_STEADY_SECONDS:
+            return []
+        if (self._calendar_before is not None and reading == self._calendar_before[0]
+                and now - self._calendar_before[1] < _CALENDAR_CHANGE_SECONDS):
+            return []  # still the one from before the change
+        self._calendar, self._calendar_seen, self._calendar_before = reading, None, None
+        self._day = (reading.today if reading.today is not None else reading.first or 0, 0)
+        return [self._hover_day()]
+
+    def _hover_day(self) -> PointerCommand:
+        """The event hovered (its popup shows), or a day with none just by its number;
+        the frame goes around the number either way."""
+        day, event = self._day
+        lines = self._calendar.events[day]
+        point = calendar_event(day, lines[event]) if lines else calendar_day(day)
+        name = f"day {day + 1} event {event + 1}" if lines else f"day {day + 1}"
+        return PointerCommand("hover", point, name, size=DAY_NUMBER_SIZE, frame_at=calendar_day(day))
 
     def _run_disguise(self, action: str, screen: BookScreen, now: float) -> list[PointerCommand]:
         if action in DISGUISE_ARROWS:
@@ -1320,6 +1539,9 @@ class BookMapper:
             # Its confirm is the usual OK/Cancel dialog.
             self._releasing = True
             return self._click(_LISTS[screen.page][2], "release", now)
+        if (screen.page == "events" and screen.top_current == CALENDAR_TAB
+                and (action in _DIRECTIONS or action in MONTH_ARROWS or action == "filter")):
+            return self._run_calendar(action, now)  # only its own: LT/RT still switch tabs
         if screen.page == "snapshots" and action in SNAPSHOT_ARROWS and action in screen.snapshot_arrows:
             return self._click(SNAPSHOT_ARROWS[action], f"snapshot {action}", now)
         if screen.page == "snapshots" and action == "pageAction" and screen.snapshot_trash:

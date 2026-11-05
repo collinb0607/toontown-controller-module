@@ -4,7 +4,7 @@ Play **Toontown Rewritten** with a controller.
 
 Toontown Rewritten's own controller support is experimental: it covers movement and a virtual mouse, but has no menu navigation and no remapping. This module runs alongside the game, reads your controller, and turns its input into the keyboard and mouse actions the game expects. Controller buttons press on-screen buttons for you directly, so you never have to steer a mouse cursor around. Every button can be remapped.
 
-> **Status:** early development. Overworld controls, battles, the gag shop, NPCs, speedchat menus and the friends list work. The shticker book is next (M6). See [plan.md](plan.md) for the full design.
+> **Status:** early development. Overworld controls, battles, the gag shop, NPCs, speedchat menus, the friends list and every page of the shticker book work. Next: controller navigation for the start-up screen, toon selection and TTR's own settings (M7). See [plan.md](plan.md) for the full design.
 
 ## Features
 
@@ -91,7 +91,10 @@ Working now:
 | Cog Disguise page | Stick/D-pad up/down pick the suit tab (Bossbot, Lawbot, Cashbot, Sellbot) · Stick/D-pad left/right click the blue arrows, where a suit has them |
 | Gardening page | Basket: Stick/D-pad up/down pick a flower (scrolling at the ends) · X release it · Album: Stick/D-pad up/down pick a collected flower · Right stick up/down the previous/next genus · Trophies, Specials: just to look at |
 | Snapshots page | Stick/D-pad left/right flip through your snapshots · X delete the one shown · A Yep! / B Cancel |
+| Events page | Calendar: opens on today's first event · Stick/D-pad move around the days, up/down going event by event (hovering one shows what it is) · Right stick left/right change month · L3 next filter (back to the first after the last) · Hosting, Invitations: nothing yet |
 | Golf page | Records: Stick/D-pad or right stick up/down scroll the courses · Trophy: Stick/D-pad hover the trophies |
+| Start-up screen | Start opens Options (Start or B closes it) · hold B to Quit · any other button enters |
+| Toon selection | Start opens Options (Start or B closes it) · hold B to Quit · Stick/D-pad move between the toons (starting top middle) · A plays the toon, or makes one in an empty slot · X delete: A OK / B Cancel, then Y types "delete" and presses OK (A won't), B Cancel |
 
 Planned:
 

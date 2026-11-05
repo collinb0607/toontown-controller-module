@@ -895,3 +895,134 @@ def test_snapshots_flip_with_left_and_right_and_x_deletes():
     # No snapshots: nothing to flip or delete.
     empty = snapshots(arrows=(), trash=False)
     assert not press(mapper, "dpad_right", 7.0, empty) and not press(mapper, "x", 8.0, empty)
+
+
+
+def test_events_calendar_reads_days_events_today_and_buttons():
+    screen = replay("book_events_calendar_1920x1009")
+    assert screen.page == "events" and screen.top_current == b.CALENDAR_TAB
+    c = screen.calendar
+    assert c.today == 3 and c.first == 0  # Wednesday the 4th, in a month starting on Sunday
+    assert c.months == ("stickRight",) and not c.filter_up and c.filter_down
+    assert c.events[5] == (0,)  # "New Cattlelog Delivery" wraps onto two lines: one event
+    assert c.events[13] == (0, 1) and c.events[27] == (0, 1)  # two events each
+    assert c.events[2] == () and c.events[7] == ()
+    for name, tab in (("book_events_hosting_1920x1009", 1), ("book_events_invitations_1920x1009", 2)):
+        other = replay(name)
+        assert other.page == "events" and other.top_current == tab and other.calendar is None
+
+
+def calendar_screen(events=None, today=3, months=("stickRight",), up=False, down=True):
+    events = events or tuple(((0, 1) if i == 13 else ()) if i in (2, 7, 13) else (0,) for i in range(42))
+    cal = b.Calendar(events, today, 0, months, up, down)
+    return BookScreen(tuple(b._center(0.46, 0.04 * i) for i in range(14)), 13, "events",
+                      top_tabs=tuple(b._center(-0.2 + 0.2 * i, -0.45) for i in range(3)), top_current=0, calendar=cal)
+
+
+def arrive(mapper, cal, now=0.0):
+    """Arrive on the calendar: kept once it reads the same for a moment."""
+    assert mapper.update(frozenset(), now, cal) == []
+    return mapper.update(frozenset(), now + 0.2, cal)
+
+
+def test_calendar_starts_on_today_and_moves_by_event():
+    mapper = BookMapper()
+    cal = calendar_screen()
+    [hover] = arrive(mapper, cal)  # straight onto today's first event
+    assert hover.point == b.calendar_event(3, 0) and hover.frame_at == b.calendar_day(3)
+    assert hover.size == b.DAY_NUMBER_SIZE
+    assert mapper.update(frozenset(), 0.5, cal) == []  # just once
+    # Down to the 11th and back up, then right to Thursday, Friday, Saturday; down to the
+    # 14th's first event, then its second.
+    [hover] = press(mapper, "dpad_down", 1.0, cal)
+    assert hover.point == b.calendar_event(10, 0)
+    press(mapper, "dpad_up", 1.5, cal)
+    for t in (2.0, 3.0, 4.0):
+        press(mapper, "ls_right", t, cal)
+    [hover] = press(mapper, "dpad_down", 5.0, cal)
+    assert hover.point == b.calendar_event(13, 0)
+    [hover] = press(mapper, "dpad_down", 6.0, cal)
+    assert hover.point == b.calendar_event(13, 1) and hover.frame_at == b.calendar_day(13)
+    [hover] = press(mapper, "dpad_up", 7.0, cal)
+    assert hover.point == b.calendar_event(13, 0)
+    # Up into the 7th's last event; a day with no events is hovered on its number.
+    press(mapper, "dpad_down", 8.0, cal)
+    [hover] = press(mapper, "dpad_up", 9.0, cal)
+    assert hover.point == b.calendar_event(13, 0)
+    [hover] = press(mapper, "dpad_up", 10.0, cal)
+    assert hover.point == b.calendar_event(6, 0)
+    for t in (11.0, 12.0, 13.0):
+        press(mapper, "dpad_left", t, cal)
+    [hover] = press(mapper, "dpad_left", 15.0, cal)  # left from the 7th to the 3rd: no events
+    assert hover.point == b.calendar_day(2) and hover.frame_at == b.calendar_day(2)
+    [hover] = press(mapper, "dpad_down", 16.0, cal)  # down from a day with none: the 10th's first
+    assert hover.point == b.calendar_event(9, 0)
+    assert mapper.hovering(cal)
+
+
+def test_calendar_month_arrows_and_filter():
+    mapper = BookMapper()
+    cal = calendar_screen()
+    arrive(mapper, cal)
+    assert not press(mapper, "rs_left", 1.0, cal)  # no earlier month showing
+    [click] = press(mapper, "rs_right", 2.0, cal)
+    assert click.kind == "click" and click.point == b.MONTH_ARROWS["stickRight"]
+    nxt = calendar_screen(today=None, months=("stickLeft", "stickRight"))
+    arrive(mapper, nxt, 3.0)
+    [click] = press(mapper, "ls", 4.0, nxt)
+    assert click.point == b.FILTER_DOWN
+    last = calendar_screen(today=None, months=("stickLeft", "stickRight"), up=True, down=False)
+    arrive(mapper, last, 5.0)
+    clicks = press(mapper, "ls", 6.0, last)
+    assert [c.point for c in clicks] == [b.FILTER_UP] * (b.FILTER_OPTIONS - 1)  # back to the first
+
+
+def test_calendar_survives_a_popup_over_the_page_tabs():
+    mapper = BookMapper()
+    cal = calendar_screen()
+    arrive(mapper, cal)  # on today
+    covered = BookScreen(cal.tabs[:5], None, None, top_tabs=cal.top_tabs, top_current=0)
+    assert mapper.update(frozenset(), 2.0, covered) == [] and mapper.hovering(covered)
+    [hover] = press(mapper, "dpad_right", 3.0, covered)
+    assert hover.point == b.calendar_event(4, 0)
+
+
+
+def test_a_new_month_is_kept_only_once_ttr_has_drawn_it():
+    mapper = BookMapper()
+    november = calendar_screen()
+    arrive(mapper, november)
+    press(mapper, "rs_right", 1.0, november)
+    # TTR still shows November for a while after the click: nothing kept or hovered.
+    for t in (1.3, 1.5, 1.7, 1.9):
+        assert mapper.update(frozenset(), t, november) == []
+    december = calendar_screen(events=tuple((0, 1, 2, 3) if i == 31 else (0,) for i in range(42)), today=None,
+                               months=("stickLeft", "stickRight"))
+    assert mapper.update(frozenset(), 2.0, december) == []
+    [hover] = mapper.update(frozenset(), 2.2, december)  # December's first day
+    assert hover.point == b.calendar_event(0, 0)
+    for t in (3.0, 4.0, 5.0, 6.0):
+        press(mapper, "dpad_down", t, december)
+    for t in (7.0, 8.0, 9.0):
+        press(mapper, "dpad_right", t, december)
+    hovers = [press(mapper, "dpad_down", 10.0 + t, december)[0].point for t in range(3)]
+    assert hovers == [b.calendar_event(31, line) for line in (1, 2, 3)]  # the 30th's four events
+    # TTR not redrawing at all (the same month): kept anyway after a while.
+    press(mapper, "rs_left", 20.0, december)
+    assert all(mapper.update(frozenset(), 20.3 + 0.1 * t, december) == [] for t in range(10))
+    assert mapper.update(frozenset(), 22.0, december)
+
+
+def test_december_reads_the_30ths_four_events():
+    c = replay("book_events_calendar_events_bug_3_1920x1009").calendar
+    assert c.today is None and c.first == 2 and c.months == ("stickLeft", "stickRight")
+    assert c.events[31] == (0, 1, 2, 3)  # Fish Bingo and three timed ones, cut off at the edge
+    assert c.events[16] == (0, 1) and c.events[32] == (0, 1)
+
+
+def test_lt_and_rt_still_switch_tabs_on_the_calendar():
+    mapper = BookMapper()
+    cal = calendar_screen()
+    arrive(mapper, cal)
+    clicks = [c for c in press(mapper, "rt", 1.0, cal) if c.kind == "click"]
+    assert [c.point for c in clicks] == [cal.top_tabs[1]]  # Hosting

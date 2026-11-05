@@ -17,12 +17,12 @@ class UIPoint:
     anchor: str  # horizontal anchor: "left", "center" or "right"
     x: float  # horizontal offset from the anchor, in units of the shorter side
     y: float  # vertical offset from the vertical anchor, in units of the shorter side
-    v_anchor: str = "top"  # vertical anchor: "top" or "center"
+    v_anchor: str = "top"  # vertical anchor: "top", "center" or "bottom"
 
     def to_client(self, width: int, height: int) -> tuple[int, int]:
         unit = min(width, height)
         base_x = {"left": 0.0, "center": width / 2, "right": float(width)}[self.anchor]
-        base_y = {"top": 0.0, "center": height / 2}[self.v_anchor]
+        base_y = {"top": 0.0, "center": height / 2, "bottom": float(height)}[self.v_anchor]
         return round(base_x + self.x * unit), round(base_y + self.y * unit)
 
     def offset(self, dx: float, dy: float) -> "UIPoint":

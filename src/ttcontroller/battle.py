@@ -434,6 +434,7 @@ class PointerCommand:
     # hover: the item's width and height (units of the window's shorter side), for
     # the highlight frame drawn around it. None draws no frame.
     size: tuple[float, float] | None = None
+    frame_at: ui.UIPoint | None = None  # hover: draw the frame here instead of around the point
 
 
 @dataclass
