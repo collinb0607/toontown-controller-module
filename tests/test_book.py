@@ -384,3 +384,68 @@ def test_after_scrolling_the_card_under_the_cursor_is_highlighted():
     [hover] = mapper.update(frozenset(), 1.3, scrolled)
     assert hover.kind == "hover" and hover.name.startswith("SOS card") and hover.size is not None
     assert mapper._trunk.trunk_item.name == hover.name  # moving on starts from it
+
+
+@pytest.mark.parametrize("name", ["book_toontasks_1920x1009", "book_toontasks_hover_1920x1009"])
+def test_toontasks_page(name):
+    screen = replay(name)
+    assert screen.page == "toontasks"
+    assert len(screen.tasks) == 4 and all(t is not None for t in screen.tasks)
+    # Only the just-for-fun task has a trash can.
+    assert screen.tasks[0] not in (None, False) and screen.tasks[1:] == (False, False, False)
+    x, y = screen.tasks[0].to_client(1920, 1009)
+    assert 880 < x < 910 and 225 < y < 270
+
+
+def test_toontasks_delete_confirm():
+    assert replay("book_toontasks_delete_popup_1920x1009").dialog is not None
+
+
+def tasks_screen(tasks):
+    return BookScreen(tuple(b._center(0.46, 0.04 * i) for i in range(5)), 4, "toontasks", tasks=tasks)
+
+
+def test_toontasks_hover_and_delete():
+    trash = b._center(-0.06, -0.25)
+    screen = tasks_screen((trash, False, None, False))  # the third scroll is blank
+    mapper = BookMapper()
+    assert mapper.update(frozenset(), 0.0, screen) == [] and not mapper.hovering(screen)
+    [hover] = press(mapper, "ls_down", 1.0, screen)
+    assert hover.name == "task 1" and hover.size is None  # no frame here
+    assert [c.point for c in press(mapper, "x", 2.0, screen) if c.kind == "click"] == [trash]
+    hover = [c for c in press(mapper, "dpad_right", 3.0, screen) if c.kind == "hover"][-1]
+    assert hover.name == "task 2"
+    assert not [c for c in press(mapper, "x", 4.0, screen) if c.kind == "click"]  # no trash can
+    [hover] = [c for c in press(mapper, "dpad_down", 5.0, screen) if c.kind == "hover"]
+    assert hover.name == "task 4"
+    assert not [c for c in press(mapper, "dpad_left", 6.0, screen) if c.kind == "hover" and c.name == "task 3"]
+
+
+def test_toontask_x_clicks_its_trash_can():
+    trash = b._center(-0.06, -0.25)
+    screen = tasks_screen((trash, False, False, False))
+    mapper = BookMapper()
+    mapper.update(frozenset(), 0.0, screen)
+    press(mapper, "dpad_down", 1.0, screen)
+    [click] = [c for c in press(mapper, "x", 2.0, screen) if c.kind == "click"]
+    assert click.point == trash
+
+
+def test_cancelling_a_task_delete_goes_back_to_that_task():
+    trash = b._center(0.17, -0.25)
+    screen = tasks_screen((False, trash, False, False))
+    mapper = BookMapper()
+    mapper.update(frozenset(), 0.0, screen)
+    press(mapper, "dpad_down", 1.0, screen)
+    press(mapper, "dpad_right", 2.0, screen)  # task 2
+    press(mapper, "x", 3.0, screen)
+    dialog = BookScreen(dialog=(b._center(-0.05, 0.1), b._center(0.05, 0.1)))
+    mapper.update(frozenset(), 4.0, dialog)
+    press(mapper, "b", 5.0, dialog)
+    [hover] = mapper.update(frozenset(), 6.0, screen)
+    assert hover.name == "task 2"
+
+
+def test_the_book_takes_the_trunks_buttons_too():
+    # LS is the SOS filter on the Trunk tab, so it mustn't also toggle sprint.
+    assert "ls" in BookMapper().buttons
