@@ -16,6 +16,7 @@ os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 import pygame  # noqa: E402
 
 from ttcontroller.battle import read_screen  # noqa: E402
+from ttcontroller.book import read_book, read_pages  # noqa: E402
 from ttcontroller.friends import read_friends  # noqa: E402
 from ttcontroller.npc import read_npc  # noqa: E402
 from ttcontroller.shop import read_shop  # noqa: E402
@@ -43,9 +44,11 @@ def main() -> None:
         npc = read_npc(w, h, get_pixel)
         speedchat = read_speedchat(w, h, get_pixel, look_for_unite=True)
         friends = read_friends(w, h, get_pixel)
+        book = read_book(w, h, get_pixel)
+        read_pages(w, h, get_pixel)
         path = OUT / f"{capture.stem}.json"
         path.write_text(json.dumps({"size": [w, h], "pixels": seen}, separators=(",", ":")), encoding="utf-8")
-        print(f"wrote {path.name}: {screen.kind or shop.kind or npc.kind or ('speedchat' if speedchat.is_open else friends.kind)}, {len(seen)} pixels")
+        print(f"wrote {path.name}: {screen.kind or shop.kind or npc.kind or ('speedchat' if speedchat.is_open else friends.kind) or (book.page and f'book {book.page}')}, {len(seen)} pixels")
 
 
 if __name__ == "__main__":

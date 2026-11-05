@@ -36,3 +36,19 @@ def test_watcher_reloads_on_change(tmp_path):
     import os
     os.utime(path, (1, 1))
     assert watcher.check().combo("jump").key == "j"
+
+
+def test_set_custom_cursor_keeps_the_rest(tmp_path):
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({"controls": {"jump": "space"}, "video": {"enable-cursor": True, "fps": 60}}))
+    assert ttr_settings.set_custom_cursor(path, False)
+    assert json.loads(path.read_text()) == {"controls": {"jump": "space"},
+                                            "video": {"enable-cursor": False, "fps": 60}}
+    assert not ttr_settings.load(path).custom_cursor
+
+
+def test_set_custom_cursor_leaves_a_broken_file_alone(tmp_path):
+    path = tmp_path / "settings.json"
+    path.write_text("{not json")
+    assert not ttr_settings.set_custom_cursor(path, False)
+    assert path.read_text() == "{not json"

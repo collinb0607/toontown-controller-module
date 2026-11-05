@@ -18,14 +18,16 @@ Working now:
 - **Talking to NPCs:** A clicks through speech bubbles; pick a ToonTask with the D-pad.
 - **Speedchat menus:** move through the menus and submenus with the D-pad and say a phrase with A. Works with any speedchat color. LT jumps straight to UNITE! > Toon-Up, in battle too.
 - **Friends list:** move down the list (it scrolls for you), switch pages, open a toon, teleport to them (X) or whisper (Y). Nearby toons work too.
+- **Shticker book:** LB/RB flip through the pages and LT/RT switch a page's tabs (like Gags and Trunk). Each page's own controls are next.
 - **Trunk:** SOS cards (scrolling the list as you go, and filtering them from the dropdown or with LS), pink slips, remotes and doodle tricks, all with the D-pad or stick.
 - **Remapping:** a config file lets you rebind any button.
-- **Hidden cursor:** the cursor disappears while you use the controller and comes back as soon as you move the mouse. When nothing needs hovering it waits on the window's title bar, out of the way. While it hovers a menu it's only hidden if TTR's custom cursor is turned off in its Options.
+- **Hidden cursor:** the cursor disappears while you use the controller and comes back as soon as you move the mouse. When nothing needs hovering it waits on the window's title bar, out of the way. TTR's custom cursor can't be hidden and has no switch in TTR's Options, so set `"hide_cursor": true` in the config and the module turns it off in TTR's settings.json for you (it takes effect the next time TTR starts).
+- **Mouse pauses the controller:** move or click the mouse in TTR and the controller pauses, like switching away from TTR. Press any controller button to resume (that press only resumes; it isn't sent).
 - Uses your TTR keybinds automatically, works at any window size, and never blocks your keyboard or mouse.
 
 Planned:
 
-- **Shticker book:** controller navigation for every page.
+- **Shticker book pages:** controller navigation on every page.
 - **Boss fights:** VP and CJ throwing, CFO crane, CEO charge attacks.
 - **Trolley games:** support for each minigame.
 - **On-screen hints:** button prompts that change with what you're doing in game.
@@ -74,12 +76,13 @@ Working now:
 | Speedchat | D-pad up/down move · right or A open a submenu · left or B go back · A say the phrase · B in the top menu closes speedchat |
 | Friends list | D-pad up/down move (scrolls at the ends) · left/right change page · A open the toon · X Go To (teleport) · Y Whisper · B close |
 | A toon's panel | D-pad up/down move between its buttons · A press · X Go To (teleport) · Y Whisper · B close Toon Details, then the panel |
+| Shticker book | LB/RB previous/next page · LT/RT previous/next tab along the page's top · B close |
 
 Planned:
 
 | State | Controls |
 |---|---|
-| Shticker book | Stick/D-pad move · A select · B back |
+| Shticker book pages | Stick/D-pad move · A select |
 | VP / CJ | Hold RT to charge a throw, release to throw |
 | CFO | Left stick move crane · hold X magnet · B leave |
 | CEO | Left stick turn · hold X charge, release to fire · B leave |

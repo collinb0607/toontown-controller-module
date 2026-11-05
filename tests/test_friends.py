@@ -116,3 +116,29 @@ def test_b_closes_toon_details_first():
     screen = FriendsScreen("panel", details=True)
     m.update(frozenset(), 0.0, screen)
     assert [c.point for c in press(m, screen, 1.0, "b")] == [f.DETAILS_CLOSE, f.FRIEND]
+
+
+def test_closing_toon_details_right_after_opening_waits_for_it():
+    m = FriendsMapper()
+    closed = FriendsScreen("panel")
+    m.update(frozenset(), 0.0, closed)
+    m.button = len(f.PANEL_BUTTONS) - 1  # Toon Details
+    press(m, closed, 1.0, "a")
+    [close, _] = press(m, FriendsScreen("panel", details=True), 1.1, "b")
+    assert close.point == f.DETAILS_CLOSE and close.delay == pytest.approx(f.DETAILS_OPEN_SECONDS - 0.1)
+
+
+def test_toon_details_close_is_clicked_again_if_it_missed():
+    m = FriendsMapper()
+    still_open = FriendsScreen("panel", details=True)
+    m.update(frozenset(), 0.0, still_open)
+    assert [c.point for c in press(m, still_open, 1.0, "b")] == [f.DETAILS_CLOSE, f.FRIEND]
+    assert m.update(frozenset(), 1.2, still_open) == []
+    assert [c.point for c in m.update(frozenset(), 1.6, still_open)] == [f.DETAILS_CLOSE, f.FRIEND]
+    m.update(frozenset(), 2.2, still_open)  # third and last try
+    assert m.update(frozenset(), 2.8, still_open) == []
+    # Once it's closed, no more clicks.
+    m2 = FriendsMapper()
+    m2.update(frozenset(), 0.0, still_open)
+    press(m2, still_open, 1.0, "b")
+    assert m2.update(frozenset(), 1.6, FriendsScreen("panel")) == []

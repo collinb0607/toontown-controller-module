@@ -52,6 +52,11 @@ PANEL_BUTTONS = ((FRIEND, "friends"), (GO_TO, "go to"), (WHISPER, "whisper"), (I
 DETAILS_CLOSE = _right(-0.6125, 0.4271)
 # How long a toon's panel takes to replace the list after a name is clicked.
 PANEL_OPEN_SECONDS = 0.3
+# Toon Details' Close ignores clicks until the panel has finished opening, and can
+# miss one now and then: it's clicked again if still open this long after, a few times.
+DETAILS_OPEN_SECONDS = 0.4
+DETAILS_RETRY_SECONDS = 0.5
+DETAILS_CLOSE_TRIES = 3
 
 
 def _is_portrait_yellow(c: RGB) -> bool:
@@ -135,6 +140,9 @@ class FriendsMapper:
         self.button = 0
         self._kind: str | None = None
         self._settle_until = 0.0
+        self._details_opened_at = float("-inf")
+        self._details_retry_at: float | None = None
+        self._details_tries = 0
 
     def set_bindings(self, bindings: Bindings) -> None:
         self.bindings = bindings
@@ -162,9 +170,20 @@ class FriendsMapper:
             elif screen.kind == "panel":
                 self.button = 0
                 commands.append(self._hover_button())
+        if self._details_retry_at is not None and now >= self._details_retry_at:
+            if screen.kind == "panel" and screen.details and self._details_tries < DETAILS_CLOSE_TRIES:
+                commands += self._close_details(now)
+            else:
+                self._details_retry_at = None
         for action in fired:
             commands += self._run(action, screen, now)
         return commands
+
+    def _close_details(self, now: float) -> list[PointerCommand]:
+        delay = max(0.0, self._details_opened_at + DETAILS_OPEN_SECONDS - now)
+        self._details_tries += 1
+        self._details_retry_at = now + delay + DETAILS_RETRY_SECONDS
+        return [PointerCommand("click", DETAILS_CLOSE, "close toon details", delay=delay), self._hover_button()]
 
     def _hover_row(self, screen: FriendsScreen) -> list[PointerCommand]:
         if not screen.rows:
@@ -226,6 +245,7 @@ class FriendsMapper:
             point, name = PANEL_BUTTONS[self.button]
             if point == TOON_DETAILS:
                 # Toon Details opens beside the panel; stay on the same button.
+                self._details_opened_at = now
                 return [PointerCommand("click", point, name)]
             return self._click(point, name, now)
         if action == "goTo":
@@ -234,6 +254,7 @@ class FriendsMapper:
             return self._click(WHISPER, "whisper", now)
         if action == "back":
             if screen.details:
-                return [PointerCommand("click", DETAILS_CLOSE, "close toon details"), self._hover_button()]
+                self._details_tries = 0
+                return self._close_details(now)
             return self._click(PANEL_CLOSE, "close toon panel", now)
         return []

@@ -91,8 +91,8 @@ class OverworldMapper:
                                       is_oneshot=lambda action: action in SPECIAL_ACTIONS)
         self.reset()
 
-    def reset(self) -> None:
-        self._actions.reset()
+    def reset(self, ignore_held: bool = False) -> None:
+        self._actions.reset(ignore_held)
         self._pulses: dict[str, float] = {}
         self._clicks: list[ui.Button] = []
         self._unite = False
@@ -154,6 +154,10 @@ class OverworldMapper:
                 self._clicks.append(ui.SPEEDCHAT)
         else:
             self._pulse(action, now)
+
+    def tap(self, control: str, now: float) -> None:
+        """Tap a TTR control on behalf of another mode (e.g. the book key to close the book)."""
+        self._pulse(control, now)
 
     def _pulse(self, control: str, now: float) -> None:
         self._pulses[control] = now + PULSE_SECONDS

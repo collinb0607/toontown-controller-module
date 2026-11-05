@@ -73,6 +73,27 @@ def load(path: Path) -> TTRSettings:
     return parse(data)
 
 
+def set_custom_cursor(path: Path, on: bool) -> bool:
+    """Turn TTR's custom cursor (video.enable-cursor, which has no switch in TTR's Options)
+    on or off, keeping the rest of settings.json as it is. TTR reads it when it starts.
+    Returns whether the file was written."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if not isinstance(data, dict):
+        return False
+    video = data.setdefault("video", {})
+    if not isinstance(video, dict):
+        return False
+    video["enable-cursor"] = on
+    try:
+        path.write_text(json.dumps(data, indent=4), encoding="utf-8")
+    except OSError:
+        return False
+    return True
+
+
 class SettingsWatcher:
     """Reloads settings.json when it changes on disk (e.g. after rebinding in game)."""
 

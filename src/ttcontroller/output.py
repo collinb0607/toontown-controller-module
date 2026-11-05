@@ -113,6 +113,14 @@ def cursor_pos() -> tuple[int, int]:
     return point.x, point.y
 
 
+_MOUSE_BUTTONS = (0x01, 0x02, 0x04)  # VK_LBUTTON, VK_RBUTTON, VK_MBUTTON
+
+
+def mouse_button_down() -> bool:
+    """Whether a mouse button is held (by anyone: the module's own clicks count too)."""
+    return any(_user32.GetAsyncKeyState(vk) & 0x8000 for vk in _MOUSE_BUTTONS)
+
+
 class MouseClicker:
     """Moves and clicks the mouse for on-screen buttons.
 

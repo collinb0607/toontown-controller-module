@@ -53,3 +53,11 @@ def test_shown_when_ttr_loses_focus():
     hider.update(True, True, (100, 100), False, None)
     hider.update(False, True, (100, 100), False, None)
     assert not hider.hidden and calls.log == ["hide", "show"]
+
+
+def test_reports_real_mouse_moves_only():
+    hider, _ = make()
+    assert not hider.update(True, True, (100, 100), False, None)
+    assert not hider.update(True, False, (500, 300), True, (500, 300))  # the module moving it
+    assert hider.update(True, False, (540, 320), False, (500, 300))
+    assert not hider.update(True, False, (540, 320), False, (500, 300))  # still

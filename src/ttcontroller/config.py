@@ -11,6 +11,7 @@ from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
 
 from .battle import BATTLE_ACTIONS, default_battle_bindings
+from .book import BOOK_ACTIONS, default_book_bindings
 from .bindings import STICK_BUTTONS, TRIGGER_BUTTONS, Bindings
 from .controller import BUTTONS
 from .mapper import SPECIAL_ACTIONS, Timing, default_bindings
@@ -46,6 +47,8 @@ HELP = {
                  "Actions: " + "; ".join(f"{name} = {desc}" for name, desc in SPEEDCHAT_ACTIONS.items()),
     "friends": "Bindings used while the friends list or a toon's panel is open. "
                "Actions: " + "; ".join(f"{name} = {desc}" for name, desc in FRIENDS_ACTIONS.items()),
+    "book": "Bindings used while the shticker book is open. "
+            "Actions: " + "; ".join(f"{name} = {desc}" for name, desc in BOOK_ACTIONS.items()),
 }
 
 
@@ -57,9 +60,13 @@ class Config:
     npc: Bindings = field(default_factory=default_npc_bindings)
     speedchat: Bindings = field(default_factory=default_speedchat_bindings)
     friends: Bindings = field(default_factory=default_friends_bindings)
+    book: Bindings = field(default_factory=default_book_bindings)
     movement: MovementTuning = field(default_factory=MovementTuning)
     # Every run starts with a sprint. The sprint button turns this on and off.
     auto_sprint: bool = False
+    # Keep TTR's custom cursor turned off in its settings.json, so the cursor can be
+    # fully hidden while the controller is in use.
+    hide_cursor: bool = False
     timing: Timing = field(default_factory=Timing)
 
 
@@ -74,8 +81,10 @@ def to_json(config: Config) -> dict:
             "npc": {"press": config.npc.press, "hold": config.npc.hold},
             "speedchat": {"press": config.speedchat.press, "hold": config.speedchat.hold},
             "friends": {"press": config.friends.press, "hold": config.friends.hold},
+            "book": {"press": config.book.press, "hold": config.book.hold},
         },
         "auto_sprint": config.auto_sprint,
+        "hide_cursor": config.hide_cursor,
         "movement": asdict(config.movement),
         "timing": asdict(config.timing),
     }
@@ -119,6 +128,7 @@ def parse(data: dict) -> tuple[Config, list[str]]:
     npc = bindings.get("npc", {})
     speedchat = bindings.get("speedchat", {})
     friends = bindings.get("friends", {})
+    book = bindings.get("book", {})
     config = Config(
         bindings=Bindings(
             press=_merge_bindings(defaults.bindings.press, bindings.get("press", {}), warnings, "press"),
@@ -144,14 +154,19 @@ def parse(data: dict) -> tuple[Config, list[str]]:
             press=_merge_bindings(defaults.friends.press, friends.get("press", {}), warnings, "friends.press"),
             hold=_merge_bindings(defaults.friends.hold, friends.get("hold", {}), warnings, "friends.hold"),
         ),
+        book=Bindings(
+            press=_merge_bindings(defaults.book.press, book.get("press", {}), warnings, "book.press"),
+            hold=_merge_bindings(defaults.book.hold, book.get("hold", {}), warnings, "book.hold"),
+        ),
         movement=_merge_numbers(defaults.movement, data.get("movement", {}), warnings, "movement"),
         timing=_merge_numbers(defaults.timing, data.get("timing", {}), warnings, "timing"),
     )
-    auto_sprint = data.get("auto_sprint", defaults.auto_sprint)
-    if isinstance(auto_sprint, bool):
-        config = replace(config, auto_sprint=auto_sprint)
-    else:
-        warnings.append(f"auto_sprint: must be true or false (using {str(defaults.auto_sprint).lower()})")
+    for name in ("auto_sprint", "hide_cursor"):
+        value = data.get(name, getattr(defaults, name))
+        if isinstance(value, bool):
+            config = replace(config, **{name: value})
+        else:
+            warnings.append(f"{name}: must be true or false (using {str(getattr(defaults, name)).lower()})")
     return config, warnings
 
 
@@ -191,7 +206,8 @@ def unknown_actions(config: Config, ttr_controls) -> list[str]:
             if action not in NPC_ACTIONS:
                 problems.append(f"bindings.{table}.{button}: unknown NPC action {action!r}")
     for section, actions, bindings in (("speedchat", SPEEDCHAT_ACTIONS, config.speedchat),
-                                       ("friends", FRIENDS_ACTIONS, config.friends)):
+                                       ("friends", FRIENDS_ACTIONS, config.friends),
+                                       ("book", BOOK_ACTIONS, config.book)):
         for table, table_bindings in (("press", bindings.press), ("hold", bindings.hold)):
             for button, action in table_bindings.items():
                 if action not in actions:

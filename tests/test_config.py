@@ -99,3 +99,11 @@ def test_old_stick_click_names_still_work():
     cfg, warnings = config.parse({"bindings": {"press": {"l3": "jump", "r3": None}}})
     assert warnings == []
     assert cfg.bindings.press["ls"] == "jump" and "rs" not in cfg.bindings.press
+
+
+def test_hide_cursor():
+    from ttcontroller.config import parse
+    assert not parse({})[0].hide_cursor
+    assert parse({"hide_cursor": True})[0].hide_cursor
+    config, warnings = parse({"hide_cursor": "yes"})
+    assert not config.hide_cursor and warnings

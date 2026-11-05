@@ -7,10 +7,11 @@ from . import config as module_config
 from . import ttr_settings
 from .battle import BattleMapper, BattleScreen, read_screen
 from .controller import NEUTRAL, ControllerReader
-from .cursor import CursorHider
+from .cursor import MOVE_TOLERANCE, CursorHider
+from .book import BookMapper, BookScreen, read_book
 from .friends import FriendsMapper, FriendsScreen, read_friends
 from .mapper import OverworldMapper, controller_buttons
-from .output import KeyboardOutput, MouseClicker, cursor_pos, send_key
+from .output import KeyboardOutput, MouseClicker, cursor_pos, mouse_button_down, send_key
 from .npc import NpcMapper, NpcScreen, read_npc
 from .shop import ShopMapper, ShopScreen, read_shop
 from .speedchat import SpeedchatMapper, SpeedchatScreen, read_speedchat
@@ -40,10 +41,23 @@ def describe_settings(settings: ttr_settings.TTRSettings) -> None:
         log("WARNING: TTR's built-in controller support is on. Turn it off in TTR Options > Controls, "
             "or every button will act twice.")
     if settings.custom_cursor:
-        log("Note: TTR's custom cursor is on, so the module can't hide the cursor while you use the "
-            "controller. Turn it off in TTR's Options to hide it.")
+        log("Note: TTR's custom cursor is on, so the cursor can blink while the module clicks. "
+            'Set "hide_cursor": true in the module config to turn it off.')
     if settings.display_mode != "window":
         log(f"Note: TTR display mode is '{settings.display_mode}'. Windowed mode is recommended.")
+
+
+def apply_hide_cursor(watcher: ttr_settings.SettingsWatcher, hide: bool, was_hidden: bool) -> None:
+    """Keep TTR's custom cursor off while hide_cursor is on (TTR may write it back), and
+    turn it back on when hide_cursor is turned off."""
+    if hide and watcher.settings.custom_cursor:
+        if ttr_settings.set_custom_cursor(watcher.path, False):
+            log("Turned off TTR's custom cursor (hide_cursor). It takes effect the next time TTR starts.")
+        else:
+            log(f"Couldn't turn off TTR's custom cursor: {watcher.path} couldn't be written.")
+    elif was_hidden and not hide and not watcher.settings.custom_cursor:
+        if ttr_settings.set_custom_cursor(watcher.path, True):
+            log("Turned TTR's custom cursor back on. It takes effect the next time TTR starts.")
 
 
 def describe_config(watcher: module_config.ConfigWatcher, settings: ttr_settings.TTRSettings) -> None:
@@ -78,6 +92,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     config_watcher = module_config.ConfigWatcher()
     log(f"Module config: {config_watcher.path}")
     describe_config(config_watcher, watcher.settings)
+    apply_hide_cursor(watcher, config_watcher.config.hide_cursor, False)
 
     def logged_send(name: str, down: bool) -> None:
         log(f"{'DOWN' if down else 'up  '} {name}" + ("" if dry_run else " (sent)"))
@@ -97,6 +112,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     speedchat_screen = SpeedchatScreen()
     friends_mapper = FriendsMapper(config.friends)
     friends_screen = FriendsScreen()
+    book_mapper = BookMapper(config.book)
+    book_screen = BookScreen()
     output = KeyboardOutput(logged_send if dry_run or debug else send_key)
     clicker = MouseClicker()
     hider = CursorHider()
@@ -122,6 +139,9 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
 
     controller_name = ""  # differs from None so the first poll logs either way
     ttr_focused = None
+    # Using the real mouse in TTR pauses the controller, like TTR losing focus, until
+    # the controller is used again.
+    mouse_paused = False
     next_settings_check = 0.0
     next_battle_check = 0.0
     last_battle_seen = -BATTLE_GRACE_SECONDS
@@ -159,10 +179,12 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     log("TTR settings changed, reloaded.")
                     describe_settings(watcher.settings)
                     describe_config(config_watcher, watcher.settings)
+                    apply_hide_cursor(watcher, config.hide_cursor, config.hide_cursor)
                 if config_watcher.check() is not None:
                     log("Module config changed, reloaded.")
                     describe_config(config_watcher, watcher.settings)
                     output.release_all()
+                    apply_hide_cursor(watcher, config_watcher.config.hide_cursor, config.hide_cursor)
                     config = config_watcher.config
                     mapper = make_mapper(config)
                     battle_mapper.set_bindings(config.battle)
@@ -170,19 +192,31 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     npc_mapper.set_bindings(config.npc)
                     speedchat_mapper.set_bindings(config.speedchat)
                     friends_mapper.set_bindings(config.friends)
+                    book_mapper.set_bindings(config.book)
 
-            if not focused:
-                mapper.reset()
+            if mouse_paused and (not focused or controller_used(state)):
+                mouse_paused = False
+                if focused:
+                    log("Controller resumed.")
+                    # Whatever the mouse opened is read right away.
+                    next_battle_check = now
+            active = focused and not mouse_paused
+            if not active:
+                # The button that resumes the controller only resumes it: anything held
+                # when it comes back does nothing until it's let go.
+                mapper.reset(ignore_held=True)
                 battle_mapper.reset_buttons()
                 shop_mapper.reset_buttons()
                 npc_mapper.reset_buttons()
                 speedchat_mapper.reset_buttons()
                 friends_mapper.reset_buttons()
+                book_mapper.reset_buttons()
                 battle_screen = BattleScreen()
                 shop_screen = ShopScreen()
                 npc_screen = NpcScreen()
                 speedchat_screen = SpeedchatScreen()
                 friends_screen = FriendsScreen()
+                book_screen = BookScreen()
                 output.release_all()
             else:
                 view = TTRView(foreground.ttr_hwnd) if foreground.ttr_hwnd else None
@@ -197,8 +231,15 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     if shop.kind != shop_screen.kind and (dry_run or debug):
                         log(f"Gag shop screen: {shop.kind or 'none'}")
                     shop_screen = shop
+                    # The book can't open in battle or the shop. It's read before NPCs, which
+                    # can't talk over it: their bubble search finds false arrows in its pages.
+                    book = (read_book(frame.width, frame.height, frame.get_pixel)
+                            if screen.kind is None and shop.kind is None else BookScreen())
+                    if (book.is_open, book.page) != (book_screen.is_open, book_screen.page) and (dry_run or debug):
+                        log(f"Book: {(book.page or 'unknown page') if book.is_open else 'closed'}")
+                    book_screen = book
                     npc = (read_npc(frame.width, frame.height, frame.get_pixel, frame.rgb())
-                           if screen.kind is None and shop.kind is None else NpcScreen())
+                           if screen.kind is None and shop.kind is None and not book.is_open else NpcScreen())
                     if npc.kind != npc_screen.kind and (dry_run or debug):
                         log(f"NPC screen: {npc.kind or 'none'}")
                     npc_screen = npc
@@ -240,10 +281,13 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 # Both are above battles too, which pause while one is open.
                 in_speedchat = not (in_shop or in_npc) and speedchat_screen.is_open
                 in_friends = not (in_shop or in_npc or in_speedchat) and friends_screen.kind is not None
-                in_menu = in_speedchat or in_friends
-                for active, menu_mapper, menu_screen in ((in_speedchat, speedchat_mapper, speedchat_screen),
-                                                         (in_friends, friends_mapper, friends_screen)):
-                    if active:
+                # The book is under both (speedchat and the friends list open over it).
+                in_book = not (in_battle or in_shop or in_npc or in_speedchat or in_friends) and book_screen.is_open
+                in_menu = in_speedchat or in_friends or in_book
+                for menu_open, menu_mapper, menu_screen in ((in_speedchat, speedchat_mapper, speedchat_screen),
+                                                            (in_friends, friends_mapper, friends_screen),
+                                                            (in_book, book_mapper, book_screen)):
+                    if menu_open:
                         buttons = controller_buttons(state, config.timing.stick_button_threshold)
                         for command in menu_mapper.update(buttons, now, menu_screen):
                             point(command.kind, command.point, command.name, view, restore=False,
@@ -276,19 +320,26 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     blocked = frozenset(speedchat_mapper.buttons)
                 elif in_friends:
                     blocked = frozenset(friends_mapper.buttons)
+                elif in_book:
+                    blocked = frozenset(book_mapper.buttons)
                 else:
                     blocked = frozenset()
                 # Walking still works mid-conversation (it walks away); not while choosing a task.
-                walk = not (in_battle or in_shop or npc_screen.kind == "tasks")
+                walk = not (in_battle or in_shop or in_book or npc_screen.kind == "tasks")
+                for control in book_mapper.take_taps():
+                    mapper.tap(control, now)
                 controls = mapper.update(state, now, view, blocked=blocked, movement=walk)
                 output.sync(controls_to_keys(controls, watcher.settings))
                 for button in mapper.take_clicks():
                     point("click", button.center, button.name, view)
                 # Nothing to hover: while the cursor is hidden, leave it off the game area.
-                idle = not (in_battle or in_shop or in_menu or npc_screen.kind == "tasks")
+                # The book's pages don't hover anything yet, so it counts as idle.
+                idle = not (in_battle or in_shop or in_speedchat or in_friends or npc_screen.kind == "tasks")
                 if idle and hider.hidden and view is not None and not clicker.busy and not dry_run:
                     spot = view.park_spot()
-                    if spot is not None and clicker.moved_to != spot:
+                    # Checked against where the cursor really is: the mouse may have moved it.
+                    pos = cursor_pos()
+                    if spot is not None and max(abs(pos[0] - spot[0]), abs(pos[1] - spot[1])) > MOVE_TOLERANCE:
                         clicker.hover(*spot)
                 if mapper.take_sprint_toggle():
                     log(f"Auto-sprint {'on' if mapper.auto_sprint else 'off'}.")
@@ -299,7 +350,17 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
             # Runs even when unfocused, so a click in progress always puts the cursor back.
             clicker.update(now)
             if not dry_run:
-                hider.update(focused, controller_used(state), cursor_pos(), clicker.busy, clicker.moved_to)
+                was_hidden = hider.hidden
+                pos = cursor_pos()
+                mouse_moved = hider.update(active, controller_used(state), pos, clicker.busy, clicker.moved_to)
+                if debug and hider.hidden != was_hidden:
+                    reason = "mouse moved" if mouse_moved else "controller used" if hider.hidden else "paused"
+                    log(f"Cursor {'hidden' if hider.hidden else 'shown'} ({reason}) at {pos[0]},{pos[1]}, "
+                        f"module last moved it to {clicker.moved_to}")
+                if active and (mouse_moved or (not clicker.busy and mouse_button_down())):
+                    mouse_paused = True
+                    log("Mouse in use: controller paused. Press any controller button to resume."
+                        + (f" ({'moved' if mouse_moved else 'button'})" if debug else ""))
 
             time.sleep(max(0.0, FRAME_SECONDS - (time.monotonic() - now)))
     except KeyboardInterrupt:
