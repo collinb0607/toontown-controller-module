@@ -36,6 +36,29 @@ def cell(row: int, col: int) -> ui.UIPoint:
     return _center(_COL0 + col * _COL_STEP, _ROW0 + row * _ROW_STEP)
 
 
+# Highlight frame sizes (units of the window's shorter side), like the book's Gags page
+# and Trunk: a gag button, and the trunk's items by the start of their names.
+GAG_SIZE = (0.080, 0.057)
+TRUNK_SIZES = (("tab ", (0.0912, 0.0912)), ("SOS card", (0.125, 0.162)), ("SOS filter", (0.1231, 0.0297)),
+               ("filter ", (0.1187, 0.0286)), ("damage remote", (0.0824, 0.1209)),
+               ("healing remote", (0.0824, 0.1209)),
+               ("doodle trick", (0.0703, 0.0451)))  # the trick's blue button, the part that's clicked
+
+
+# An SOS card is hovered on its CALL button; its frame goes around the whole card,
+# whose center is this far from CALL (measured at 1920x1009).
+SOS_CARD_CENTER = (0.0372, -0.0644)
+# The orange arrow boxes on "which cog/toon?", the same size in both rows. A cog's is
+# centered on its point; a toon's point (on the row through the arrows' shafts) is
+# this far above its box's center.
+TARGET_SIZE = (0.132, 0.075)
+TOON_BOX_DY = 0.0144
+
+
+def trunk_size(name: str) -> tuple[float, float] | None:
+    return next((size for start, size in TRUNK_SIZES if name.startswith(start)), None)
+
+
 PASS = _center(0.3717, 0.0510)
 RUN = _center(0.4886, 0.0510)
 TRUNK = _center(0.4311, 0.1620)
@@ -614,7 +637,8 @@ class BattleMapper:
 
     def _hover_trunk(self, item: Item) -> list[PointerCommand]:
         self.trunk_item = item
-        return [PointerCommand("hover", item.point, item.name)]
+        frame_at = item.point.offset(*SOS_CARD_CENTER) if item.name.startswith("SOS card") else None
+        return [PointerCommand("hover", item.point, item.name, size=trunk_size(item.name), frame_at=frame_at)]
 
     def _trunk_move(self, screen: BattleScreen, direction: str, now: float) -> list[PointerCommand]:
         current = self.trunk_item
@@ -663,11 +687,13 @@ class BattleMapper:
 
     def _hover_target(self) -> PointerCommand:
         self.target_index = min(self.target_index, len(self._targets) - 1)
-        return PointerCommand("hover", self._targets[self.target_index], f"target {self.target_index + 1}")
+        point = self._targets[self.target_index]
+        frame_at = point.offset(0, TOON_BOX_DY) if abs(point.y - TOON_ARROW_ROW) < 0.01 else None
+        return PointerCommand("hover", point, f"target {self.target_index + 1}", size=TARGET_SIZE, frame_at=frame_at)
 
     def _hover_gag(self) -> PointerCommand:
         r, c = self.gag
-        return PointerCommand("hover", cell(r, c), f"{TRACKS[r]} level {c + 1}")
+        return PointerCommand("hover", cell(r, c), f"{TRACKS[r]} level {c + 1}", size=GAG_SIZE)
 
     def _click(self, point: ui.UIPoint, name: str, now: float) -> list[PointerCommand]:
         self._settle_until = now + self.timing.settle_seconds

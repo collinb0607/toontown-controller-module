@@ -164,7 +164,7 @@ def test_stick_repeats_while_held():
 def test_target_choice():
     m = BattleMapper()
     cmds = m.update(frozenset(), 0.0, TARGETS)
-    assert cmds == [battle.PointerCommand("hover", TARGETS.targets[0], "target 1")]
+    assert cmds == [battle.PointerCommand("hover", TARGETS.targets[0], "target 1", size=battle.TARGET_SIZE)]
     cmds = press(m, TARGETS, 1.0, "dpad_right")
     assert cmds[-1].point == TARGETS.targets[1]
     cmds = press(m, TARGETS, 2.0, "a")
@@ -574,3 +574,32 @@ def test_l3_relocks_on_the_first_card_even_if_the_list_is_still_open_at_first():
     assert m.update(frozenset(), 2.0, opened) == []  # the list hasn't closed yet
     assert [c.name for c in m.update(frozenset(), 2.1, sos)] == ["SOS card 1 at -0.04"]
     assert m.update(frozenset(), 2.2, sos) == []  # just once
+
+
+def test_gags_and_trunk_items_carry_the_highlight_frame():
+    m = BattleMapper()
+    assert m.update(frozenset(), 0.0, PICKER)[0].size == battle.GAG_SIZE
+    sos = replay("battle_trunk_1920x1009")
+    m = BattleMapper()
+    card = m.update(frozenset(), 0.0, sos)[0]
+    assert card.size == battle.trunk_size("SOS card")
+    assert card.frame_at == card.point.offset(*battle.SOS_CARD_CENTER)  # the card, not its CALL button
+    tab = press(m, sos, 1.0, "dpad_left")[-1]
+    assert tab.name.startswith("tab ") and tab.size == battle.trunk_size("tab ")
+
+
+def test_teammates_have_no_frame():
+    screen = replay("battle_teammates_4_1920x1009")
+    m = BattleMapper()
+    m.update(frozenset(), 0.0, screen)
+    assert press(m, screen, 1.0, "lb")[-1].size is None
+
+
+@pytest.mark.parametrize("row, dy", [(battle.COG_ARROW_ROW, None), (battle.TOON_ARROW_ROW, battle.TOON_BOX_DY)])
+def test_target_arrows_carry_the_frame_around_their_box(row, dy):
+    point = battle._center(-0.1, row)
+    m = BattleMapper()
+    hover = m.update(frozenset(), 0.0, BattleScreen("target", targets=(point,)))[0]
+    assert hover.size == battle.TARGET_SIZE
+    assert hover.frame_at == (None if dy is None else point.offset(0, dy))
+

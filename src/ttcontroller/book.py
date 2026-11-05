@@ -75,6 +75,7 @@ from dataclasses import dataclass, field, replace
 from . import ui
 from .battle import DIRECTIONS as BATTLE_DIRECTIONS
 from .battle import _REMOTE_ROWS, _REMOTE_XS, BattleMapper, BattleScreen, Item, PointerCommand, _read_trunk, move
+from .battle import trunk_size as _battle_trunk_size
 from .bindings import Bindings, ButtonActions
 from .dialog import find_ok_cancel
 from .held_scroll import HeldScroll
@@ -578,10 +579,6 @@ _CARD_LIST_MIDDLE = _center(0.0485, -0.115)  # where to turn the wheel when no c
 # long, the card under the cursor is highlighted.
 _SCROLL_SETTLE_SECONDS = 0.2
 _CARD_GAP = 0.013  # (the gap between rows of cards is 0.015) the most a card's white margin is broken by its lettering
-# Frame sizes for the trunk's items, by the start of their names.
-_TRUNK_SIZES = (("tab ", (0.083, 0.083)), ("SOS card", (0.112, 0.146)), ("SOS filter", (0.112, 0.027)),
-                ("filter ", (0.108, 0.026)), ("damage remote", (0.075, 0.110)), ("healing remote", (0.075, 0.110)),
-                ("doodle trick", (0.064, 0.041)))  # the trick's blue button, the part that's clicked
 
 # ToonTasks, measured at 1920x1009: each scroll's center, top left to bottom right.
 TASK_CENTERS = tuple(_center(x, y) for y in (-0.181, 0.1194) for x in (-0.225, 0.228))
@@ -1010,7 +1007,9 @@ def _trunk_bindings() -> Bindings:
 
 
 def _trunk_size(name: str) -> tuple[float, float] | None:
-    return next((size for start, size in _TRUNK_SIZES if name.startswith(start)), None)
+    """The battle trunk's frame sizes, at the book trunk's scale."""
+    size = _battle_trunk_size(name)
+    return None if size is None else (size[0] * _TRUNK_SCALE, size[1] * _TRUNK_SCALE)
 
 
 # Buttons that change the page or tab, or close the book (Start is the book key), so

@@ -359,9 +359,13 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     for command in battle_mapper.update(buttons, now, battle_screen):
                         # Battle clicks leave the cursor on the button, where the highlight is.
                         point(command.kind, command.point, command.name, view, size=command.size, restore=False,
-                              notches=command.notches, delay=command.delay)
+                              notches=command.notches, delay=command.delay, frame_at=command.frame_at)
                 else:
                     battle_mapper.reset_buttons()
+                if in_battle and not in_menu and battle_screen.kind not in ("picker", "trunk", "target"):
+                    # The frame goes around gags, trunk items and target arrows; once those
+                    # are gone (a gag clicked, the round over) it goes too.
+                    highlight = None
                 # In battle or the shop, their bindings own their buttons and the left stick doesn't walk.
                 if in_pregame:
                     # Toon selection takes every button. The start-up screen only Start and B:

@@ -21,7 +21,7 @@ Working now:
 - **Shticker book:** LB/RB flip through the pages and LT/RT switch a page's tabs (like Gags and Trunk). Each page's own controls are next.
 - **Trunk:** SOS cards (scrolling the list as you go, and filtering them from the dropdown or with LS), pink slips, remotes and doodle tricks, all with the D-pad or stick.
 - **Remapping:** a config file lets you rebind any button.
-- **Highlight frame:** where it's hard to tell what's hovered with the cursor hidden (the shticker book's Gags and Trunk tabs so far), a glowing frame is drawn around it, like a console game.
+- **Highlight frame:** where it's hard to tell what's hovered with the cursor hidden (battle gags, the trunk and the which cog/toon arrows, and the shticker book's Gags and Trunk tabs), a glowing frame is drawn around it, like a console game.
 - **Hidden cursor:** the cursor disappears while you use the controller and comes back as soon as you move the mouse. When nothing needs hovering it waits on the window's title bar, out of the way. TTR's custom cursor can't be hidden and has no switch in TTR's Options, so set `"hide_cursor": true` in the config and the module turns it off in TTR's settings.json for you (it takes effect the next time TTR starts).
 - **Mouse pauses the controller:** move or click the mouse in TTR and the controller pauses, like switching away from TTR. Press any controller button to resume (that press only resumes; it isn't sent).
 - Uses your TTR keybinds automatically, works at any window size, and never blocks your keyboard or mouse.
