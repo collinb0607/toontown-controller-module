@@ -40,6 +40,11 @@ Pages with controls of their own:
   Summons over the dimmed book: one to three summon buttons and a close X.
   Picking one asks to confirm (a Yes/No dialog over it); once confirmed, the same
   popup shows a message instead of buttons, closed with its X.
+- Fishing: three tabs. Bucket lists your fish ten at a time, with triangles above
+  and below to scroll it (the wheel doesn't); clicking one shows it, and it opens
+  on the top one. The tiny red X in the bottom left of the fish shown releases it,
+  after an OK/Cancel confirm. Album flips through species with its own triangles. Trophies is
+  just to look at.
 """
 
 from collections.abc import Callable
@@ -145,6 +150,28 @@ def _read_map(width: int, height: int, get_pixel: PixelReader) -> tuple[tuple[tu
                    if sum(_is_cloud(get_pixel(*point.offset(dx, dy).to_client(width, height)))
                           for dx, dy in _CLOUD_SAMPLES) < _CLOUD_MIN)
     return places, shows(_GO_HOME_PROBES), shows(_PLAYGROUND_PROBES)
+
+
+def fish_row(i: int) -> ui.UIPoint:
+    return _center(_FISH_X, _FISH_Y0 + _FISH_STEP * i)
+
+
+def _is_fish_lettering(c: RGB) -> bool:
+    return max(c) < 90 or (c[1] > c[0] + 30 and c[1] > c[2] + 30)
+
+
+def _read_fish(width: int, height: int, get_pixel: PixelReader) -> tuple[ui.UIPoint, ...]:
+    """The fish names showing in the Bucket, top to bottom (a row with lettering: dark,
+    or green for the one picked)."""
+    rows = []
+    for i in range(FISH_ROWS):
+        y = _FISH_Y0 + _FISH_STEP * i
+        ink = sum(_is_fish_lettering(get_pixel(*_center(x, y + dy).to_client(width, height)))
+                  for x in _FISH_INK_XS for dy in (-0.003, 0.0, 0.003))
+        if ink < 3:
+            break
+        rows.append(fish_row(i))
+    return tuple(rows)
 
 
 def cog_cell(col: int, row: int) -> ui.UIPoint:
@@ -402,6 +429,18 @@ SUMMONS_CLOSE = _center(0.3489, -0.1006)
 _SUMMONS_PANEL = (_center(-0.355, -0.350), _center(-0.256, -0.104))  # the popup's pale yellow
 _SUMMONS_MIN_HEIGHT = 0.020
 
+# Fishing, measured at 1920x1009: the Bucket's fish names and scroll triangles, and the
+# Album's triangles. The tabs along the top are Bucket, Album and Trophies.
+_FISH_X, _FISH_Y0, _FISH_STEP = -0.2577, -0.1060, 0.01927
+FISH_ROWS = 10
+_FISH_INK_XS = tuple(-0.2884 + 0.002 * i for i in range(36))
+FISH_SCROLL_UP = _center(-0.2001, -0.1384)
+FISH_SCROLL_DOWN = _center(-0.2001, 0.1214)
+RELEASE_FISH = _center(0.1031, 0.0159)
+ALBUM_UP = _center(0.0, -0.3375)
+ALBUM_DOWN = _center(0.0, 0.2359)
+BUCKET_TAB, ALBUM_TAB = 0, 1
+
 GO_HOME = _center(0.0723, 0.2711)
 BACK_TO_PLAYGROUND = _center(0.2676, 0.2711)
 _GO_HOME_PROBES = (_center(0.0297, 0.2552), _center(0.1140, 0.2552))
@@ -428,6 +467,7 @@ class BookScreen:
     # click its trash can, or False if it can't be deleted.
     tasks: tuple[ui.UIPoint | bool | None, ...] = ()
     summon_cogs: tuple[tuple[int, int], ...] = ()  # on the Cog Gallery: the cells with a summon button
+    fish: tuple[ui.UIPoint, ...] = ()  # on Fishing's Bucket tab: the fish names showing, top to bottom
     summons_open: bool = False  # Issue a Cog Summons is open
     summons: tuple[ui.UIPoint, ...] = ()  # its available buttons, top to bottom (none for a message)
 
@@ -612,9 +652,12 @@ def read_book(width: int, height: int, get_pixel: PixelReader) -> BookScreen:
     gags = _read_gags(width, height, get_pixel) if page == "gags" and trunk is None else None
     tasks = _read_tasks(width, height, get_pixel) if page == "toontasks" else ()
     summon_cogs = _read_summon_cogs(width, height, get_pixel) if page == "cog gallery" else ()
+    fish = (_read_fish(width, height, get_pixel) if page == "fishing" and top_current == BUCKET_TAB
+            else ())
     return BookScreen(tabs, current, page, top_tabs, top_current, districts=districts, district_chosen=chosen,
                       district_current=current_district, places=places, go_home=go_home,
-                      back_to_playground=playground, gags=gags, trunk=trunk, tasks=tasks, summon_cogs=summon_cogs)
+                      back_to_playground=playground, gags=gags, trunk=trunk, tasks=tasks, summon_cogs=summon_cogs,
+                      fish=fish)
 
 
 def read_pages(width: int, height: int, get_pixel: PixelReader) -> list[str | None]:
@@ -638,7 +681,8 @@ BOOK_ACTIONS = {
     "left": "change a setting (the SpeedChat color), or the next place left on the map",
     "right": "change a setting (the SpeedChat color), or the next place right on the map",
     "goHome": "the map's Go Home button",
-    "pageAction": "the map's Back to Playground button, or delete the highlighted ToonTask (one with a trash can)",
+    "pageAction": "the map's Back to Playground button, delete the highlighted ToonTask (one with a trash can), "
+                  "or release the fish picked in the Fishing Bucket",
     "stickUp": "right stick up: scroll the Trunk's SOS cards up, or the Cog Gallery's tie (Bossbot)",
     "stickDown": "right stick down: scroll the Trunk's SOS cards down, or the Cog Gallery's bar graph (Sellbot)",
     "stickLeft": "right stick left: the Cog Gallery's gavel (Lawbot)",
@@ -726,6 +770,8 @@ class BookMapper:
         self._task: int | None = None  # the ToonTask hovered (none at first)
         self._cog: tuple[int, int] | None = None  # the summon button hovered (none at first)
         self._summon = 0  # the button hovered in Issue a Cog Summons
+        self._fish = 0  # the Bucket row chosen (it opens on the top one)
+        self._releasing = False  # the release confirm is up (or about to be)
         # The Trunk tab works like the battle trunk, so it's run by a battle mapper.
         self._trunk = BattleMapper(_trunk_bindings())
 
@@ -773,6 +819,16 @@ class BookMapper:
             self._gag = None
         if not screen.tasks and screen.dialog is None:
             self._task = None
+        if screen.dialog is not None and self._releasing:
+            pass  # the list is hidden behind the confirm: keep the fish
+        elif self._releasing and screen.fish and now >= self._settle_until:
+            # The confirm closed: back on the fish released (or the one moved into its row).
+            self._releasing = False
+            self._fish = min(self._fish, len(screen.fish) - 1)
+            commands.append(PointerCommand("click", screen.fish[self._fish], f"fish {self._fish + 1}"))
+        elif not screen.fish and now >= self._settle_until:
+            self._fish = 0
+            self._releasing = False
         if screen.page != "cog gallery" and not screen.summons_open and screen.dialog is None:
             self._cog = None
         elif screen.tasks and self._task is not None and screen.tasks[self._task] is None:
@@ -835,6 +891,24 @@ class BookMapper:
         item = self._trunk.trunk_item
         point = to_book(item.point) if item is not None and item.name.startswith("SOS card") else _CARD_LIST_MIDDLE
         return [PointerCommand("scroll", point, "scroll SOS cards", notches=1 if up else -1)]
+
+    def _run_fishing(self, action: str, screen: BookScreen, now: float) -> list[PointerCommand]:
+        if screen.top_current == ALBUM_TAB:
+            return self._click(ALBUM_UP if action == "up" else ALBUM_DOWN, f"album {action}", now)
+        if not screen.fish:
+            return []
+        # Like Districts, each fish is clicked as you go (hovering does nothing).
+        self._fish = min(self._fish, len(screen.fish) - 1)  # one may have been released
+        row = self._fish + (-1 if action == "up" else 1)
+        if 0 <= row < len(screen.fish):
+            self._fish = row
+            return [PointerCommand("click", screen.fish[row], f"fish {row + 1}")]
+        if row < 0 or len(screen.fish) == FISH_ROWS:
+            # Past the top or a full bottom row: scroll, and click the fish moved into it.
+            arrow = FISH_SCROLL_UP if row < 0 else FISH_SCROLL_DOWN
+            return [PointerCommand("click", arrow, f"scroll fish {action}"),
+                    PointerCommand("click", screen.fish[self._fish], f"fish {self._fish + 1}")]
+        return []
 
     def _run_cog_gallery(self, action: str, screen: BookScreen, now: float) -> list[PointerCommand]:
         suits = {"stickUp": "up", "stickLeft": "left", "stickRight": "right", "stickDown": "down"}
@@ -983,6 +1057,12 @@ class BookMapper:
             return self._run_map(action, screen, now)
         if screen.page == "cog gallery":
             return self._run_cog_gallery(action, screen, now)
+        if screen.page == "fishing" and action in ("up", "down"):
+            return self._run_fishing(action, screen, now)
+        if screen.page == "fishing" and action == "pageAction" and screen.fish:
+            # Its confirm is the usual OK/Cancel dialog.
+            self._releasing = True
+            return self._click(RELEASE_FISH, "release fish", now)
         if screen.page == "resistance rank" and action in RANK_PAGE_ARROWS:
             return self._click(RANK_PAGE_ARROWS[action], f"rank page {action}", now)
         if screen.tasks and action in ("up", "down", "left", "right", "pageAction"):

@@ -85,6 +85,7 @@ Working now:
 | ToonTasks page | Stick/D-pad hover tasks (blank scrolls are skipped) · X delete the hovered task, if it has a trash can · its confirm: A Delete · B cancel |
 | Resistance Rank page | Stick/D-pad left/right turn its pages |
 | Cog Gallery page | Right stick up/left/right/down: the tie/gavel/dollar sign/bar graph suits · Stick/D-pad move between summon buttons · A open Issue a Cog Summons · there: up/down move · A summon · B close |
+| Fishing page | Bucket: Stick/D-pad up/down pick the fish above/below (scrolls at the ends) · X release it (A OK · B cancel) · Album: up/down flip through species · Trophies: just to look at |
 
 Planned:
 

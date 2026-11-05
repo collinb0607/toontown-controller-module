@@ -564,3 +564,75 @@ def test_the_summons_message_closes_with_a_too():
     mapper.update(frozenset(), 0.0, message)
     [close] = press(mapper, "a", 1.0, message)
     assert close.point == b.SUMMONS_CLOSE
+
+
+@pytest.mark.parametrize("name,tab,fish", [("book_fishing_bucket_1920x1009", 0, 10),
+                                           # The picked fish (the top one here) is lettered green.
+                                           ("book_fishing_bucket_2_1920x1009", 0, 10),
+                                           ("book_fishing_album_1920x1009", 1, 0),
+                                           ("book_fishing_trophies_1920x1009", 2, 0)])
+def test_fishing_tabs(name, tab, fish):
+    screen = replay(name)
+    assert screen.page == "fishing" and screen.top_current == tab
+    assert len(screen.fish) == fish and not screen.hovers
+
+
+def fishing(tab=0, rows=10):
+    return BookScreen(tuple(b._center(0.46, 0.04 * i) for i in range(8)), 7, "fishing",
+                      top_tabs=(b._center(-0.2, -0.45), b._center(0, -0.45), b._center(0.2, -0.45)),
+                      top_current=tab, fish=tuple(b.fish_row(i) for i in range(rows)) if tab == 0 else ())
+
+
+def test_bucket_clicks_each_fish_and_scrolls_at_the_ends():
+    mapper = BookMapper()
+    assert mapper.update(frozenset(), 0.0, fishing()) == []  # it opens on the top fish
+    [c] = press(mapper, "dpad_down", 1.0, fishing())
+    assert c.kind == "click" and c.point == b.fish_row(1)
+    [c] = press(mapper, "ls_up", 2.0, fishing())
+    assert c.point == b.fish_row(0)
+    [scroll, again] = press(mapper, "dpad_up", 3.0, fishing())  # past the top
+    assert scroll.point == b.FISH_SCROLL_UP and again.point == b.fish_row(0)
+    for t in range(9):
+        press(mapper, "dpad_down", 4.0 + t, fishing())
+    [scroll, again] = press(mapper, "dpad_down", 20.0, fishing())
+    assert scroll.point == b.FISH_SCROLL_DOWN and again.point == b.fish_row(9)
+    # A short bucket doesn't scroll at the bottom.
+    short = BookMapper()
+    short.update(frozenset(), 0.0, fishing(rows=2))
+    press(short, "dpad_down", 1.0, fishing(rows=2))
+    assert not press(short, "dpad_down", 2.0, fishing(rows=2))
+
+
+def test_album_triangles_and_trophies():
+    mapper = BookMapper()
+    mapper.update(frozenset(), 0.0, fishing(tab=1))
+    [c] = press(mapper, "dpad_down", 1.0, fishing(tab=1))
+    assert c.point == b.ALBUM_DOWN
+    [c] = press(mapper, "ls_up", 2.0, fishing(tab=1))
+    assert c.point == b.ALBUM_UP
+    assert not press(mapper, "dpad_down", 3.0, fishing(tab=2))
+
+
+def test_x_releases_the_picked_fish_after_a_confirm():
+    assert replay("book_fishing_bucket_release_popup_1920x1009").dialog is not None
+    mapper = BookMapper()
+    mapper.update(frozenset(), 0.0, fishing())
+    [c] = press(mapper, "x", 1.0, fishing())
+    assert c.kind == "click" and c.point == b.RELEASE_FISH
+    assert not [c for c in press(mapper, "x", 2.0, fishing(tab=1)) if c.kind == "click"]  # not on the Album
+
+
+@pytest.mark.parametrize("answer", ["a", "b"])
+def test_after_the_release_confirm_its_the_same_fish_again(answer):
+    mapper = BookMapper()
+    mapper.update(frozenset(), 0.0, fishing())
+    for t in (1.0, 2.0, 3.0):
+        press(mapper, "dpad_down", t, fishing())  # the fourth fish
+    press(mapper, "x", 4.0, fishing())
+    dialog = BookScreen(dialog=(b._center(-0.05, 0.16), b._center(0.05, 0.16)))
+    mapper.update(frozenset(), 5.0, dialog)
+    press(mapper, answer, 6.0, dialog)
+    clicks = [c for c in mapper.update(frozenset(), 7.0, fishing()) if c.kind == "click"]
+    assert [c.point for c in clicks] == [b.fish_row(3)]
+    [c] = press(mapper, "dpad_down", 8.0, fishing())
+    assert c.point == b.fish_row(4)  # and moving on carries on from it
