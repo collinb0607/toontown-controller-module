@@ -127,6 +127,8 @@ class MouseClicker:
     click() clicks a point and, by default, puts the cursor back where it was.
     hover() just parks the cursor on a point (the battle highlight).
     scroll() parks the cursor on a point and turns the mouse wheel there.
+    hold() presses the button on a point and keeps it down until release() (for
+    buttons that act while held, like turning the kart).
     The steps are spread over a few frames so the game sees the cursor arrive
     on the button before the click, like a real mouse.
     """
@@ -142,6 +144,7 @@ class MouseClicker:
         self._job: tuple[int, int, bool, bool, int, float] | None = None
         self._restore_to: tuple[int, int] | None = None
         self.moved_to: tuple[int, int] | None = None  # where the module last put the cursor
+        self.holding = False  # the button is held down by hold()
 
     def click(self, x: int, y: int, restore: bool = True, delay: float = 0.0) -> None:
         """delay waits after the previous step, e.g. for a menu the last click opens."""
@@ -149,6 +152,18 @@ class MouseClicker:
 
     def scroll(self, x: int, y: int, notches: int) -> None:
         self._queue.append((x, y, False, False, notches, 0.0))
+
+    def hold(self, x: int, y: int) -> None:
+        self._queue.append((x, y, "hold", False, 0, 0.0))
+
+    def release(self) -> None:
+        """Let go of a hold(), straight away (also safe when nothing is held)."""
+        self._queue = deque(job for job in self._queue if job[2] != "hold")
+        if self._job is not None and self._job[2] == "hold":
+            self._job = None
+        if self.holding:
+            self._button(False)
+            self.holding = False
 
     def hover(self, x: int, y: int) -> None:
         # A newer hover replaces any hover still waiting, so fast stick input doesn't lag behind.
@@ -158,7 +173,7 @@ class MouseClicker:
 
     @property
     def busy(self) -> bool:
-        return self._job is not None or bool(self._queue)
+        return self._job is not None or bool(self._queue) or self.holding
 
     def update(self, now: float) -> None:
         if self._job is None:
@@ -172,6 +187,11 @@ class MouseClicker:
             return
 
         x, y, click, _, notches, _ = self._job
+        if click == "hold" and self._step == 1:
+            self._button(True)
+            self.holding = True
+            self._job = None
+            return
         if self._step == 0:
             self._move(x, y)
             self.moved_to = (x, y)

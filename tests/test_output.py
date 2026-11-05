@@ -100,3 +100,17 @@ def test_release_all():
     out.release_all()
     assert sorted(sent) == [("space", False), ("w", False)]
     assert out.held == set()
+
+
+def test_hold_keeps_the_button_down_until_release():
+    events = []
+    clicker = MouseClicker(move=lambda x, y: events.append(("move", x, y)),
+                           button=lambda down: events.append(("down" if down else "up",)), get_pos=lambda: (0, 0))
+    clicker.hold(10, 20)
+    for t in range(5):
+        clicker.update(t * 0.05)
+    assert events == [("move", 10, 20), ("down",)] and clicker.holding and clicker.busy
+    clicker.release()
+    assert events[-1] == ("up",) and not clicker.holding and not clicker.busy
+    clicker.release()  # nothing held: does nothing
+    assert events.count(("up",)) == 1

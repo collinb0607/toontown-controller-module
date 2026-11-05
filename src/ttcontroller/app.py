@@ -148,6 +148,10 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
             return
         if kind == "hover":
             clicker.hover(x, y)
+        elif kind == "hold":
+            clicker.hold(x, y)
+        elif kind == "release":
+            clicker.release()
         elif kind == "scroll":
             clicker.scroll(x, y, notches)
         else:
@@ -218,6 +222,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     next_battle_check = now
             active = focused and not mouse_paused
             if not active:
+                clicker.release()
                 # The button that resumes the controller only resumes it: anything held
                 # when it comes back does nothing until it's let go.
                 mapper.reset(ignore_held=True)
@@ -350,6 +355,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     mapper.tap(control, now)
                 if book_mapper.take_left_page():
                     highlight = None
+                if not in_book:
+                    clicker.release()  # e.g. a kart turn held when the book closed
                 controls = mapper.update(state, now, view, blocked=blocked, movement=walk)
                 output.sync(controls_to_keys(controls, watcher.settings))
                 for button in mapper.take_clicks():
@@ -403,6 +410,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     except KeyboardInterrupt:
         log("Quitting.")
     finally:
+        clicker.release()
         hider.show()
         if highlighter is not None:
             highlighter.close()

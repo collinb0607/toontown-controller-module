@@ -43,7 +43,12 @@ Pages with controls of their own:
 - Fishing: three tabs. Bucket lists your fish ten at a time, with triangles above
   and below to scroll it (the wheel doesn't); clicking one shows it, and it opens
   on the top one. The tiny red X in the bottom left of the fish shown releases it,
-  after an OK/Cancel confirm. Album flips through species with its own triangles. Trophies is
+  after an OK/Cancel confirm.
+- Racing: Customize (the kart, turned with LEFT and RIGHT buttons, and a row of
+  accessory icons at the bottom), Records (just to look at) and Trophy. Golf has
+  Records and Trophy. A Trophy tab is 30 small trophies, ten by three, and three
+  big ones below; one not earned yet is a gray card with a "?" (nothing to hover),
+  and hovering an earned one tints it yellow and shows what it took. Album flips through species with its own triangles. Trophies is
   just to look at.
 """
 
@@ -150,6 +155,19 @@ def _read_map(width: int, height: int, get_pixel: PixelReader) -> tuple[tuple[tu
                    if sum(_is_cloud(get_pixel(*point.offset(dx, dy).to_client(width, height)))
                           for dx, dy in _CLOUD_SAMPLES) < _CLOUD_MIN)
     return places, shows(_GO_HOME_PROBES), shows(_PLAYGROUND_PROBES)
+
+
+def _read_trophies(width: int, height: int, get_pixel: PixelReader) -> tuple[int, ...]:
+    """The trophies earned: their card is white (pale yellow while hovered), not gray."""
+    def earned(point: ui.UIPoint) -> bool:
+        c = get_pixel(*point.offset(*_TROPHY_CARD).to_client(width, height))
+        return c[0] > 235 and c[1] > 235
+
+    return tuple(i for i, point in enumerate(TROPHIES) if earned(point))
+
+
+def _accessory(i: int) -> ui.UIPoint:
+    return _center(_ACCESSORY_X0 + _ACCESSORY_STEP * i, _ACCESSORY_Y)
 
 
 def fish_row(i: int) -> ui.UIPoint:
@@ -441,6 +459,19 @@ ALBUM_UP = _center(0.0, -0.3375)
 ALBUM_DOWN = _center(0.0, 0.2359)
 BUCKET_TAB, ALBUM_TAB = 0, 1
 
+# Racing and Golf, measured at 1920x1009. Customize: the kart's turn buttons and the
+# accessory icons along the bottom. Trophy: the trophies, small then big.
+KART_TURN = {"stickLeft": _center(-0.127, -0.0193), "stickRight": _center(0.127, -0.0193)}
+_ACCESSORY_X0, _ACCESSORY_STEP, _ACCESSORY_Y = -0.2299, 0.0656, 0.2611
+ACCESSORIES = 8
+ACCESSORY_SIZE = (0.058, 0.060)
+TROPHIES = (tuple(_center(-0.3791 + 0.0855 * c, -0.2879 + 0.1150 * r) for r in range(3) for c in range(10))
+            + tuple(_center(x, 0.1392) for x in (-0.1249, 0.0, 0.1249)))
+_TROPHY_CARD = (-0.025, 0.035)  # a spot on a trophy's card clear of the trophy (or "?")
+# The tabs along the top, by page: which one is Customize, and which is Trophy.
+_CUSTOMIZE_TAB = {"racing": 0}
+_TROPHY_TAB = {"racing": 2, "golf": 1}
+
 GO_HOME = _center(0.0723, 0.2711)
 BACK_TO_PLAYGROUND = _center(0.2676, 0.2711)
 _GO_HOME_PROBES = (_center(0.0297, 0.2552), _center(0.1140, 0.2552))
@@ -468,6 +499,7 @@ class BookScreen:
     tasks: tuple[ui.UIPoint | bool | None, ...] = ()
     summon_cogs: tuple[tuple[int, int], ...] = ()  # on the Cog Gallery: the cells with a summon button
     fish: tuple[ui.UIPoint, ...] = ()  # on Fishing's Bucket tab: the fish names showing, top to bottom
+    trophies: tuple[int, ...] = ()  # on a Trophy tab: the trophies earned (indexes into TROPHIES)
     summons_open: bool = False  # Issue a Cog Summons is open
     summons: tuple[ui.UIPoint, ...] = ()  # its available buttons, top to bottom (none for a message)
 
@@ -654,10 +686,12 @@ def read_book(width: int, height: int, get_pixel: PixelReader) -> BookScreen:
     summon_cogs = _read_summon_cogs(width, height, get_pixel) if page == "cog gallery" else ()
     fish = (_read_fish(width, height, get_pixel) if page == "fishing" and top_current == BUCKET_TAB
             else ())
+    trophies = (_read_trophies(width, height, get_pixel)
+                if top_current is not None and top_current == _TROPHY_TAB.get(page) else ())
     return BookScreen(tabs, current, page, top_tabs, top_current, districts=districts, district_chosen=chosen,
                       district_current=current_district, places=places, go_home=go_home,
                       back_to_playground=playground, gags=gags, trunk=trunk, tasks=tasks, summon_cogs=summon_cogs,
-                      fish=fish)
+                      fish=fish, trophies=trophies)
 
 
 def read_pages(width: int, height: int, get_pixel: PixelReader) -> list[str | None]:
@@ -685,8 +719,8 @@ BOOK_ACTIONS = {
                   "or release the fish picked in the Fishing Bucket",
     "stickUp": "right stick up: scroll the Trunk's SOS cards up, or the Cog Gallery's tie (Bossbot)",
     "stickDown": "right stick down: scroll the Trunk's SOS cards down, or the Cog Gallery's bar graph (Sellbot)",
-    "stickLeft": "right stick left: the Cog Gallery's gavel (Lawbot)",
-    "stickRight": "right stick right: the Cog Gallery's dollar sign (Cashbot)",
+    "stickLeft": "right stick left: the Cog Gallery's gavel (Lawbot), or turn the kart on Racing's Customize tab",
+    "stickRight": "right stick right: the Cog Gallery's dollar sign (Cashbot), or turn the kart",
 }
 
 
@@ -771,6 +805,10 @@ class BookMapper:
         self._cog: tuple[int, int] | None = None  # the summon button hovered (none at first)
         self._summon = 0  # the button hovered in Issue a Cog Summons
         self._fish = 0  # the Bucket row chosen (it opens on the top one)
+        self._accessory: int | None = None  # the Customize tab's accessory icon hovered (none at first)
+        self._trophy: int | None = None  # the trophy hovered (none at first)
+        self._tab: tuple | None = None  # the page and top tab these are for
+        self._turning: str | None = None  # the kart turn button held down ("stickLeft"/"stickRight")
         self._releasing = False  # the release confirm is up (or about to be)
         # The Trunk tab works like the battle trunk, so it's run by a battle mapper.
         self._trunk = BattleMapper(_trunk_bindings())
@@ -795,7 +833,8 @@ class BookMapper:
         """Whether something on the book is hovered (so the cursor isn't parked)."""
         return (screen.hovers or (screen.gags is not None and self._gag is not None)
                 or (screen.tasks and self._task is not None)
-                or (screen.page == "cog gallery" and self._cog is not None))
+                or (screen.page == "cog gallery" and self._cog is not None)
+                or self._accessory is not None or self._trophy is not None)
 
     def take_left_page(self) -> bool:
         """Whether a button that leaves the page (or closes the book) was pressed since
@@ -819,6 +858,8 @@ class BookMapper:
             self._gag = None
         if not screen.tasks and screen.dialog is None:
             self._task = None
+        elif screen.tasks and self._task is not None and screen.tasks[self._task] is None:
+            self._task = None  # deleted
         if screen.dialog is not None and self._releasing:
             pass  # the list is hidden behind the confirm: keep the fish
         elif self._releasing and screen.fish and now >= self._settle_until:
@@ -831,8 +872,11 @@ class BookMapper:
             self._releasing = False
         if screen.page != "cog gallery" and not screen.summons_open and screen.dialog is None:
             self._cog = None
-        elif screen.tasks and self._task is not None and screen.tasks[self._task] is None:
-            self._task = None  # deleted
+        if (screen.page, screen.top_current) != self._tab:
+            # A new page or tab: nothing hovered there yet.
+            self._tab = (screen.page, screen.top_current)
+            self._accessory = self._trophy = None
+        commands += self._turn_kart(buttons, screen)
         if screen.trunk is not None and screen.dialog is None:
             # The battle mapper moves around the trunk; its points are turned into the book's.
             for c in self._trunk.update(buttons, now, screen.trunk):
@@ -891,6 +935,51 @@ class BookMapper:
         item = self._trunk.trunk_item
         point = to_book(item.point) if item is not None and item.name.startswith("SOS card") else _CARD_LIST_MIDDLE
         return [PointerCommand("scroll", point, "scroll SOS cards", notches=1 if up else -1)]
+
+    def _turn_kart(self, buttons: frozenset[str], screen: BookScreen) -> list[PointerCommand]:
+        """The kart turns while its LEFT or RIGHT button is held, so the right stick holds
+        the mouse button down on it for as long as the stick is pushed."""
+        on_customize = screen.top_current is not None and screen.top_current == _CUSTOMIZE_TAB.get(screen.page)
+        turning = None
+        if on_customize and screen.dialog is None:
+            turning = next((action for action in KART_TURN
+                            if any(self.bindings.press.get(b) == action for b in buttons)), None)
+        if turning == self._turning:
+            return []
+        commands = []
+        if self._turning is not None:
+            commands.append(PointerCommand("release", KART_TURN[self._turning], "stop turning kart"))
+        if turning is not None:
+            commands.append(PointerCommand("hold", KART_TURN[turning], f"turn kart {turning[5:].lower()}"))
+        self._turning = turning
+        return commands
+
+    def _run_customize(self, action: str, now: float) -> list[PointerCommand]:
+        if action == "select" and self._accessory is not None:
+            return self._click(_accessory(self._accessory), f"accessory {self._accessory + 1}", now)
+        if action not in ("left", "right"):
+            return []
+        if self._accessory is None:
+            self._accessory = 0
+        else:
+            self._accessory = max(0, min(ACCESSORIES - 1, self._accessory + (-1 if action == "left" else 1)))
+        return [PointerCommand("hover", _accessory(self._accessory), f"accessory {self._accessory + 1}",
+                               size=ACCESSORY_SIZE)]
+
+    def _run_trophies(self, action: str, screen: BookScreen) -> list[PointerCommand]:
+        # Only trophies earned: a "?" has nothing to hover.
+        if action not in _DIRECTIONS or not screen.trophies:
+            return []
+        if self._trophy not in screen.trophies:
+            self._trophy = screen.trophies[0]
+        else:
+            here = (str(self._trophy), TROPHIES[self._trophy])
+            nearest = _nearest(here, [(str(i), TROPHIES[i]) for i in screen.trophies], _DIRECTIONS[action])
+            if nearest is None:
+                return []
+            self._trophy = int(nearest[0])
+        # No frame: a hovered trophy tints yellow.
+        return [PointerCommand("hover", TROPHIES[self._trophy], f"trophy {self._trophy + 1}")]
 
     def _run_fishing(self, action: str, screen: BookScreen, now: float) -> list[PointerCommand]:
         if screen.top_current == ALBUM_TAB:
@@ -1059,6 +1148,12 @@ class BookMapper:
             return self._run_cog_gallery(action, screen, now)
         if screen.page == "fishing" and action in ("up", "down"):
             return self._run_fishing(action, screen, now)
+        if (screen.top_current is not None and screen.top_current == _CUSTOMIZE_TAB.get(screen.page)
+                and action in ("left", "right", "select")):
+            return self._run_customize(action, now)
+        if (screen.top_current is not None and screen.top_current == _TROPHY_TAB.get(screen.page)
+                and action in _DIRECTIONS):
+            return self._run_trophies(action, screen)
         if screen.page == "fishing" and action == "pageAction" and screen.fish:
             # Its confirm is the usual OK/Cancel dialog.
             self._releasing = True

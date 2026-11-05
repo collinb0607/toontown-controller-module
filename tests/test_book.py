@@ -636,3 +636,90 @@ def test_after_the_release_confirm_its_the_same_fish_again(answer):
     assert [c.point for c in clicks] == [b.fish_row(3)]
     [c] = press(mapper, "dpad_down", 8.0, fishing())
     assert c.point == b.fish_row(4)  # and moving on carries on from it
+
+
+@pytest.mark.parametrize("name,page,tab", [
+    ("book_racing_customize_1920x1009", "racing", 0), ("book_racing_records_1920x1009", "racing", 1),
+    ("book_racing_trophy_1920x1009", "racing", 2), ("book_golf_trophy_1920x1009", "golf", 1),
+])
+def test_racing_and_golf_tabs(name, page, tab):
+    screen = replay(name)
+    assert screen.page == page and screen.top_current == tab
+
+
+def racing(tab):
+    tops = tuple(b._center(-0.2 + 0.2 * i, -0.45) for i in range(3))
+    return BookScreen(tuple(b._center(0.46, 0.04 * i) for i in range(9)), 8, "racing", top_tabs=tops, top_current=tab)
+
+
+def test_customize_turns_the_kart_and_moves_along_the_accessories():
+    mapper = BookMapper()
+    assert mapper.update(frozenset(), 0.0, racing(0)) == []
+    # The right stick holds the turn button down while it's pushed.
+    [hold] = mapper.update(frozenset({"rs_left"}), 1.0, racing(0))
+    assert hold.kind == "hold" and hold.point == b.KART_TURN["stickLeft"]
+    assert mapper.update(frozenset({"rs_left"}), 1.5, racing(0)) == []
+    release, hold = mapper.update(frozenset({"rs_right"}), 2.0, racing(0))
+    assert release.kind == "release" and (hold.kind, hold.point) == ("hold", b.KART_TURN["stickRight"])
+    [release] = mapper.update(frozenset(), 2.5, racing(0))
+    assert release.kind == "release"
+    [hover] = press(mapper, "dpad_right", 3.0, racing(0))
+    assert hover.point == b._accessory(0) and hover.size == b.ACCESSORY_SIZE  # the frame
+    [hover] = press(mapper, "ls_right", 4.0, racing(0))
+    assert hover.point == b._accessory(1)
+    [click] = press(mapper, "a", 5.0, racing(0))
+    assert click.kind == "click" and click.point == b._accessory(1)
+
+
+@pytest.mark.parametrize("name,earned", [("book_golf_trophy_1920x1009", (0, 3)),
+                                         ("book_golf_trophy_hover_1920x1009", (0, 3)),  # hovered: pale yellow
+                                         ("book_racing_trophy_1920x1009", ())])
+def test_trophies_earned(name, earned):
+    assert replay(name).trophies == earned
+
+
+def test_trophies_hover_only_the_earned_ones_without_a_frame():
+    earned = (0, 3, 14, 31)
+    screen = BookScreen(racing(2).tabs, 8, "racing", top_tabs=racing(2).top_tabs, top_current=2, trophies=earned)
+    mapper = BookMapper()
+    assert mapper.update(frozenset(), 0.0, screen) == []
+    [hover] = press(mapper, "dpad_down", 1.0, screen)
+    assert hover.point == b.TROPHIES[0] and hover.size is None
+    [hover] = press(mapper, "dpad_right", 2.0, screen)
+    assert hover.point == b.TROPHIES[3]  # past the "?"s between
+    [hover] = press(mapper, "dpad_down", 3.0, screen)
+    assert hover.point == b.TROPHIES[14]
+    [hover] = press(mapper, "dpad_down", 4.0, screen)
+    assert hover.point == b.TROPHIES[31]
+    # None earned: nothing to hover.
+    empty = BookScreen(racing(2).tabs, 8, "racing", top_tabs=racing(2).top_tabs, top_current=2)
+    fresh = BookMapper()
+    fresh.update(frozenset(), 0.0, empty)
+    assert not press(fresh, "dpad_down", 1.0, empty)
+    # Golf's Trophy tab is its second.
+    golf = BookScreen(racing(2).tabs, 11, "golf", top_tabs=racing(2).top_tabs[:2], top_current=1, trophies=(0,))
+    mapper2 = BookMapper()
+    mapper2.update(frozenset(), 0.0, golf)
+    [hover] = press(mapper2, "ls_down", 1.0, golf)
+    assert hover.point == b.TROPHIES[0]
+
+
+def test_records_tab_does_nothing():
+    mapper = BookMapper()
+    mapper.update(frozenset(), 0.0, racing(1))
+    assert not press(mapper, "dpad_down", 1.0, racing(1)) and not press(mapper, "rs_left", 2.0, racing(1))
+
+
+@pytest.mark.parametrize("tab", [0, 2])
+def test_lt_and_rt_still_switch_tabs_on_racing(tab):
+    mapper = BookMapper()
+    mapper.update(frozenset(), 0.0, racing(tab))
+    clicks = [c for c in press(mapper, "lt" if tab else "rt", 1.0, racing(tab)) if c.kind == "click"]
+    assert [c.point for c in clicks] == [racing(tab).top_tabs[tab - 1 if tab else 1]]
+
+
+def test_leaving_customize_lets_go_of_the_kart():
+    mapper = BookMapper()
+    mapper.update(frozenset({"rs_left"}), 0.0, racing(0))
+    [release] = mapper.update(frozenset({"rs_left"}), 1.0, racing(1))
+    assert release.kind == "release"
