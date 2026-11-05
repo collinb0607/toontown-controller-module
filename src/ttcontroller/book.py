@@ -34,6 +34,12 @@ Pages with controls of their own:
   has a trash can in its top right, which asks to confirm with an OK/Cancel dialog.
 - Resistance Rank: just to look at, a few pages of it turned by the small blue
   arrows either side of "Page 1/4" at the bottom.
+- Cog Gallery: a grid of cogs, a suit a row, with that suit's icon (tie, gavel,
+  dollar sign, bar graph) down the left to show its buildings. A cog you can
+  summon has a small blue button in its bottom right, which opens Issue a Cog
+  Summons over the dimmed book: one to three summon buttons and a close X.
+  Picking one asks to confirm (a Yes/No dialog over it); once confirmed, the same
+  popup shows a message instead of buttons, closed with its X.
 """
 
 from collections.abc import Callable
@@ -139,6 +145,59 @@ def _read_map(width: int, height: int, get_pixel: PixelReader) -> tuple[tuple[tu
                    if sum(_is_cloud(get_pixel(*point.offset(dx, dy).to_client(width, height)))
                           for dx, dy in _CLOUD_SAMPLES) < _CLOUD_MIN)
     return places, shows(_GO_HOME_PROBES), shows(_PLAYGROUND_PROBES)
+
+
+def cog_cell(col: int, row: int) -> ui.UIPoint:
+    return _center(_COG_X0 + _COG_STEP_X * col, _COG_Y0 + _COG_STEP_Y * row)
+
+
+def summon_button(cog: tuple[int, int]) -> ui.UIPoint:
+    return cog_cell(*cog).offset(*SUMMON_OFFSET)
+
+
+def _is_summon_blue(c: RGB) -> bool:
+    # Dark blue, or light blue while hovered.
+    return c[2] > 150 and c[0] < 110 and c[2] - c[0] > 80
+
+
+def _read_summon_cogs(width: int, height: int, get_pixel: PixelReader) -> tuple[tuple[int, int], ...]:
+    return tuple((col, row) for row in range(COG_ROWS) for col in range(COG_COLS)
+                 if sum(_is_summon_blue(get_pixel(*cog_cell(col, row).offset(dx, dy).to_client(width, height)))
+                        for dx, dy in _SUMMON_SAMPLES) >= _SUMMON_MIN)
+
+
+def _is_popup_yellow(c: RGB) -> bool:
+    return c[0] > 240 and c[1] > 240 and 160 < c[2] < 215
+
+
+def _is_summon_available(c: RGB) -> bool:
+    yellow = c[0] > 170 and c[1] > 160 and c[2] < 60
+    hovered = c[2] > 160 and c[1] > 130 and c[0] < 80
+    return yellow or hovered
+
+
+def _read_summons(width: int, height: int, get_pixel: PixelReader) -> tuple[ui.UIPoint, ...] | None:
+    """Issue a Cog Summons' available buttons if it's open (None if it isn't): colored
+    bands down its button column that are yellow, or light blue while hovered (dark
+    teal is unavailable). A message there instead has none."""
+    if not all(_is_popup_yellow(get_pixel(*p.to_client(width, height))) for p in _SUMMONS_PANEL):
+        return None
+    if not ui.is_red(get_pixel(*SUMMONS_CLOSE.offset(-0.012, 0).to_client(width, height))):
+        return None
+    unit = min(width, height)
+    px = round(width / 2 + _SUMMONS_SCAN_X * unit)
+    top, bottom = (round(height / 2 + y * unit) for y in (_SUMMONS_TOP, _SUMMONS_BOTTOM))
+    buttons, run = [], []
+    for py in range(top, bottom + 2):
+        if py <= bottom and not _is_popup_yellow(get_pixel(px, py)):
+            run.append(py)
+            continue
+        if run and run[-1] - run[0] >= _SUMMONS_MIN_HEIGHT * unit:
+            middle = get_pixel(px, (run[0] + run[-1]) // 2)
+            if _is_summon_available(middle):
+                buttons.append(_center(SUMMONS_BUTTON_X, ((run[0] + run[-1]) / 2 - height / 2) / unit))
+        run = []
+    return tuple(buttons)
 
 
 def _is_trash_blue(c: RGB) -> bool:
@@ -324,6 +383,25 @@ _TRASH_MIN = 3
 # Resistance Rank, measured at 1920x1009: the arrows either side of its page number.
 RANK_PAGE_ARROWS = {"left": _center(-0.0545, 0.2349), "right": _center(0.0471, 0.2339)}
 
+# Cog Gallery, measured at 1920x1009: the cells (8 cogs a row, a suit a row), the
+# summon button in a cell's bottom right, and the suit icons down the left.
+_COG_X0, _COG_STEP_X = -0.330, 0.0995
+_COG_Y0, _COG_STEP_Y = -0.2720, 0.1417
+COG_COLS, COG_ROWS = 8, 4
+SUMMON_OFFSET = (0.0297, 0.0377)
+_SUMMON_SAMPLES = tuple((0.0198 + 0.003 * i, 0.0277 + 0.003 * j) for i in range(8) for j in range(8))
+_SUMMON_MIN = 6  # of the 64 samples (a cog's own blue face reaches 2)
+SUIT_ICONS = {direction: _center(-0.4063, y) for direction, y in
+              (("up", -0.2820), ("left", -0.1333), ("right", 0.0104), ("down", 0.1590))}  # tie, gavel, $, graph
+# Issue a Cog Summons: its buttons are found down this column (their left ends, clear
+# of lettering), clicked here, and the close X.
+_SUMMONS_SCAN_X = -0.0119
+_SUMMONS_TOP, _SUMMONS_BOTTOM = -0.3068, -0.1129
+SUMMONS_BUTTON_X = 0.1487
+SUMMONS_CLOSE = _center(0.3489, -0.1006)
+_SUMMONS_PANEL = (_center(-0.355, -0.350), _center(-0.256, -0.104))  # the popup's pale yellow
+_SUMMONS_MIN_HEIGHT = 0.020
+
 GO_HOME = _center(0.0723, 0.2711)
 BACK_TO_PLAYGROUND = _center(0.2676, 0.2711)
 _GO_HOME_PROBES = (_center(0.0297, 0.2552), _center(0.1140, 0.2552))
@@ -349,16 +427,19 @@ class BookScreen:
     # On the ToonTasks page: each scroll's task (None for a blank scroll), as where to
     # click its trash can, or False if it can't be deleted.
     tasks: tuple[ui.UIPoint | bool | None, ...] = ()
+    summon_cogs: tuple[tuple[int, int], ...] = ()  # on the Cog Gallery: the cells with a summon button
+    summons_open: bool = False  # Issue a Cog Summons is open
+    summons: tuple[ui.UIPoint, ...] = ()  # its available buttons, top to bottom (none for a message)
 
     @property
     def is_open(self) -> bool:
-        return bool(self.tabs) or self.dialog is not None
+        return bool(self.tabs) or self.dialog is not None or self.summons_open
 
     @property
     def hovers(self) -> bool:
         """Whether something is highlighted with the cursor (so it isn't parked)."""
         return (self.dialog is not None or self.page in PAGE_ROWS or bool(self.places)
-                or self.trunk is not None)
+                or self.trunk is not None or self.summons_open)
 
 
 def _px(width: int, height: int, x: float, y: float) -> tuple[int, int]:
@@ -514,6 +595,9 @@ def read_book(width: int, height: int, get_pixel: PixelReader) -> BookScreen:
             dialog = find_ok_cancel(width, height, get_pixel)
             if dialog is not None:
                 return BookScreen(dialog=dialog)
+            summons = _read_summons(width, height, get_pixel)
+            if summons is not None:
+                return BookScreen(summons_open=True, summons=summons)
         return BookScreen()
     kinds, edges = found
     current = kinds.index("pressed") if "pressed" in kinds else None
@@ -527,9 +611,10 @@ def read_book(width: int, height: int, get_pixel: PixelReader) -> BookScreen:
     trunk = _read_book_trunk(width, height, get_pixel) if page == "gags" else None
     gags = _read_gags(width, height, get_pixel) if page == "gags" and trunk is None else None
     tasks = _read_tasks(width, height, get_pixel) if page == "toontasks" else ()
+    summon_cogs = _read_summon_cogs(width, height, get_pixel) if page == "cog gallery" else ()
     return BookScreen(tabs, current, page, top_tabs, top_current, districts=districts, district_chosen=chosen,
                       district_current=current_district, places=places, go_home=go_home,
-                      back_to_playground=playground, gags=gags, trunk=trunk, tasks=tasks)
+                      back_to_playground=playground, gags=gags, trunk=trunk, tasks=tasks, summon_cogs=summon_cogs)
 
 
 def read_pages(width: int, height: int, get_pixel: PixelReader) -> list[str | None]:
@@ -554,13 +639,17 @@ BOOK_ACTIONS = {
     "right": "change a setting (the SpeedChat color), or the next place right on the map",
     "goHome": "the map's Go Home button",
     "pageAction": "the map's Back to Playground button, or delete the highlighted ToonTask (one with a trash can)",
-    "scrollUp": "scroll the Trunk's SOS cards up", "scrollDown": "scroll the Trunk's SOS cards down",
+    "stickUp": "right stick up: scroll the Trunk's SOS cards up, or the Cog Gallery's tie (Bossbot)",
+    "stickDown": "right stick down: scroll the Trunk's SOS cards down, or the Cog Gallery's bar graph (Sellbot)",
+    "stickLeft": "right stick left: the Cog Gallery's gavel (Lawbot)",
+    "stickRight": "right stick right: the Cog Gallery's dollar sign (Cashbot)",
 }
 
 
 def default_book_bindings() -> Bindings:
     press = {"lb": "prevPage", "rb": "nextPage", "lt": "prevTab", "rt": "nextTab", "b": "close", "a": "select",
-             "y": "goHome", "x": "pageAction", "rs_up": "scrollUp", "rs_down": "scrollDown"}
+             "y": "goHome", "x": "pageAction",
+             "rs_up": "stickUp", "rs_down": "stickDown", "rs_left": "stickLeft", "rs_right": "stickRight"}
     # The left stick too: the toon can't walk while the book is open.
     for direction in ("up", "down", "left", "right"):
         press[f"dpad_{direction}"] = direction
@@ -635,13 +724,15 @@ class BookMapper:
         self._place: str | None = None  # the map place hovered
         self._gag: tuple[int, int] | None = None  # the gag hovered on the Gags tab (none at first)
         self._task: int | None = None  # the ToonTask hovered (none at first)
+        self._cog: tuple[int, int] | None = None  # the summon button hovered (none at first)
+        self._summon = 0  # the button hovered in Issue a Cog Summons
         # The Trunk tab works like the battle trunk, so it's run by a battle mapper.
         self._trunk = BattleMapper(_trunk_bindings())
 
     def set_bindings(self, bindings: Bindings) -> None:
         self.bindings = bindings
         self._actions = ButtonActions(bindings, 0.5, is_oneshot=lambda action: True,
-                                      repeats=lambda action: action in ("prevPage", "nextPage", "up", "down", "scrollUp", "scrollDown"))
+                                      repeats=lambda action: action in ("prevPage", "nextPage", "up", "down", "stickUp", "stickDown"))
 
     @property
     def buttons(self) -> set[str]:
@@ -657,7 +748,8 @@ class BookMapper:
     def hovering(self, screen: BookScreen) -> bool:
         """Whether something on the book is hovered (so the cursor isn't parked)."""
         return (screen.hovers or (screen.gags is not None and self._gag is not None)
-                or (screen.tasks and self._task is not None))
+                or (screen.tasks and self._task is not None)
+                or (screen.page == "cog gallery" and self._cog is not None))
 
     def take_left_page(self) -> bool:
         """Whether a button that leaves the page (or closes the book) was pressed since
@@ -681,6 +773,8 @@ class BookMapper:
             self._gag = None
         if not screen.tasks and screen.dialog is None:
             self._task = None
+        if screen.page != "cog gallery" and not screen.summons_open and screen.dialog is None:
+            self._cog = None
         elif screen.tasks and self._task is not None and screen.tasks[self._task] is None:
             self._task = None  # deleted
         if screen.trunk is not None and screen.dialog is None:
@@ -689,8 +783,8 @@ class BookMapper:
                 size = _trunk_size(c.name) if c.kind == "hover" else None
                 commands.append(PointerCommand(c.kind, to_book(c.point), c.name, c.notches, c.delay, size))
             fired = [a for a in fired if a not in ("up", "down", "left", "right", "select")]
-            for action in [a for a in fired if a in ("scrollUp", "scrollDown")]:
-                scroll = self._scroll_trunk(screen.trunk, action == "scrollUp")
+            for action in [a for a in fired if a in ("stickUp", "stickDown")]:
+                scroll = self._scroll_trunk(screen.trunk, action == "stickUp")
                 if scroll:
                     self._scrolled = (now, scroll[0].point)
                 commands += scroll
@@ -714,6 +808,8 @@ class BookMapper:
         for action in fired:
             if screen.dialog is not None:
                 commands += self._run_dialog(action, screen, now)
+            elif screen.summons_open:
+                commands += self._run_summons(action, screen, now)
             elif action in _TAPS:
                 self._taps.append(_TAPS[action])
             elif now >= self._settle_until:
@@ -739,6 +835,40 @@ class BookMapper:
         item = self._trunk.trunk_item
         point = to_book(item.point) if item is not None and item.name.startswith("SOS card") else _CARD_LIST_MIDDLE
         return [PointerCommand("scroll", point, "scroll SOS cards", notches=1 if up else -1)]
+
+    def _run_cog_gallery(self, action: str, screen: BookScreen, now: float) -> list[PointerCommand]:
+        suits = {"stickUp": "up", "stickLeft": "left", "stickRight": "right", "stickDown": "down"}
+        if action in suits:
+            return self._click(SUIT_ICONS[suits[action]], f"{suits[action]} suit", now)
+        if action == "select" and self._cog in screen.summon_cogs:
+            self._summon = 0
+            return self._click(summon_button(self._cog), "summon button", now)
+        if action not in _DIRECTIONS or not screen.summon_cogs:
+            return []
+        if self._cog not in screen.summon_cogs:
+            self._cog = screen.summon_cogs[0]
+        else:
+            here = (str(self._cog), summon_button(self._cog))
+            others = [(str(c), summon_button(c)) for c in screen.summon_cogs]
+            nearest = _nearest(here, others, _DIRECTIONS[action])
+            if nearest is None:
+                return []
+            self._cog = next(c for c in screen.summon_cogs if str(c) == nearest[0])
+        return [PointerCommand("hover", summon_button(self._cog), "summon button")]
+
+    def _run_summons(self, action: str, screen: BookScreen, now: float) -> list[PointerCommand]:
+        if action == "close" or (action == "select" and not screen.summons):
+            # A message (no buttons) closes with A too.
+            return self._click(SUMMONS_CLOSE, "close summons", now)
+        if not screen.summons:
+            return []
+        if action in ("up", "down"):
+            self._summon = max(0, min(len(screen.summons) - 1, self._summon + (-1 if action == "up" else 1)))
+            return [PointerCommand("hover", screen.summons[self._summon], f"summon {self._summon + 1}")]
+        if action == "select":
+            self._summon = min(self._summon, len(screen.summons) - 1)
+            return self._click(screen.summons[self._summon], f"summon {self._summon + 1}", now)
+        return []
 
     def _run_tasks(self, action: str, screen: BookScreen, now: float) -> list[PointerCommand]:
         if action == "pageAction":
@@ -808,6 +938,15 @@ class BookMapper:
     def _hover(self, screen: BookScreen) -> list[PointerCommand]:
         if screen.dialog is not None:
             return [PointerCommand("hover", screen.dialog[0], "OK")]
+        if screen.summons:
+            # Opened fresh, the top button; back from declining a summons, the one picked.
+            self._summon = min(self._summon, len(screen.summons) - 1)
+            return [PointerCommand("hover", screen.summons[self._summon], f"summon {self._summon + 1}")]
+        if screen.summons_open:
+            return []  # a message, with only its close X
+        if screen.page == "cog gallery" and self._cog in screen.summon_cogs:
+            # Back from Issue a Cog Summons: the same cog's button again.
+            return [PointerCommand("hover", summon_button(self._cog), "summon button")]
         if screen.tasks and self._task is not None:
             # Back from the delete dialog (cancelled): the same task again.
             return self._hover_task()
@@ -842,6 +981,8 @@ class BookMapper:
             return self._run_districts(action, screen)
         if screen.page == "map":
             return self._run_map(action, screen, now)
+        if screen.page == "cog gallery":
+            return self._run_cog_gallery(action, screen, now)
         if screen.page == "resistance rank" and action in RANK_PAGE_ARROWS:
             return self._click(RANK_PAGE_ARROWS[action], f"rank page {action}", now)
         if screen.tasks and action in ("up", "down", "left", "right", "pageAction"):

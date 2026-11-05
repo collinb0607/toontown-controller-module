@@ -461,3 +461,106 @@ def test_resistance_rank_pages_turn_with_left_and_right():
     [click] = press(mapper, "ls_left", 2.0, rank)
     assert click.point == b.RANK_PAGE_ARROWS["left"]
     assert not press(mapper, "dpad_up", 3.0, rank)
+
+
+SUMMON_COGS = ((3, 0), (4, 0), (5, 0), (1, 1), (2, 2), (2, 3), (4, 3))
+
+
+@pytest.mark.parametrize("name,cogs", [
+    ("book_cog_gallery_1920x1009", SUMMON_COGS),
+    ("book_cog_gallery_summon_hover_1920x1009", SUMMON_COGS),  # the hovered button turns light blue
+    ("book_cog_gallery_some_missing_1920x1009", ()),  # nothing to summon, even on gold (maxed) cogs
+])
+def test_cog_gallery_summon_buttons(name, cogs):
+    screen = replay(name)
+    assert screen.page == "cog gallery" and screen.summon_cogs == cogs
+
+
+@pytest.mark.parametrize("name", ["book_cog_gallery_summon_popup_1920x1009",
+                                  "book_cog_gallery_summon_popup_hover_1920x1009"])
+def test_issue_a_cog_summons_popup(name):
+    screen = replay(name)
+    assert screen.is_open and screen.hovers
+    # Summon a Cog Invasion is dark teal (unavailable), so it can't be hovered.
+    assert [p.to_client(1920, 1009) for p in screen.summons] == [(1110, 226), (1110, 290)]
+
+
+def gallery(cogs=SUMMON_COGS):
+    return BookScreen(tuple(b._center(0.46, 0.04 * i) for i in range(7)), 6, "cog gallery", summon_cogs=cogs)
+
+
+def test_cog_gallery_suits_on_the_right_stick():
+    mapper = BookMapper()
+    mapper.update(frozenset(), 0.0, gallery())
+    for t, (button, suit) in enumerate((("rs_up", "up"), ("rs_left", "left"), ("rs_right", "right"),
+                                        ("rs_down", "down")), start=1):
+        clicks = [c for c in press(mapper, button, float(t), gallery()) if c.kind == "click"]
+        assert [c.point for c in clicks] == [b.SUIT_ICONS[suit]]
+
+
+def test_cog_gallery_summons_and_back():
+    mapper = BookMapper()
+    assert mapper.update(frozenset(), 0.0, gallery()) == [] and not mapper.hovering(gallery())
+    [hover] = press(mapper, "dpad_down", 1.0, gallery())
+    assert hover.point == b.summon_button((3, 0))
+    [hover] = press(mapper, "dpad_right", 2.0, gallery())
+    assert hover.point == b.summon_button((4, 0))
+    [click] = press(mapper, "a", 3.0, gallery())
+    assert click.kind == "click" and click.point == b.summon_button((4, 0))
+    # The popup: starts on its top button, up/down move, B closes it.
+    popup = BookScreen(summons_open=True,
+                       summons=(b._center(0.15, -0.28), b._center(0.15, -0.22), b._center(0.15, -0.15)))
+    [hover] = mapper.update(frozenset(), 4.0, popup)
+    assert hover.point == popup.summons[0]
+    [hover] = press(mapper, "dpad_down", 5.0, popup)
+    assert hover.point == popup.summons[1]
+    assert not press(mapper, "lb", 6.0, popup) and not mapper.take_taps()
+    [close] = press(mapper, "b", 7.0, popup)
+    assert close.point == b.SUMMONS_CLOSE and not mapper.take_taps()
+    # Back on the gallery, on the same cog's button.
+    [hover] = mapper.update(frozenset(), 8.0, gallery())
+    assert hover.point == b.summon_button((4, 0))
+
+
+def test_summons_confirm_and_message():
+    confirm = replay("book_cog_gallery_summon_popup_confirmation_1920x1009")
+    assert confirm.dialog is not None  # Yes/No
+    message = replay("book_cog_gallery_summon_popup_message_1920x1009")
+    assert message.is_open and message.summons_open and message.summons == ()
+
+
+def test_declining_a_summons_goes_back_to_the_one_picked_and_the_message_closes_with_b():
+    popup = BookScreen(summons_open=True,
+                       summons=(b._center(0.15, -0.28), b._center(0.15, -0.22), b._center(0.15, -0.15)))
+    mapper = BookMapper()
+    mapper.update(frozenset(), 0.0, gallery())
+    press(mapper, "dpad_down", 1.0, gallery())
+    press(mapper, "a", 2.0, gallery())
+    mapper.update(frozenset(), 3.0, popup)
+    press(mapper, "dpad_down", 4.0, popup)
+    press(mapper, "a", 5.0, popup)  # the second summons
+    dialog = BookScreen(dialog=(b._center(-0.05, 0.13), b._center(0.05, 0.13)))
+    [hover] = mapper.update(frozenset(), 6.0, dialog)
+    assert hover.point == dialog.dialog[0]  # Yes
+    [no] = press(mapper, "b", 7.0, dialog)
+    assert no.point == dialog.dialog[1]
+    [hover] = mapper.update(frozenset(), 8.0, popup)
+    assert hover.point == popup.summons[1]  # the one picked, not the top one
+    # Confirmed: the message, closed with B, back to the gallery on the same cog.
+    press(mapper, "a", 9.0, popup)
+    mapper.update(frozenset(), 10.0, dialog)
+    press(mapper, "a", 11.0, dialog)
+    message = BookScreen(summons_open=True)
+    assert mapper.update(frozenset(), 12.0, message) == []
+    [close] = press(mapper, "b", 13.0, message)
+    assert close.point == b.SUMMONS_CLOSE and not mapper.take_taps()
+    [hover] = mapper.update(frozenset(), 14.0, gallery())
+    assert hover.point == b.summon_button((3, 0))
+
+
+def test_the_summons_message_closes_with_a_too():
+    mapper = BookMapper()
+    message = BookScreen(summons_open=True)
+    mapper.update(frozenset(), 0.0, message)
+    [close] = press(mapper, "a", 1.0, message)
+    assert close.point == b.SUMMONS_CLOSE
