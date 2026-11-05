@@ -108,6 +108,9 @@ _SOS_KNOB_X, _SOS_KNOB_TOP, _SOS_KNOB_BOTTOM = 0.2032, -0.16, 0.145
 SOS_SCROLL_NOTCHES = 5
 SOS_EXTRA_NOTCHES = 4
 _SOS_ROW_STEP = 0.18
+# The right stick turns the wheel a notch at a time over the cards, as in the book's
+# Trunk; once they've stopped moving for this long, the card under the cursor is hovered.
+SOS_STICK_SETTLE_SECONDS = 0.2
 _REMOTE_XS = (-0.3053, -0.1982, -0.0912)
 _REMOTE_ROWS = (("damage", -0.0837), ("healing", 0.1065))
 _TRICK_ROW0, _TRICK_STEP, _TRICK_ROWS = -0.1829, 0.0551, 7
@@ -384,11 +387,13 @@ BATTLE_ACTIONS = {
     "run": "run from the battle", "trunk": "open or close the trunk", "pass": "pass this turn",
     "teammates": "switch between your gags and hovering teammates' gag choices (left/right to pick one)",
     "sos_filter": "show the next kind of SOS card (All, Restock, Toon-Up, ...)",
+    "sos_scroll_up": "scroll the SOS cards up", "sos_scroll_down": "scroll the SOS cards down",
 }
 
 
 def default_battle_bindings() -> Bindings:
-    press = {"a": "select", "b": "back", "x": "trunk", "y": "pass", "lb": "teammates", "ls": "sos_filter"}
+    press = {"a": "select", "b": "back", "x": "trunk", "y": "pass", "lb": "teammates", "ls": "sos_filter",
+             "rs_up": "sos_scroll_up", "rs_down": "sos_scroll_down"}
     for direction in DIRECTIONS:
         press[f"dpad_{direction}"] = direction
         press[f"ls_{direction}"] = direction
@@ -493,6 +498,8 @@ class BattleMapper:
         self._targets: tuple[ui.UIPoint, ...] = ()
         # While scrolling the SOS list: (+1 up / -1 down, where the highlight was, extra notches left).
         self._scrolling: tuple[int, ui.UIPoint, int] | None = None
+        # After a right stick scroll: when, and where the wheel was turned.
+        self._stick_scrolled: tuple[float, ui.UIPoint] | None = None
         self._kind: str | None = None
         self._settle_until = 0.0
 
@@ -500,7 +507,8 @@ class BattleMapper:
         self.bindings = bindings
         self._actions = ButtonActions(bindings, self.timing.hold_seconds,
                                       is_oneshot=lambda action: True,
-                                      repeats=lambda action: action in DIRECTIONS)
+                                      repeats=lambda action: action in DIRECTIONS
+                                      or action in ("sos_scroll_up", "sos_scroll_down"))
 
     @property
     def buttons(self) -> set[str]:
@@ -543,6 +551,11 @@ class BattleMapper:
             # (also once the first of them picks).
             self.teammate = 0
             commands.append(self._hover_teammate(screen))
+        if screen.kind != "trunk":
+            self._stick_scrolled = None
+        elif self._stick_scrolled is not None and now - self._stick_scrolled[0] >= SOS_STICK_SETTLE_SECONDS:
+            commands += self._hover_card_at(screen, self._stick_scrolled[1])
+            self._stick_scrolled = None
         for action in fired:
             commands += self._run(action, screen, now)
         return commands
@@ -625,6 +638,23 @@ class BattleMapper:
             # The end of the list (or a row with no usable cards).
             return self._appear_trunk(screen, now)
         return self._hover_trunk(min(cards, key=lambda i: _distance(i.point, origin)))
+
+    def _stick_scroll(self, screen: BattleScreen, up: bool, now: float) -> list[PointerCommand]:
+        """A wheel notch over the SOS cards, where the hovered card is (so the cursor
+        stays on the list), or the middle of the list."""
+        if screen.tab != "SOS" or screen.filter_open or not screen.can_scroll[0 if up else 1]:
+            return []
+        item = self.trunk_item
+        point = item.point if item is not None and item.name.startswith("SOS card") else SOS_LIST
+        self._stick_scrolled = (now, point)
+        return [PointerCommand("scroll", point, "scroll SOS cards", 1 if up else -1)]
+
+    def _hover_card_at(self, screen: BattleScreen, point: ui.UIPoint) -> list[PointerCommand]:
+        """Hover the card nearest a point: after scrolling, the one under the cursor."""
+        cards = [i for i in screen.items if i.name.startswith("SOS card")]
+        if not cards:
+            return []
+        return self._hover_trunk(min(cards, key=lambda i: _distance(i.point, point)))
 
     def _filter_option(self, screen: BattleScreen, index: int) -> Item:
         return next(i for i in screen.items if i.name == f"filter {SOS_FILTERS[index]}")
@@ -778,6 +808,8 @@ class BattleMapper:
                 return commands
             if action in DIRECTIONS:
                 return self._trunk_move(screen, action, now)
+            if action in ("sos_scroll_up", "sos_scroll_down"):
+                return self._stick_scroll(screen, action == "sos_scroll_up", now)
             if action == "select" and self.trunk_item is not None:
                 return self._click(self.trunk_item.point, self.trunk_item.name, now)
             if action == "pass":

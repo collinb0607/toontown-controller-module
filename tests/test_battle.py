@@ -603,3 +603,26 @@ def test_target_arrows_carry_the_frame_around_their_box(row, dy):
     assert hover.size == battle.TARGET_SIZE
     assert hover.frame_at == (None if dy is None else point.offset(0, dy))
 
+
+def test_right_stick_scrolls_sos_cards_then_hovers_the_card_under_the_cursor():
+    sos = replay("battle_trunk_sos_more_1920x1009")
+    assert sos.can_scroll[1]
+    m = BattleMapper()
+    first = m.update(frozenset(), 0.0, sos)[0]
+    scroll = press(m, sos, 1.0, "rs_down")
+    assert [(c.kind, c.point, c.notches) for c in scroll] == [("scroll", first.point, -1)]
+    assert m.update(frozenset(), 1.1, sos) == []  # still moving
+    hover = m.update(frozenset(), 1.25, sos)
+    assert [(c.kind, c.point) for c in hover] == [("hover", first.point)]
+    assert hover[0].size == battle.trunk_size("SOS card")
+
+
+def test_right_stick_does_nothing_where_the_list_cant_scroll():
+    sos = replay("battle_trunk_sos_more_1920x1009")
+    m = BattleMapper()
+    m.update(frozenset(), 0.0, sos)
+    if not sos.can_scroll[0]:
+        assert press(m, sos, 1.0, "rs_up") == []
+    remotes = replay("battle_trunk_remotes_1920x1009")
+    m.update(frozenset(), 2.0, remotes)
+    assert press(m, remotes, 3.0, "rs_down") == []

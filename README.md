@@ -59,7 +59,7 @@ Working now:
 | Gag picker | Stick/D-pad move highlight · A select · LB hover teammates' gags (left/right to choose, LB again to return) · X trunk · Y pass · hold B run |
 | Which cog / toon? | Stick/D-pad left/right choose · A select · B back |
 | Waiting for other toons | Hovers teammates' gags automatically · Stick/D-pad left/right choose · B back (change your gag) |
-| Trunk | Stick/D-pad move between tabs and items · A use · LS next SOS filter · LB hover teammates' gags · Y pass · B or X close |
+| Trunk | Stick/D-pad move between tabs and items · A use · LS next SOS filter · Right stick up/down scroll the SOS cards · LB hover teammates' gags · Y pass · B or X close |
 | Run prompt | A OK · B cancel |
 
 | Gag shop | Controls |
