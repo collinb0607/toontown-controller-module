@@ -34,6 +34,10 @@ def replay(name):
     ("speedchat_unite_jellybeans_1920x1009", [(137, 20, 3), (335, 3, 2), (386, 2, None)]),
     # BATTLE > STRATEGY > I DON'T HAVE, pushed up to fit in the window.
     ("speedchat_long_1920x1009", [(137, 19, 14), (335, 9, 0), (408, 14, 2), (549, 15, None)]),
+    # A lone pixel on the edge of HELLO's lettering is neither highlight nor dark text,
+    # which used to end the row there, so the submenu went unseen.
+    ("speedchat_submenu_broken_1920x1009", [(138, 19, 4), (335, 9, None)]),
+    ("speedchat_submenu_working_1920x1009", [(138, 19, 9), (335, 18, 3)]),  # SORRY
 ])
 def test_reads_open_menus(name, menus):
     w, h, screen = replay(name)

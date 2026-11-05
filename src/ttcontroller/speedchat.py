@@ -50,6 +50,9 @@ def _is_colored(c: RGB) -> bool:
     return max(c) - min(c) > 60
 
 
+_RUN_GAP = 3  # pixels
+
+
 def _is_run(c: RGB) -> bool:
     """Part of a highlighted row: the highlight color, or its dark text."""
     return _is_colored(c) or sum(c) < 250
@@ -134,8 +137,13 @@ def _find_child(width: int, height: int, get_pixel: PixelReader, left: int, y: i
     """The submenu open beside a highlighted row: where its left edge is, or None."""
     x = left + round(0.008 * unit)
     limit = min(width - 2, left + round(0.9 * unit))
-    while x < limit and _is_run(get_pixel(x, y)):
+    # The row ends where a few pixels in a row aren't part of it: a lone pixel on the
+    # edge of a letter can be neither the highlight color nor dark (HELLO's).
+    gap = 0
+    while x < limit and gap < _RUN_GAP:
+        gap = 0 if _is_run(get_pixel(x, y)) else gap + 1
         x += 1
+    x -= gap
     # A submenu can open as little as 0.045 in from its parent's edge (UNITE > Jellybeans).
     if x >= limit or x < left + 0.025 * unit:
         return None
