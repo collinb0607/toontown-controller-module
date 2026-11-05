@@ -750,3 +750,115 @@ def test_cog_disguise_clicks_suit_tabs_up_and_down_and_its_arrows():
     [c] = press(mapper, "ls_right", 6.0, disguise(3))
     assert c.point == b.DISGUISE_ARROWS["right"]
     assert not press(mapper, "dpad_left", 7.0, disguise(1, arrows=()))  # a suit without arrows
+
+
+@pytest.mark.parametrize("name,tab,fish,flowers", [
+    ("book_gardening_basket_1920x1009", 0, 10, 0), ("book_gardening_album_1920x1009", 1, 0, 7),
+    ("book_gardening_album_hover_1920x1009", 1, 0, 7), ("book_gardening_trophies_1920x1009", 2, 0, 0),
+    ("book_gardening_specials_1920x1009", 3, 0, 0),
+])
+def test_gardening_tabs(name, tab, fish, flowers):
+    screen = replay(name)
+    assert screen.page == "gardening" and screen.top_current == tab
+    assert len(screen.fish) == fish and len(screen.flowers) == flowers and not screen.hovers
+    if flowers:
+        assert screen.flowers == tuple(b.album_flower(i) for i in range(7))  # not the "????"
+
+
+def gardening(tab=0, rows=10, flowers=7):
+    return BookScreen(tuple(b._center(0.46, 0.04 * i) for i in range(12)), 10, "gardening",
+                      top_tabs=tuple(b._center(-0.3 + 0.2 * i, -0.45) for i in range(4)), top_current=tab,
+                      fish=tuple(b.flower_row(i) for i in range(rows)) if tab == 0 else (),
+                      flowers=tuple(b.album_flower(i) for i in range(flowers)) if tab == 1 else ())
+
+
+def test_basket_is_like_the_bucket():
+    mapper = BookMapper()
+    assert mapper.update(frozenset(), 0.0, gardening()) == []
+    [c] = press(mapper, "dpad_down", 1.0, gardening())
+    assert c.kind == "click" and c.point == b.flower_row(1)
+    [scroll, again] = press(mapper, "dpad_up", 2.0, gardening()) and press(mapper, "dpad_up", 3.0, gardening())
+    assert scroll.point == b.FLOWER_SCROLL_UP and again.point == b.flower_row(0)
+    [release] = press(mapper, "x", 4.0, gardening())
+    assert release.point == b.RELEASE_FLOWER
+
+
+def test_flower_album_clicks_names_and_the_right_stick_flips_genus():
+    mapper = BookMapper()
+    assert mapper.update(frozenset(), 0.0, gardening(1)) == []  # it opens on the top name
+    [c] = press(mapper, "dpad_down", 1.0, gardening(1))
+    assert c.kind == "click" and c.point == b.album_flower(1)
+    [c] = press(mapper, "ls_up", 2.0, gardening(1))
+    assert c.point == b.album_flower(0)
+    assert not press(mapper, "dpad_up", 3.0, gardening(1))  # no wrap, no page flip
+    for t in range(6):
+        press(mapper, "dpad_down", 4.0 + t, gardening(1))
+    assert not press(mapper, "dpad_down", 11.0, gardening(1))  # the last collected one
+    [c] = press(mapper, "rs_down", 12.0, gardening(1))
+    assert c.point == b.ALBUM_DOWN
+    [c] = press(mapper, "dpad_down", 13.0, gardening(1))
+    assert c.point == b.album_flower(1)  # the new genus starts at its top name
+    [c] = press(mapper, "rs_up", 14.0, gardening(1))
+    assert c.point == b.ALBUM_UP
+
+
+@pytest.mark.parametrize("tab", [2, 3])
+def test_gardening_trophies_and_specials_do_nothing(tab):
+    mapper = BookMapper()
+    mapper.update(frozenset(), 0.0, gardening(tab))
+    for t, button in enumerate(("dpad_down", "ls_up", "rs_down", "x", "a")):
+        assert not press(mapper, button, 1.0 + t, gardening(tab))
+
+
+
+def test_golf_records_scroll_with_either_stick():
+    assert replay("book_golf_records_1920x1009").top_current == b.GOLF_RECORDS_TAB
+    records = BookScreen(racing(0).tabs, 11, "golf", top_tabs=racing(0).top_tabs[:2], top_current=0)
+    mapper = BookMapper()
+    assert mapper.update(frozenset(), 0.0, records) == []
+    for t, (button, side) in enumerate((("dpad_down", "down"), ("ls_up", "up"), ("rs_down", "down"),
+                                        ("rs_up", "up"))):
+        [c] = press(mapper, button, 1.0 + t, records)
+        assert c.kind == "click" and c.point == b.GOLF_RECORDS_SCROLL[side]
+
+
+
+def test_holding_a_direction_holds_the_scroll_triangle_down():
+    records = BookScreen(racing(0).tabs, 11, "golf", top_tabs=racing(0).top_tabs[:2], top_current=0)
+    mapper = BookMapper()
+    mapper.update(frozenset(), 0.0, records)
+    down = frozenset({"dpad_down"})
+    [click] = mapper.update(down, 1.0, records)
+    assert click.kind == "click" and click.point == b.GOLF_RECORDS_SCROLL["down"]
+    held = [c for t in (1.1, 1.2, 1.3, 1.45) for c in mapper.update(down, t, records)]
+    assert [(c.kind, c.point) for c in held] == [("hold", b.GOLF_RECORDS_SCROLL["down"])]
+    assert all(mapper.update(down, 1.5 + 0.1 * t, records) == [] for t in range(10))  # kept down
+    [release] = mapper.update(frozenset(), 3.0, records)
+    assert release.kind == "release"
+    # A tap is still just a click.
+    assert [c.kind for c in press(mapper, "dpad_up", 4.0, records)] == ["click"]
+
+
+def test_holding_at_the_end_of_the_bucket_holds_its_triangle_then_picks_the_row():
+    mapper = BookMapper()
+    mapper.update(frozenset(), 0.0, fishing())
+    for t in range(9):
+        press(mapper, "dpad_down", 1.0 + t, fishing())
+    down = frozenset({"ls_down"})
+    scroll, again = mapper.update(down, 20.0, fishing())
+    assert scroll.point == b.FISH_SCROLL_DOWN and again.point == b.fish_row(9)
+    [hold] = mapper.update(down, 20.45, fishing())
+    assert hold.kind == "hold" and hold.point == b.FISH_SCROLL_DOWN
+    release, pick = mapper.update(frozenset(), 22.0, fishing())
+    assert release.kind == "release" and (pick.kind, pick.point) == ("click", b.fish_row(9))
+
+
+def test_leaving_the_tab_lets_go_of_a_held_triangle():
+    records = BookScreen(racing(0).tabs, 11, "golf", top_tabs=racing(0).top_tabs[:2], top_current=0)
+    trophy = BookScreen(racing(0).tabs, 11, "golf", top_tabs=racing(0).top_tabs[:2], top_current=1)
+    mapper = BookMapper()
+    mapper.update(frozenset(), 0.0, records)
+    down = frozenset({"dpad_down"})
+    mapper.update(down, 1.0, records)
+    mapper.update(down, 1.45, records)
+    assert [c.kind for c in mapper.update(down, 2.0, trophy)] == ["release"]

@@ -46,12 +46,17 @@ Pages with controls of their own:
   after an OK/Cancel confirm.
 - Racing: Customize (the kart, turned with LEFT and RIGHT buttons, and a row of
   accessory icons at the bottom), Records (just to look at) and Trophy. Golf has
-  Records and Trophy. A Trophy tab is 30 small trophies, ten by three, and three
+  Records and Trophy (its Records scroll, with triangles above and below). A Trophy tab is 30 small trophies, ten by three, and three
   big ones below; one not earned yet is a gray card with a "?" (nothing to hover),
   and hovering an earned one tints it yellow and shows what it took.
 - Cog Disguise: a tab per suit down its right side, written sideways (Bossbot,
   Lawbot, Cashbot, Sellbot); the current one's lettering is red. Some suits have
   blue arrows either side of their name plate to flip between versions.
+- Gardening: four tabs. Basket is like Fishing's Bucket (smaller lettering, so more
+  rows, and its red X is on the card's right). Album lists up to eight flower names
+  beside the one shown, each clickable (blue while hovered, yellow as it's picked;
+  a "????" in green isn't collected), with triangles above and below flipping to
+  the next genus. Trophies and Specials are just to look at.
 """
 
 from collections.abc import Callable
@@ -62,6 +67,7 @@ from .battle import DIRECTIONS as BATTLE_DIRECTIONS
 from .battle import _REMOTE_ROWS, _REMOTE_XS, BattleMapper, BattleScreen, Item, PointerCommand, _read_trunk, move
 from .bindings import Bindings, ButtonActions
 from .dialog import find_ok_cancel
+from .held_scroll import HeldScroll
 
 RGB = tuple[int, int, int]
 PixelReader = Callable[[int, int], RGB]
@@ -176,21 +182,43 @@ def fish_row(i: int) -> ui.UIPoint:
     return _center(_FISH_X, _FISH_Y0 + _FISH_STEP * i)
 
 
+def flower_row(i: int) -> ui.UIPoint:
+    return _center(_FISH_X, _FLOWER_Y0 + _FLOWER_STEP * i)
+
+
+def album_flower(i: int) -> ui.UIPoint:
+    return _center(_ALBUM_FLOWER_X, _ALBUM_FLOWER_Y0 + _ALBUM_FLOWER_STEP * i)
+
+
+def _read_album_flowers(width: int, height: int, get_pixel: PixelReader) -> tuple[ui.UIPoint, ...]:
+    """The Flower Album's collected names, top to bottom (dark lettering; a green "????"
+    is one not collected)."""
+    rows = []
+    for i in range(ALBUM_FLOWERS):
+        y = _ALBUM_FLOWER_Y0 + _ALBUM_FLOWER_STEP * i
+        ink = sum(max(get_pixel(*_center(x, y + dy).to_client(width, height))) < 90
+                  for x in _ALBUM_INK_XS for dy in (-0.004, 0.0, 0.004))
+        if ink >= 3:
+            rows.append(album_flower(i))
+    return tuple(rows)
+
+
 def _is_fish_lettering(c: RGB) -> bool:
     return max(c) < 90 or (c[1] > c[0] + 30 and c[1] > c[2] + 30)
 
 
-def _read_fish(width: int, height: int, get_pixel: PixelReader) -> tuple[ui.UIPoint, ...]:
-    """The fish names showing in the Bucket, top to bottom (a row with lettering: dark,
-    or green for the one picked)."""
+def _read_fish(width: int, height: int, get_pixel: PixelReader, page: str = "fishing") -> tuple[ui.UIPoint, ...]:
+    """The fish (or flower) names showing in the Bucket (or Basket), top to bottom (a row
+    with lettering: dark, or green for the one picked)."""
+    row_at, rows_max = (fish_row, FISH_ROWS) if page == "fishing" else (flower_row, FLOWER_ROWS)
     rows = []
-    for i in range(FISH_ROWS):
-        y = _FISH_Y0 + _FISH_STEP * i
-        ink = sum(_is_fish_lettering(get_pixel(*_center(x, y + dy).to_client(width, height)))
+    for i in range(rows_max):
+        point = row_at(i)
+        ink = sum(_is_fish_lettering(get_pixel(*_center(x, point.y + dy).to_client(width, height)))
                   for x in _FISH_INK_XS for dy in (-0.003, 0.0, 0.003))
         if ink < 3:
             break
-        rows.append(fish_row(i))
+        rows.append(point)
     return tuple(rows)
 
 
@@ -480,6 +508,20 @@ RELEASE_FISH = _center(0.1031, 0.0159)
 ALBUM_UP = _center(0.0, -0.3375)
 ALBUM_DOWN = _center(0.0, 0.2359)
 BUCKET_TAB, ALBUM_TAB = 0, 1
+# Gardening, measured at 1920x1009: the Basket (same place as the Bucket, rows closer
+# together) and the Album's names. Its tabs are Basket, Album, Trophies and Specials;
+# its Album triangles are where Fishing's are.
+_FLOWER_Y0, _FLOWER_STEP = -0.1056, 0.01487
+FLOWER_ROWS = 14  # as many as fit (not seen full)
+FLOWER_SCROLL_UP = _center(-0.2001, -0.1432)
+FLOWER_SCROLL_DOWN = _center(-0.2001, 0.1214)
+RELEASE_FLOWER = _center(0.3380, 0.0124)
+_ALBUM_FLOWER_X, _ALBUM_FLOWER_Y0, _ALBUM_FLOWER_STEP = 0.0694, -0.2334, 0.04965
+ALBUM_FLOWERS = 8
+_ALBUM_INK_XS = tuple(0.0406 + 0.004 * i for i in range(25))
+# The lists per page: (scroll up, scroll down, the release X, "full" when this many show).
+_LISTS = {"fishing": (FISH_SCROLL_UP, FISH_SCROLL_DOWN, RELEASE_FISH, FISH_ROWS),
+          "gardening": (FLOWER_SCROLL_UP, FLOWER_SCROLL_DOWN, RELEASE_FLOWER, 10)}
 
 # Racing and Golf, measured at 1920x1009. Customize: the kart's turn buttons and the
 # accessory icons along the bottom. Trophy: the trophies, small then big.
@@ -493,6 +535,9 @@ _TROPHY_CARD = (-0.025, 0.035)  # a spot on a trophy's card clear of the trophy 
 # The tabs along the top, by page: which one is Customize, and which is Trophy.
 _CUSTOMIZE_TAB = {"racing": 0}
 _TROPHY_TAB = {"racing": 2, "golf": 1}
+# Golf's Records tab scrolls its courses with triangles above and below the list.
+GOLF_RECORDS_TAB = 0
+GOLF_RECORDS_SCROLL = {"up": _center(0.0278, -0.3464), "down": _center(0.0278, 0.2651)}
 
 # Cog Disguise, measured at 1920x1009: the suit tabs (top to bottom) and the blue arrows.
 SUIT_TABS = tuple(_center(0.3845, y) for y in (-0.2265, -0.0798, 0.0610, 0.1948))
@@ -527,7 +572,8 @@ class BookScreen:
     # click its trash can, or False if it can't be deleted.
     tasks: tuple[ui.UIPoint | bool | None, ...] = ()
     summon_cogs: tuple[tuple[int, int], ...] = ()  # on the Cog Gallery: the cells with a summon button
-    fish: tuple[ui.UIPoint, ...] = ()  # on Fishing's Bucket tab: the fish names showing, top to bottom
+    fish: tuple[ui.UIPoint, ...] = ()  # on Fishing's Bucket (or Gardening's Basket): the names showing
+    flowers: tuple[ui.UIPoint, ...] = ()  # on Gardening's Album: the collected names, top to bottom
     trophies: tuple[int, ...] = ()  # on a Trophy tab: the trophies earned (indexes into TROPHIES)
     suit_current: int | None = None  # on Cog Disguise: the suit tab picked (into SUIT_TABS)
     suit_arrows: tuple[str, ...] = ()  # and its blue arrows showing ("left", "right")
@@ -715,8 +761,10 @@ def read_book(width: int, height: int, get_pixel: PixelReader) -> BookScreen:
     gags = _read_gags(width, height, get_pixel) if page == "gags" and trunk is None else None
     tasks = _read_tasks(width, height, get_pixel) if page == "toontasks" else ()
     summon_cogs = _read_summon_cogs(width, height, get_pixel) if page == "cog gallery" else ()
-    fish = (_read_fish(width, height, get_pixel) if page == "fishing" and top_current == BUCKET_TAB
+    fish = (_read_fish(width, height, get_pixel, page) if page in _LISTS and top_current == BUCKET_TAB
             else ())
+    flowers = (_read_album_flowers(width, height, get_pixel) if page == "gardening" and top_current == ALBUM_TAB
+               else ())
     trophies = (_read_trophies(width, height, get_pixel)
                 if top_current is not None and top_current == _TROPHY_TAB.get(page) else ())
     suit_current, suit_arrows = (_read_disguise(width, height, get_pixel) if page == "cog disguise"
@@ -724,7 +772,7 @@ def read_book(width: int, height: int, get_pixel: PixelReader) -> BookScreen:
     return BookScreen(tabs, current, page, top_tabs, top_current, districts=districts, district_chosen=chosen,
                       district_current=current_district, places=places, go_home=go_home,
                       back_to_playground=playground, gags=gags, trunk=trunk, tasks=tasks, summon_cogs=summon_cogs,
-                      fish=fish, trophies=trophies, suit_current=suit_current, suit_arrows=suit_arrows)
+                      fish=fish, flowers=flowers, trophies=trophies, suit_current=suit_current, suit_arrows=suit_arrows)
 
 
 def read_pages(width: int, height: int, get_pixel: PixelReader) -> list[str | None]:
@@ -838,10 +886,12 @@ class BookMapper:
         self._cog: tuple[int, int] | None = None  # the summon button hovered (none at first)
         self._summon = 0  # the button hovered in Issue a Cog Summons
         self._fish = 0  # the Bucket row chosen (it opens on the top one)
+        self._flower = 0  # the Flower Album name chosen (it opens on the top one)
         self._accessory: int | None = None  # the Customize tab's accessory icon hovered (none at first)
         self._trophy: int | None = None  # the trophy hovered (none at first)
         self._tab: tuple | None = None  # the page and top tab these are for
         self._turning: str | None = None  # the kart turn button held down ("stickLeft"/"stickRight")
+        self._held_scroll = HeldScroll()  # a list's scroll triangle, held down while its direction is
         self._releasing = False  # the release confirm is up (or about to be)
         # The Trunk tab works like the battle trunk, so it's run by a battle mapper.
         self._trunk = BattleMapper(_trunk_bindings())
@@ -859,6 +909,7 @@ class BookMapper:
 
     def reset_buttons(self) -> None:
         self._actions.reset(ignore_held=True)
+        self._held_scroll.stop(finish=False)
         self._shown = None
         self._trunk.reset_buttons()
 
@@ -908,8 +959,11 @@ class BookMapper:
         if (screen.page, screen.top_current) != self._tab:
             # A new page or tab: nothing hovered there yet.
             self._tab = (screen.page, screen.top_current)
+            self._flower = 0
+            commands += self._held_scroll.stop(finish=False)
             self._accessory = self._trophy = None
         commands += self._turn_kart(buttons, screen)
+        commands += self._held_scroll.update({self.bindings.press.get(b) for b in buttons})
         if screen.trunk is not None and screen.dialog is None:
             # The battle mapper moves around the trunk; its points are turned into the book's.
             for c in self._trunk.update(buttons, now, screen.trunk):
@@ -939,7 +993,10 @@ class BookMapper:
                     self._place = None
                 commands += self._hover(screen)
         for action in fired:
-            if screen.dialog is not None:
+            held = self._held_scroll.repeat(action)
+            if held is not None:
+                commands += held  # still held on a scroll triangle: hold it down instead
+            elif screen.dialog is not None:
                 commands += self._run_dialog(action, screen, now)
             elif screen.summons_open:
                 commands += self._run_summons(action, screen, now)
@@ -1027,9 +1084,24 @@ class BookMapper:
         # No frame: a hovered trophy tints yellow.
         return [PointerCommand("hover", TROPHIES[self._trophy], f"trophy {self._trophy + 1}")]
 
+    def _run_flower_album(self, action: str, screen: BookScreen, now: float) -> list[PointerCommand]:
+        if action in ("stickUp", "stickDown"):
+            # The triangles: the next genus, shown from its top name.
+            self._flower = 0
+            return self._click(ALBUM_UP if action == "stickUp" else ALBUM_DOWN, f"album {action[5:].lower()}", now)
+        if not screen.flowers:
+            return []
+        self._flower = min(self._flower, len(screen.flowers) - 1)
+        row = self._flower + (-1 if action == "up" else 1)
+        if not 0 <= row < len(screen.flowers):
+            return []
+        self._flower = row
+        return [PointerCommand("click", screen.flowers[row], f"flower {row + 1}")]
+
     def _run_fishing(self, action: str, screen: BookScreen, now: float) -> list[PointerCommand]:
         if screen.top_current == ALBUM_TAB:
             return self._click(ALBUM_UP if action == "up" else ALBUM_DOWN, f"album {action}", now)
+        scroll_up, scroll_down, _, full = _LISTS[screen.page]
         if not screen.fish:
             return []
         # Like Districts, each fish is clicked as you go (hovering does nothing).
@@ -1038,11 +1110,12 @@ class BookMapper:
         if 0 <= row < len(screen.fish):
             self._fish = row
             return [PointerCommand("click", screen.fish[row], f"fish {row + 1}")]
-        if row < 0 or len(screen.fish) == FISH_ROWS:
+        if row < 0 or len(screen.fish) >= full:
             # Past the top or a full bottom row: scroll, and click the fish moved into it.
-            arrow = FISH_SCROLL_UP if row < 0 else FISH_SCROLL_DOWN
-            return [PointerCommand("click", arrow, f"scroll fish {action}"),
-                    PointerCommand("click", screen.fish[self._fish], f"fish {self._fish + 1}")]
+            arrow = scroll_up if row < 0 else scroll_down
+            again = PointerCommand("click", screen.fish[self._fish], f"fish {self._fish + 1}")
+            self._held_scroll.clicked(action, arrow, after=[again])
+            return [PointerCommand("click", arrow, f"scroll fish {action}"), again]
         return []
 
     def _run_cog_gallery(self, action: str, screen: BookScreen, now: float) -> list[PointerCommand]:
@@ -1192,18 +1265,27 @@ class BookMapper:
             return self._run_map(action, screen, now)
         if screen.page == "cog gallery":
             return self._run_cog_gallery(action, screen, now)
-        if screen.page == "fishing" and action in ("up", "down"):
+        if (screen.page == "gardening" and screen.top_current == ALBUM_TAB
+                and action in ("up", "down", "stickUp", "stickDown")):
+            return self._run_flower_album(action, screen, now)
+        if action in ("up", "down") and (screen.page == "fishing" or
+                                         (screen.page == "gardening" and screen.top_current == BUCKET_TAB)):
             return self._run_fishing(action, screen, now)
         if (screen.top_current is not None and screen.top_current == _CUSTOMIZE_TAB.get(screen.page)
                 and action in ("left", "right", "select")):
             return self._run_customize(action, now)
+        if (screen.page == "golf" and screen.top_current == GOLF_RECORDS_TAB
+                and action in ("up", "down", "stickUp", "stickDown")):
+            direction = action[5:].lower() if action.startswith("stick") else action
+            self._held_scroll.clicked(action, GOLF_RECORDS_SCROLL[direction])
+            return self._click(GOLF_RECORDS_SCROLL[direction], f"scroll records {direction}", now)
         if (screen.top_current is not None and screen.top_current == _TROPHY_TAB.get(screen.page)
                 and action in _DIRECTIONS):
             return self._run_trophies(action, screen)
-        if screen.page == "fishing" and action == "pageAction" and screen.fish:
+        if screen.page in _LISTS and action == "pageAction" and screen.fish:
             # Its confirm is the usual OK/Cancel dialog.
             self._releasing = True
-            return self._click(RELEASE_FISH, "release fish", now)
+            return self._click(_LISTS[screen.page][2], "release", now)
         if screen.page == "cog disguise" and action in ("up", "down", "left", "right"):
             return self._run_disguise(action, screen, now)
         if screen.page == "resistance rank" and action in RANK_PAGE_ARROWS:

@@ -167,6 +167,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     last_battle_seen = -BATTLE_GRACE_SECONDS
     last_shop_seen = -BATTLE_GRACE_SECONDS
     was_in_menu = False
+    last_holder: str | None = None  # the menu that may hold the mouse button down ("book"/"friends")
     log("Running. Press Ctrl+C to quit." + (" (dry run: keys are printed, not sent)" if dry_run else ""))
 
     try:
@@ -355,8 +356,12 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     mapper.tap(control, now)
                 if book_mapper.take_left_page():
                     highlight = None
-                if not in_book:
-                    clicker.release()  # e.g. a kart turn held when the book closed
+                # The book and friends list let go of their own holds while open (the kart, a
+                # scroll triangle); one held when it closes, or the other opens, is let go here.
+                holder = "book" if in_book else "friends" if in_friends else None
+                if holder is None or holder != last_holder:
+                    clicker.release()
+                last_holder = holder
                 controls = mapper.update(state, now, view, blocked=blocked, movement=walk)
                 output.sync(controls_to_keys(controls, watcher.settings))
                 for button in mapper.take_clicks():

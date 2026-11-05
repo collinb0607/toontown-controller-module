@@ -17,7 +17,7 @@ Working now:
 - **Gag shop:** move across the gags, buy one or as many as fit, delete mode, and save/load your usual set.
 - **Talking to NPCs:** A clicks through speech bubbles; pick a ToonTask with the D-pad.
 - **Speedchat menus:** move through the menus and submenus with the D-pad and say a phrase with A. Works with any speedchat color. LT jumps straight to UNITE! > Toon-Up, in battle too.
-- **Friends list:** move down the list (it scrolls for you), switch pages, open a toon, teleport to them (X) or whisper (Y). Nearby toons work too.
+- **Friends list:** move down the list (it scrolls for you; hold the direction at the end to scroll fast), switch pages, open a toon, teleport to them (X) or whisper (Y). Nearby toons work too.
 - **Shticker book:** LB/RB flip through the pages and LT/RT switch a page's tabs (like Gags and Trunk). Each page's own controls are next.
 - **Trunk:** SOS cards (scrolling the list as you go, and filtering them from the dropdown or with LS), pink slips, remotes and doodle tricks, all with the D-pad or stick.
 - **Remapping:** a config file lets you rebind any button.
@@ -88,7 +88,8 @@ Working now:
 | Fishing page | Bucket: Stick/D-pad up/down pick the fish above/below (scrolls at the ends) · X release it (A OK · B cancel) · Album: up/down flip through species · Trophies: just to look at |
 | Racing page | Customize: right stick left/right turn the kart · Stick/D-pad left/right hover the accessory icons · A pick one · Records: just to look at · Trophy: Stick/D-pad hover the trophies |
 | Cog Disguise page | Stick/D-pad up/down pick the suit tab (Bossbot, Lawbot, Cashbot, Sellbot) · Stick/D-pad left/right click the blue arrows, where a suit has them |
-| Golf page | Records: just to look at · Trophy: Stick/D-pad hover the trophies |
+| Gardening page | Basket: Stick/D-pad up/down pick a flower (scrolling at the ends) · X release it · Album: Stick/D-pad up/down pick a collected flower · Right stick up/down the previous/next genus · Trophies, Specials: just to look at |
+| Golf page | Records: Stick/D-pad or right stick up/down scroll the courses · Trophy: Stick/D-pad hover the trophies |
 
 Planned:
 

@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from . import ui
 from .battle import PointerCommand
 from .bindings import Bindings, ButtonActions
+from .held_scroll import HeldScroll
 
 RGB = tuple[int, int, int]
 PixelReader = Callable[[int, int], RGB]
@@ -143,6 +144,7 @@ class FriendsMapper:
         self._details_opened_at = float("-inf")
         self._details_retry_at: float | None = None
         self._details_tries = 0
+        self._held_scroll = HeldScroll()  # a scroll triangle, held down while its direction is
 
     def set_bindings(self, bindings: Bindings) -> None:
         self.bindings = bindings
@@ -155,13 +157,23 @@ class FriendsMapper:
 
     def reset_buttons(self) -> None:
         self._actions.reset(ignore_held=True)
+        self._held_scroll.stop(finish=False)
         self._kind = None
 
     def update(self, buttons: frozenset[str], now: float, screen: FriendsScreen) -> list[PointerCommand]:
         _, fired = self._actions.update(buttons, now)
+        commands = self._held_scroll.stop(finish=False) if screen.kind != "list" else []
+        commands += self._held_scroll.update({self.bindings.press.get(b) for b in buttons})
+        fired_rest = []
+        for action in fired:
+            held = self._held_scroll.repeat(action)
+            if held is None:
+                fired_rest.append(action)
+            else:
+                commands += held  # still held on a scroll triangle: hold it down instead
+        fired = fired_rest
         if now < self._settle_until:
-            return []
-        commands: list[PointerCommand] = []
+            return commands
         if screen.kind != self._kind:
             self._kind = screen.kind
             if screen.kind == "list":
@@ -220,6 +232,7 @@ class FriendsMapper:
             if row < 0 or len(screen.rows) == VISIBLE_ROWS:
                 # Past the top or a full bottom row: scroll, and stay on the same row.
                 arrow = SCROLL_UP if row < 0 else SCROLL_DOWN
+                self._held_scroll.clicked(action, arrow, after=self._hover_row(screen))
                 return [PointerCommand("click", arrow, "scroll up" if row < 0 else "scroll down"),
                         *self._hover_row(screen)]
             return []

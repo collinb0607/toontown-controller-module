@@ -142,3 +142,17 @@ def test_toon_details_close_is_clicked_again_if_it_missed():
     m2.update(frozenset(), 0.0, still_open)
     press(m2, still_open, 1.0, "b")
     assert m2.update(frozenset(), 1.6, FriendsScreen("panel")) == []
+
+
+
+def test_holding_at_the_end_of_the_list_holds_the_triangle_down():
+    m = FriendsMapper()
+    screen = full_list()
+    m.update(frozenset(), 0.0, screen)
+    up = frozenset({"dpad_up"})
+    assert [c.kind for c in m.update(up, 1.0, screen)] == ["click", "hover"]
+    [hold] = m.update(up, 1.45, screen)
+    assert hold.kind == "hold" and hold.point == f.SCROLL_UP
+    assert m.update(up, 2.0, screen) == []
+    release, hover = m.update(frozenset(), 3.0, screen)
+    assert release.kind == "release" and (hover.kind, hover.point) == ("hover", screen.rows[0])
