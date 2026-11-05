@@ -83,3 +83,79 @@ def test_b_closes_the_book():
     mapper = BookMapper()
     assert not press(mapper, "b", 0.0, screen())
     assert mapper.take_taps() == ["stickerBook"]
+
+
+def test_options_page():
+    screen = replay("book_options_1920x1009")
+    assert screen.page == "options" and screen.hovers
+    assert replay("book_options_speedchat_color_hover_1920x1009").page == "options"
+
+
+def test_exit_dialog_over_the_dimmed_book():
+    screen = replay("book_options_exit_confirm_1920x1009")
+    assert screen.is_open and screen.dialog is not None and screen.hovers
+    w, h = 1920, 1009
+    assert [p.to_client(w, h) for p in screen.dialog] == [(904, 602), (1015, 602)]
+
+
+def options(dialog=None):
+    tabs = tuple(b._center(0.46, 0.04 * i) for i in range(4))
+    if dialog:
+        return BookScreen(dialog=(b._center(-0.05, 0.1), b._center(0.05, 0.1)))
+    return BookScreen(tabs, 0, "options")
+
+
+def test_options_buttons_and_exit_dialog():
+    mapper = BookMapper()
+    [hover] = mapper.update(frozenset(), 0.0, options())
+    assert hover.kind == "hover" and hover.point == b.SUBMIT
+    for t in (1.0, 2.0, 3.0):
+        press(mapper, "dpad_down", t, options())
+    assert mapper.row == 3
+    [click] = press(mapper, "a", 4.0, options())
+    assert click.kind == "click" and click.point == b.EXIT_TOONTOWN
+    # The dialog: OK is highlighted, the bumpers do nothing, B cancels.
+    [hover] = mapper.update(frozenset(), 5.0, options(dialog=True))
+    assert hover.point == options(dialog=True).dialog[0]
+    assert not press(mapper, "lb", 6.0, options(dialog=True)) and not mapper.take_taps()
+    [cancel] = press(mapper, "b", 7.0, options(dialog=True))
+    assert cancel.point == options(dialog=True).dialog[1]
+    assert not mapper.take_taps()  # B cancelled the dialog, it didn't close the book
+    # Back on the page, still on Exit Toontown.
+    [hover] = mapper.update(frozenset(), 8.0, options())
+    assert hover.point == b.EXIT_TOONTOWN
+
+
+def test_speedchat_color_arrows():
+    mapper = BookMapper()
+    mapper.update(frozenset(), 0.0, options())
+    press(mapper, "dpad_down", 1.0, options())
+    click, hover = press(mapper, "dpad_right", 2.0, options())
+    assert (click.kind, click.point) == ("click", b.COLOR_RIGHT)
+    assert (hover.kind, hover.point) == ("hover", b.SPEEDCHAT_COLOR)
+    [click, _] = press(mapper, "dpad_left", 3.0, options())
+    assert click.point == b.COLOR_LEFT
+    assert not press(mapper, "a", 4.0, options())
+
+
+def test_pages_without_controls_hover_nothing():
+    mapper = BookMapper()
+    gags = BookScreen((b._center(0.46, 0),), 0, "gags")
+    assert not mapper.update(frozenset(), 0.0, gags) and not gags.hovers
+    assert not press(mapper, "dpad_down", 1.0, gags)
+
+
+def test_blank_page_with_four_top_tabs():
+    # Gardening's Specials page is blank white (the battle reader took it for its waiting screen).
+    screen = replay("book_gardening_specials_1920x1009")
+    assert screen.page == "gardening"
+    assert len(screen.top_tabs) == 4 and screen.top_current == 3
+
+
+def test_left_stick_moves_like_the_dpad():
+    mapper = BookMapper()
+    mapper.update(frozenset(), 0.0, options())
+    [hover] = press(mapper, "ls_down", 1.0, options())
+    assert hover.point == b.SPEEDCHAT_COLOR
+    click, _ = press(mapper, "ls_right", 2.0, options())
+    assert click.point == b.COLOR_RIGHT

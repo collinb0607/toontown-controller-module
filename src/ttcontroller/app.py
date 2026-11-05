@@ -223,21 +223,25 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 if view is not None and now >= next_battle_check:
                     next_battle_check = now + BATTLE_CHECK_SECONDS
                     frame = view.snapshot()
-                    screen = read_screen(frame.width, frame.height, frame.get_pixel)
+                    # The book can't open in battle or the shop, so it's read first and the
+                    # rest are skipped while it's open: a blank white page looks like the
+                    # battle's waiting screen, the shop takes a dialog over the book for its
+                    # own, and the NPC bubble search finds false arrows in its pages.
+                    book = read_book(frame.width, frame.height, frame.get_pixel)
+                    screen = read_screen(frame.width, frame.height, frame.get_pixel) if not book.is_open else BattleScreen()
                     if screen.kind != battle_screen.kind and (dry_run or debug):
                         log(f"Battle screen: {screen.kind or 'none'}")
                     battle_screen = screen
-                    shop = read_shop(frame.width, frame.height, frame.get_pixel) if screen.kind is None else ShopScreen()
+                    if ((book.is_open, book.page, book.dialog is not None)
+                            != (book_screen.is_open, book_screen.page, book_screen.dialog is not None)
+                            and (dry_run or debug)):
+                        log(f"Book: {'closed' if not book.is_open else 'dialog' if book.dialog else book.page or 'unknown page'}")
+                    book_screen = book
+                    shop = (read_shop(frame.width, frame.height, frame.get_pixel)
+                            if screen.kind is None and not book.is_open else ShopScreen())
                     if shop.kind != shop_screen.kind and (dry_run or debug):
                         log(f"Gag shop screen: {shop.kind or 'none'}")
                     shop_screen = shop
-                    # The book can't open in battle or the shop. It's read before NPCs, which
-                    # can't talk over it: their bubble search finds false arrows in its pages.
-                    book = (read_book(frame.width, frame.height, frame.get_pixel)
-                            if screen.kind is None and shop.kind is None else BookScreen())
-                    if (book.is_open, book.page) != (book_screen.is_open, book_screen.page) and (dry_run or debug):
-                        log(f"Book: {(book.page or 'unknown page') if book.is_open else 'closed'}")
-                    book_screen = book
                     npc = (read_npc(frame.width, frame.height, frame.get_pixel, frame.rgb())
                            if screen.kind is None and shop.kind is None and not book.is_open else NpcScreen())
                     if npc.kind != npc_screen.kind and (dry_run or debug):
@@ -333,8 +337,9 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 for button in mapper.take_clicks():
                     point("click", button.center, button.name, view)
                 # Nothing to hover: while the cursor is hidden, leave it off the game area.
-                # The book's pages don't hover anything yet, so it counts as idle.
-                idle = not (in_battle or in_shop or in_speedchat or in_friends or npc_screen.kind == "tasks")
+                # Book pages without controls of their own don't hover anything.
+                idle = not (in_battle or in_shop or in_speedchat or in_friends or npc_screen.kind == "tasks"
+                            or (in_book and book_screen.hovers))
                 if idle and hider.hidden and view is not None and not clicker.busy and not dry_run:
                     spot = view.park_spot()
                     # Checked against where the cursor really is: the mouse may have moved it.

@@ -10,6 +10,14 @@ way round from the rest.
 
 Some pages have tabs of their own above the book (the Gags page has Gags and
 Trunk). The current one is brightly colored; the others are pale.
+
+An OK/Cancel dialog over the book (Exit Toontown?) dims everything behind it,
+backdrop included, so the book is known by the dimmed backdrop then.
+
+Pages with controls of their own:
+- Options & Codes: Submit, the SpeedChat color (hovering its box previews it, with
+  arrows either side to change it), Open Options and Exit Toontown. The code box
+  is skipped, since there's no way to type.
 """
 
 from collections.abc import Callable
@@ -18,6 +26,7 @@ from dataclasses import dataclass, field
 from . import ui
 from .battle import PointerCommand
 from .bindings import Bindings, ButtonActions
+from .dialog import find_ok_cancel
 
 RGB = tuple[int, int, int]
 PixelReader = Callable[[int, int], RGB]
@@ -29,6 +38,7 @@ def _center(x: float, y: float) -> ui.UIPoint:
 
 # Measured at 1915x1006.
 BACKDROP = (13, 38, 102)
+DIM_BACKDROP = (7, 19, 51)  # behind a dialog
 _BELOW_BOOK_Y = 0.338
 _BACKDROP_PROBES = tuple(_center(-0.45 + 0.05 * i, _BELOW_BOOK_Y) for i in range(19))
 _BACKDROP_MIN_HITS = 14
@@ -79,8 +89,23 @@ def is_backdrop(c: RGB) -> bool:
     return sum(abs(p - q) for p, q in zip(c, BACKDROP)) < 40
 
 
+def is_dim_backdrop(c: RGB) -> bool:
+    return sum(abs(p - q) for p, q in zip(c, DIM_BACKDROP)) < 25
+
+
 def _is_face(c: RGB) -> bool:
     return all(194 <= v <= 214 for v in c) and max(c) - min(c) < 8
+
+
+# Options & Codes, measured at 1920x1009.
+SUBMIT = _center(0.2270, -0.1001)
+SPEEDCHAT_COLOR = _center(0.2200, 0.0649)  # hovering it previews the color
+COLOR_LEFT = _center(0.1234, 0.0639)
+COLOR_RIGHT = _center(0.3256, 0.0639)
+OPEN_OPTIONS = _center(0.2270, 0.1705)
+EXIT_TOONTOWN = _center(0.2270, 0.2448)
+OPTIONS_ROWS = ((SUBMIT, "submit"), (SPEEDCHAT_COLOR, "speedchat color"), (OPEN_OPTIONS, "open options"),
+                (EXIT_TOONTOWN, "exit toontown"))
 
 
 @dataclass(frozen=True)
@@ -90,10 +115,16 @@ class BookScreen:
     page: str | None = None  # the current page, by its tab's icon (None if it isn't known)
     top_tabs: tuple[ui.UIPoint, ...] = ()
     top_current: int | None = None
+    dialog: tuple[ui.UIPoint, ui.UIPoint] | None = None  # an OK/Cancel dialog over the book
 
     @property
     def is_open(self) -> bool:
-        return bool(self.tabs)
+        return bool(self.tabs) or self.dialog is not None
+
+    @property
+    def hovers(self) -> bool:
+        """Whether something is highlighted with the cursor (so it isn't parked)."""
+        return self.dialog is not None or self.page in PAGE_ROWS
 
 
 def _px(width: int, height: int, x: float, y: float) -> tuple[int, int]:
@@ -244,6 +275,11 @@ def _read_tabs(width: int, height: int, get_pixel: PixelReader) -> tuple[list[st
 def read_book(width: int, height: int, get_pixel: PixelReader) -> BookScreen:
     found = _read_tabs(width, height, get_pixel)
     if found is None:
+        dim = sum(is_dim_backdrop(get_pixel(*p.to_client(width, height))) for p in _BACKDROP_PROBES)
+        if dim >= _BACKDROP_MIN_HITS:
+            dialog = find_ok_cancel(width, height, get_pixel)
+            if dialog is not None:
+                return BookScreen(dialog=dialog)
         return BookScreen()
     kinds, edges = found
     current = kinds.index("pressed") if "pressed" in kinds else None
@@ -268,12 +304,26 @@ BOOK_ACTIONS = {
     "nextPage": "the page below in the tabs down the right (taps TTR's turn right key)",
     "prevTab": "the tab to the left along the page's top",
     "nextTab": "the tab to the right along the page's top",
-    "close": "close the book",
+    "close": "close the book, or cancel a dialog over it",
+    "select": "press the highlighted button (OK in a dialog)",
+    "up": "move up a page's buttons", "down": "move down a page's buttons",
+    "left": "change a setting (the SpeedChat color)", "right": "change a setting (the SpeedChat color)",
 }
 
 
 def default_book_bindings() -> Bindings:
-    return Bindings(press={"lb": "prevPage", "rb": "nextPage", "lt": "prevTab", "rt": "nextTab", "b": "close"})
+    press = {"lb": "prevPage", "rb": "nextPage", "lt": "prevTab", "rt": "nextTab", "b": "close", "a": "select"}
+    # The left stick too: the toon can't walk while the book is open.
+    for direction in ("up", "down", "left", "right"):
+        press[f"dpad_{direction}"] = direction
+        press[f"ls_{direction}"] = direction
+    return Bindings(press=press)
+
+
+# Each page with controls: its buttons, top to bottom.
+PAGE_ROWS = {"options": OPTIONS_ROWS}
+# Buttons with a setting changed by left/right: the arrows to click.
+_ARROWS = {SPEEDCHAT_COLOR: (COLOR_LEFT, COLOR_RIGHT)}
 
 
 # Actions that are just a tap of a TTR control.
@@ -289,11 +339,14 @@ class BookMapper:
         self.set_bindings(self.bindings)
         self._settle_until = 0.0
         self._taps: list[str] = []
+        self.row = 0
+        self._shown: tuple | None = None  # what was last hovered for: (page, dialog showing)
+        self._page: str | None = None
 
     def set_bindings(self, bindings: Bindings) -> None:
         self.bindings = bindings
         self._actions = ButtonActions(bindings, 0.5, is_oneshot=lambda action: True,
-                                      repeats=lambda action: action in ("prevPage", "nextPage"))
+                                      repeats=lambda action: action in ("prevPage", "nextPage", "up", "down"))
 
     @property
     def buttons(self) -> set[str]:
@@ -301,6 +354,7 @@ class BookMapper:
 
     def reset_buttons(self) -> None:
         self._actions.reset(ignore_held=True)
+        self._shown = None
 
     def take_taps(self) -> list[str]:
         """TTR controls to tap, asked for since the last call: the turn keys flip pages
@@ -311,19 +365,65 @@ class BookMapper:
     def update(self, buttons: frozenset[str], now: float, screen: BookScreen) -> list[PointerCommand]:
         _, fired = self._actions.update(buttons, now)
         commands: list[PointerCommand] = []
+        if now >= self._settle_until:
+            shown = (screen.page, screen.dialog is not None)
+            if shown != self._shown:
+                self._shown = shown
+                # A new page starts at its top button. A dialog hides the page, so
+                # coming back from one keeps the button it was opened from.
+                if screen.dialog is None and screen.page != self._page:
+                    self._page = screen.page
+                    self.row = 0
+                commands += self._hover(screen)
         for action in fired:
-            if action in _TAPS:
+            if screen.dialog is not None:
+                commands += self._run_dialog(action, screen, now)
+            elif action in _TAPS:
                 self._taps.append(_TAPS[action])
             elif now >= self._settle_until:
                 commands += self._run(action, screen, now)
         return commands
 
+    def _hover(self, screen: BookScreen) -> list[PointerCommand]:
+        if screen.dialog is not None:
+            return [PointerCommand("hover", screen.dialog[0], "OK")]
+        rows = PAGE_ROWS.get(screen.page)
+        if not rows:
+            return []
+        point, name = rows[self.row]
+        return [PointerCommand("hover", point, name)]
+
+    def _run_dialog(self, action: str, screen: BookScreen, now: float) -> list[PointerCommand]:
+        ok, cancel = screen.dialog
+        if action == "select":
+            return self._click(ok, "OK", now)
+        if action == "close":
+            return self._click(cancel, "cancel", now)
+        return []
+
     def _click(self, point: ui.UIPoint, name: str, now: float) -> list[PointerCommand]:
         """Click something that changes the page, then look again once it settles."""
         self._settle_until = now + self.settle_seconds
+        self._shown = None
         return [PointerCommand("click", point, name)]
 
     def _run(self, action: str, screen: BookScreen, now: float) -> list[PointerCommand]:
+        rows = PAGE_ROWS.get(screen.page)
+        if rows and action in ("up", "down"):
+            self.row = max(0, min(len(rows) - 1, self.row + (-1 if action == "up" else 1)))
+            return self._hover(screen)
+        if rows and action in ("left", "right"):
+            point, name = rows[self.row]
+            if point in _ARROWS:
+                arrow = _ARROWS[point][action == "right"]
+                # Back onto the setting after, which shows it.
+                return [PointerCommand("click", arrow, f"{name} {action}"), PointerCommand("hover", point, name)]
+            return []
+        if rows and action == "select":
+            point, name = rows[self.row]
+            if point in _ARROWS:
+                return []
+            return self._click(point, name, now)
         if action in ("prevTab", "nextTab") and screen.top_tabs and screen.top_current is not None:
             i = screen.top_current + (-1 if action == "prevTab" else 1)
             if 0 <= i < len(screen.top_tabs):

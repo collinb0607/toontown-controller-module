@@ -14,7 +14,7 @@ PixelReader = Callable[[int, int], RGB]
 _OK_X, _CANCEL_X = -0.0555, 0.0541
 _SCAN_X = 0.047  # through the Cancel circle, left of its white X
 _SCAN_TOP, _SCAN_BOTTOM = -0.1, 0.35
-_FILL_XS = (-0.22, -0.2, 0.2, 0.22)  # dialog fill on either side of the buttons
+_FILL_XS = (-0.15, -0.13, 0.13, 0.15)  # dialog fill on either side of the buttons (the narrowest dialog, Exit Toontown?, is 0.34 wide)
 
 
 def _center(x: float, y: float) -> ui.UIPoint:

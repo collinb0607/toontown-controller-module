@@ -77,6 +77,7 @@ Working now:
 | Friends list | D-pad up/down move (scrolls at the ends) · left/right change page · A open the toon · X Go To (teleport) · Y Whisper · B close |
 | A toon's panel | D-pad up/down move between its buttons · A press · X Go To (teleport) · Y Whisper · B close Toon Details, then the panel |
 | Shticker book | LB/RB previous/next page · LT/RT previous/next tab along the page's top · B close |
+| Options & Codes page | Stick/D-pad up/down move · left/right change the SpeedChat color · A press · Exit Toontown's dialog: A OK · B cancel |
 
 Planned:
 
