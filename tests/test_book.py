@@ -862,3 +862,36 @@ def test_leaving_the_tab_lets_go_of_a_held_triangle():
     mapper.update(down, 1.0, records)
     mapper.update(down, 1.45, records)
     assert [c.kind for c in mapper.update(down, 2.0, trophy)] == ["release"]
+
+
+
+def test_snapshots_page_and_its_delete_confirm():
+    page = replay("book_snapshots_1920x1009")
+    assert page.page == "snapshots" and page.snapshot_arrows == ("left", "right") and page.snapshot_trash
+    confirm = replay("book_snapshots_delete_confirm_1920x1009")
+    assert confirm.is_open and confirm.dialog == (b.SNAPSHOT_YEP, b.SNAPSHOT_CANCEL)
+
+
+def snapshots(arrows=("left", "right"), trash=True):
+    return BookScreen(tuple(b._center(0.46, 0.04 * i) for i in range(14)), 12, "snapshots",
+                      snapshot_arrows=arrows, snapshot_trash=trash)
+
+
+def test_snapshots_flip_with_left_and_right_and_x_deletes():
+    mapper = BookMapper()
+    assert mapper.update(frozenset(), 0.0, snapshots()) == []
+    [c] = press(mapper, "dpad_right", 1.0, snapshots())
+    assert c.kind == "click" and c.point == b.SNAPSHOT_ARROWS["right"]
+    [c] = press(mapper, "ls_left", 2.0, snapshots())
+    assert c.point == b.SNAPSHOT_ARROWS["left"]
+    [c] = press(mapper, "x", 3.0, snapshots())
+    assert c.point == b.SNAPSHOT_TRASH
+    confirm = BookScreen(dialog=(b.SNAPSHOT_YEP, b.SNAPSHOT_CANCEL))
+    [hover] = mapper.update(frozenset(), 4.0, confirm)
+    assert hover.point == b.SNAPSHOT_YEP
+    [cancel] = press(mapper, "b", 5.0, confirm)
+    assert cancel.point == b.SNAPSHOT_CANCEL and not mapper.take_taps()  # B cancels, the book stays open
+    assert mapper.update(frozenset(), 6.0, snapshots()) == []  # back on the page, nothing hovered
+    # No snapshots: nothing to flip or delete.
+    empty = snapshots(arrows=(), trash=False)
+    assert not press(mapper, "dpad_right", 7.0, empty) and not press(mapper, "x", 8.0, empty)

@@ -57,6 +57,10 @@ Pages with controls of their own:
   beside the one shown, each clickable (blue while hovered, yellow as it's picked;
   a "????" in green isn't collected), with triangles above and below flipping to
   the next genus. Trophies and Specials are just to look at.
+- Snapshots: the list of snapshots on the left, the one shown on the right with blue
+  arrows either side of its name to flip through them, and a trash can beside Add
+  Caption. Deleting asks in a yellow Yep!/Cancel panel over the bottom right of the
+  book (the book isn't dimmed, and it hides the lower page tabs).
 """
 
 from collections.abc import Callable
@@ -238,6 +242,21 @@ def _read_disguise(width: int, height: int, get_pixel: PixelReader) -> tuple[int
     arrows = tuple(side for side, p in DISGUISE_ARROWS.items()
                    if _is_arrow_blue(get_pixel(*p.to_client(width, height))))
     return current, arrows
+
+
+def _read_snapshot_confirm(width: int, height: int, get_pixel: PixelReader) -> bool:
+    """The Snapshots delete confirm: its yellow panel, with a blue Yep! and red Cancel."""
+    if not all(_is_confirm_yellow(get_pixel(*p.to_client(width, height))) for p in _SNAPSHOT_CONFIRM_PANEL):
+        return False
+    sides = (-0.012, 0.012)
+    yep = any(_is_arrow_blue(get_pixel(*SNAPSHOT_YEP.offset(dx, 0).to_client(width, height))) for dx in sides)
+    cancel = any(ui.is_red(get_pixel(*SNAPSHOT_CANCEL.offset(dx, 0).to_client(width, height))) for dx in sides)
+    return yep and cancel
+
+
+def _is_confirm_yellow(c: RGB) -> bool:
+    r, g, b = c
+    return r > 235 and g > 235 and 160 < b < 215
 
 
 def _is_red_ink(c: RGB) -> bool:
@@ -546,6 +565,13 @@ _SUIT_INK_XS = tuple(0.3746 + 0.002 * i for i in range(11))
 _SUIT_INK_DYS = tuple(-0.042 + 0.006 * i for i in range(15))
 DISGUISE_ARROWS = {"left": _center(-0.3409, 0.2126), "right": _center(-0.0793, 0.2126)}
 
+# Snapshots, measured at 1920x1009: the arrows, the trash can and its delete confirm.
+SNAPSHOT_ARROWS = {"left": _center(0.0743, 0.0530), "right": _center(0.3746, 0.0530)}
+SNAPSHOT_TRASH = _center(0.3419, 0.1224)
+SNAPSHOT_YEP = _center(0.1744, 0.2235)
+SNAPSHOT_CANCEL = _center(0.2740, 0.2235)
+_SNAPSHOT_CONFIRM_PANEL = tuple(_center(x, y) for x in (-0.0099, 0.2200, 0.4559) for y in (0.0550, 0.1838))
+
 GO_HOME = _center(0.0723, 0.2711)
 BACK_TO_PLAYGROUND = _center(0.2676, 0.2711)
 _GO_HOME_PROBES = (_center(0.0297, 0.2552), _center(0.1140, 0.2552))
@@ -572,6 +598,8 @@ class BookScreen:
     # click its trash can, or False if it can't be deleted.
     tasks: tuple[ui.UIPoint | bool | None, ...] = ()
     summon_cogs: tuple[tuple[int, int], ...] = ()  # on the Cog Gallery: the cells with a summon button
+    snapshot_arrows: tuple[str, ...] = ()  # on Snapshots: its arrows showing ("left", "right")
+    snapshot_trash: bool = False  # and its trash can (there's a snapshot to delete)
     fish: tuple[ui.UIPoint, ...] = ()  # on Fishing's Bucket (or Gardening's Basket): the names showing
     flowers: tuple[ui.UIPoint, ...] = ()  # on Gardening's Album: the collected names, top to bottom
     trophies: tuple[int, ...] = ()  # on a Trophy tab: the trophies earned (indexes into TROPHIES)
@@ -747,6 +775,8 @@ def read_book(width: int, height: int, get_pixel: PixelReader) -> BookScreen:
             summons = _read_summons(width, height, get_pixel)
             if summons is not None:
                 return BookScreen(summons_open=True, summons=summons)
+        elif _read_snapshot_confirm(width, height, get_pixel):
+            return BookScreen(dialog=(SNAPSHOT_YEP, SNAPSHOT_CANCEL))
         return BookScreen()
     kinds, edges = found
     current = kinds.index("pressed") if "pressed" in kinds else None
@@ -769,10 +799,14 @@ def read_book(width: int, height: int, get_pixel: PixelReader) -> BookScreen:
                 if top_current is not None and top_current == _TROPHY_TAB.get(page) else ())
     suit_current, suit_arrows = (_read_disguise(width, height, get_pixel) if page == "cog disguise"
                                  else (None, ()))
+    snapshot_arrows = tuple(side for side, p in SNAPSHOT_ARROWS.items()
+                            if page == "snapshots" and _is_arrow_blue(get_pixel(*p.to_client(width, height))))
+    snapshot_trash = page == "snapshots" and min(get_pixel(*SNAPSHOT_TRASH.to_client(width, height))) < 200
     return BookScreen(tabs, current, page, top_tabs, top_current, districts=districts, district_chosen=chosen,
                       district_current=current_district, places=places, go_home=go_home,
                       back_to_playground=playground, gags=gags, trunk=trunk, tasks=tasks, summon_cogs=summon_cogs,
-                      fish=fish, flowers=flowers, trophies=trophies, suit_current=suit_current, suit_arrows=suit_arrows)
+                      fish=fish, flowers=flowers, trophies=trophies, suit_current=suit_current, suit_arrows=suit_arrows,
+                      snapshot_arrows=snapshot_arrows, snapshot_trash=snapshot_trash)
 
 
 def read_pages(width: int, height: int, get_pixel: PixelReader) -> list[str | None]:
@@ -793,11 +827,11 @@ BOOK_ACTIONS = {
     "select": "press the highlighted button (Teleport Here! on Districts, OK in a dialog)",
     "up": "move up a page's buttons (or choose the district above)",
     "down": "move down a page's buttons (or choose the district below)",
-    "left": "change a setting (the SpeedChat color), or the next place left on the map",
-    "right": "change a setting (the SpeedChat color), or the next place right on the map",
+    "left": "change a setting (the SpeedChat color), the next place left on the map, or the snapshot before",
+    "right": "change a setting (the SpeedChat color), the next place right on the map, or the next snapshot",
     "goHome": "the map's Go Home button",
     "pageAction": "the map's Back to Playground button, delete the highlighted ToonTask (one with a trash can), "
-                  "or release the fish picked in the Fishing Bucket",
+                  "release the fish (or flower) picked, or delete the snapshot shown",
     "stickUp": "right stick up: scroll the Trunk's SOS cards up, or the Cog Gallery's tie (Bossbot)",
     "stickDown": "right stick down: scroll the Trunk's SOS cards down, or the Cog Gallery's bar graph (Sellbot)",
     "stickLeft": "right stick left: the Cog Gallery's gavel (Lawbot), or turn the kart on Racing's Customize tab",
@@ -1286,6 +1320,10 @@ class BookMapper:
             # Its confirm is the usual OK/Cancel dialog.
             self._releasing = True
             return self._click(_LISTS[screen.page][2], "release", now)
+        if screen.page == "snapshots" and action in SNAPSHOT_ARROWS and action in screen.snapshot_arrows:
+            return self._click(SNAPSHOT_ARROWS[action], f"snapshot {action}", now)
+        if screen.page == "snapshots" and action == "pageAction" and screen.snapshot_trash:
+            return self._click(SNAPSHOT_TRASH, "delete snapshot", now)  # then its Yep!/Cancel
         if screen.page == "cog disguise" and action in ("up", "down", "left", "right"):
             return self._run_disguise(action, screen, now)
         if screen.page == "resistance rank" and action in RANK_PAGE_ARROWS:

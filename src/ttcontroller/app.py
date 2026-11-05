@@ -6,6 +6,7 @@ from pathlib import Path
 from . import config as module_config
 from . import ttr_settings
 from .battle import BattleMapper, BattleScreen, read_screen
+from .combo import ButtonCombo
 from .controller import NEUTRAL, ControllerReader
 from .cursor import MOVE_TOLERANCE, CursorHider
 from .book import BookMapper, BookScreen, read_book
@@ -167,6 +168,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     last_battle_seen = -BATTLE_GRACE_SECONDS
     last_shop_seen = -BATTLE_GRACE_SECONDS
     was_in_menu = False
+    bumper_combo = ButtonCombo()  # LB + RB: a screenshot
     last_holder: str | None = None  # the menu that may hold the mouse button down ("book"/"friends")
     log("Running. Press Ctrl+C to quit." + (" (dry run: keys are printed, not sent)" if dry_run else ""))
 
@@ -283,6 +285,10 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     friends_screen = friends
 
                 state = state or NEUTRAL
+                state, screenshot = bumper_combo.update(state, now)
+                if screenshot:
+                    log("Screenshot (LB + RB).")
+                    mapper.tap("screenshot", now)
                 if battle_screen.kind is not None:
                     last_battle_seen = now
                 if shop_screen.kind is not None:

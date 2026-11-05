@@ -30,6 +30,7 @@ DEFAULT_CONTROLS = {
     "lookUp": "page_up",
     "lookDown": "page_down",
     "chat": "t",
+    "screenshot": "f9",
 }
 
 

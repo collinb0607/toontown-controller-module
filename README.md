@@ -47,6 +47,7 @@ Working now:
 | RS (click the right stick) | Switch camera |
 | Right stick up/down | Look up/down |
 | RB | Friends list (press again to close) |
+| LB + RB | Take a screenshot (TTR's own Screenshot key), anywhere: walking, battles, the book |
 | View | Speedchat (press again to close) |
 | LT | Unite: opens speedchat at UNITE! with Toon-Up highlighted (in battle too) |
 | Y / X | Show gags / show tasks |
@@ -89,6 +90,7 @@ Working now:
 | Racing page | Customize: right stick left/right turn the kart · Stick/D-pad left/right hover the accessory icons · A pick one · Records: just to look at · Trophy: Stick/D-pad hover the trophies |
 | Cog Disguise page | Stick/D-pad up/down pick the suit tab (Bossbot, Lawbot, Cashbot, Sellbot) · Stick/D-pad left/right click the blue arrows, where a suit has them |
 | Gardening page | Basket: Stick/D-pad up/down pick a flower (scrolling at the ends) · X release it · Album: Stick/D-pad up/down pick a collected flower · Right stick up/down the previous/next genus · Trophies, Specials: just to look at |
+| Snapshots page | Stick/D-pad left/right flip through your snapshots · X delete the one shown · A Yep! / B Cancel |
 | Golf page | Records: Stick/D-pad or right stick up/down scroll the courses · Trophy: Stick/D-pad hover the trophies |
 
 Planned:
