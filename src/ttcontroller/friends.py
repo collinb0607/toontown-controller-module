@@ -77,6 +77,13 @@ PANEL_CLOSE = _right(-0.0327, 0.4262)
 # Up and down move through these.
 PANEL_BUTTONS = ((FRIEND, "friends"), (GO_TO, "go to"), (WHISPER, "whisper"), (IGNORE, "ignore"),
                  (REPORT, "report"), (TOON_DETAILS, "toon details"))
+# Near a boarding group's elevator the panel grows a Boarding Group section below: a
+# white "Boarding Group" label, then one button on green, Invite (or, for the group's
+# leader looking at a member, Kick: a red boot). It joins the up/down list last, after
+# Toon Details, the order they're in going down (the user, Nov 7, 2026). Measured in boarding_groups_invite and _kick, 1920x1009.
+BOARDING = _right(-0.1070, 0.5669)
+_BOARDING_LABEL = (_right(-0.1784, 0.4797), _right(-0.1784, 0.5054))  # above and below its text
+_BOARDING_GREEN = (_right(-0.1784, 0.5451), _right(-0.1784, 0.5698))
 
 DETAILS_CLOSE = _right(-0.6125, 0.4271)
 # How long a toon's panel takes to replace the list after a name is clicked.
@@ -86,6 +93,7 @@ PANEL_OPEN_SECONDS = 0.3
 DETAILS_OPEN_SECONDS = 0.4
 DETAILS_RETRY_SECONDS = 0.5
 DETAILS_CLOSE_TRIES = 3
+INVITE_WAIT_SECONDS = 1.0  # RT on the list: how long to wait for the panel's Invite before giving up
 
 _POPUP_FILL_Y = 0.04  # a row inside a popup's top, above its message
 _POPUP_SCAN = (-1.3, -0.2)  # searched for between these, from the right edge
@@ -102,10 +110,23 @@ _DIALOG_SECONDS = 1.0  # how long after Ignore, Report or the last dialog one ma
 # A friend request: the smaller peach popup.
 _REQUEST_FILL_Y = -0.42  # a row just inside its top, above its message (from the window's middle)
 _REQUEST_SCAN = (-0.3, 0.7)  # searched for between these, from the window's middle
-_REQUEST_WIDTH = (0.28, 0.40)
+_REQUEST_WIDTH = (0.25, 0.40)  # its fill along that row (a portrait at its left can cut it short)
 _REQUEST_BUTTONS = (-0.36, -0.20)  # its buttons' row is between these, from the window's middle
 _REQUEST_DX = 0.0413  # OK left of its middle, No right
 _YES_BLUE = ((0, -0.009), (-0.009, 0), (-0.006, -0.006), (-0.003, -0.006), (-0.008, -0.002), (0.008, 0.007))
+
+
+def _is_boarding_green(c: RGB) -> bool:
+    r, g, b = c
+    return 100 < r < 160 and g > 180 and b < 110
+
+
+def panel_buttons(screen: "FriendsScreen") -> tuple:
+    """What up/down move through on a toon's panel: Invite or Kick comes last, below Toon
+    Details, as it is on screen."""
+    if screen.boarding:
+        return PANEL_BUTTONS + ((BOARDING, "invite or kick"),)
+    return PANEL_BUTTONS
 
 
 def _is_no_red(c: RGB) -> bool:
@@ -170,6 +191,7 @@ class FriendsScreen:
     kind: str | None = None  # "list", "panel" (a toon's panel), "popup" (one of its buttons asking first), or None
     rows: tuple[ui.UIPoint, ...] = ()  # list: the names showing, top to bottom
     details: bool = False  # panel: Toon Details is open too
+    boarding: bool = False  # panel: its Boarding Group section shows (Invite or Kick)
     whisper: bool = False  # list or panel: a whisper is open too (its X goes first on B)
     yes: ui.UIPoint | None = None  # popup: what A presses (Yes, Stop being Toon friends)
     no: ui.UIPoint | None = None  # and B (No, Cancel)
@@ -277,18 +299,61 @@ def _read_request(width: int, height: int, get_pixel: PixelReader) -> FriendsScr
     run = _fill_run(width, get_pixel, y, left, right, unit, _is_request_peach)
     if run is None or not _REQUEST_WIDTH[0] * unit <= run[1] - run[0] <= _REQUEST_WIDTH[1] * unit:
         return None
-    middle = (run[0] + run[1]) / 2
-    no_x = round(middle + _REQUEST_DX * unit)
+    # Its red button (No, or Cancel alone), searched for across it: where it sits depends
+    # on the popup (a boarding group invite's portrait makes it wider on the left).
     top, bottom = (round(height / 2 + dy * unit) for dy in _REQUEST_BUTTONS)
-    red = _red_run(width, height, get_pixel, no_x, top, bottom, unit, size=0.023)
+    step = max(2, round(0.006 * unit))
+    hit = next(((x, y) for y in range(max(top, 0), min(bottom, height), step)
+                for x in range(run[0], run[1], step) if _is_no_red(get_pixel(x, y))), None)
+    if hit is None:
+        return _read_request_ok(width, height, get_pixel, run, top, bottom, step)
+    red = _red_run(width, height, get_pixel, hit[0], hit[1] - step, bottom, unit, size=0.023)
     if red is None:
         return None
-    no = ui.UIPoint("center", (no_x - width / 2) / unit, (sum(red) / 2 - height / 2) / unit, "center")
+    cy = round(sum(red) / 2)
+    xs = [x for x in range(hit[0] - round(0.03 * unit), hit[0] + round(0.03 * unit)) if _is_no_red(get_pixel(x, cy))]
+    no = ui.UIPoint("center", ((xs[0] + xs[-1]) / 2 - width / 2) / unit, (cy - height / 2) / unit, "center")
+    if sum(_is_no_red(at(p)) for p in ui.around(no, 0.007)) < 3:
+        return None
     ok = no.offset(-2 * _REQUEST_DX, 0)
-    if (sum(_is_no_red(at(p)) for p in ui.around(no, 0.007)) >= 3
-            and sum(_is_yes_blue(at(p)) for p in ui.around(ok, 0.007)) >= 3
-            and _is_request_peach(at(no.offset(-_REQUEST_DX, 0)))):
+    # OK's blue: much of it is pale shading round its white tick, so its blue is counted
+    # in a box round where it should be.
+    ox, oy = ok.to_client(width, height)
+    reach, step = round(0.012 * unit), max(1, round(0.002 * unit))
+    blue = sum(_is_yes_blue(get_pixel(x, y)) for y in range(oy - reach, oy + reach + 1, step)
+               for x in range(ox - reach, ox + reach + 1, step))
+    if blue >= 0.12 * ((2 * reach) // step + 1) ** 2 and _is_request_peach(at(no.offset(-_REQUEST_DX, 0))):
+        # A friend request, or a boarding group invite ("... would like you to join their ... Group."): OK and No.
         return FriendsScreen("popup", yes=ok, no=no, popup="friend request")
+    if _is_request_peach(at(no.offset(-2 * _REQUEST_DX, 0))) and _is_request_peach(at(no.offset(2 * _REQUEST_DX, 0))):
+        # Cancel alone: inviting a toon to your boarding group, waiting for their answer.
+        return FriendsScreen("popup", no=no, popup="cancel")
+    return None
+
+
+def _read_request_ok(width: int, height: int, get_pixel: PixelReader, run: tuple[int, int], top: int,
+                     bottom: int, step: int) -> FriendsScreen | None:
+    """The peach popup with a lone blue OK: "... has declined to join your Boarding Group."
+    (boarding_groups_declined). A or B clicks OK."""
+    unit = min(width, height)
+    hit = next(((x, y) for y in range(max(top, 0), min(bottom, height), step)
+                for x in range(run[0], run[1], step) if _is_yes_blue(get_pixel(x, y))), None)
+    if hit is None:
+        return None
+    blue = _red_run(width, height, get_pixel, hit[0], hit[1] - step, bottom, unit, test=_is_yes_blue, size=0.02)
+    if blue is None:
+        return None
+    cy = round(sum(blue) / 2)
+    reach = round(0.03 * unit)
+    xs = [x for x in range(hit[0] - reach, hit[0] + reach) if _is_yes_blue(get_pixel(x, cy))]
+    ok = ui.UIPoint("center", ((xs[0] + xs[-1]) / 2 - width / 2) / unit, (cy - height / 2) / unit, "center")
+
+    def at(p: ui.UIPoint) -> RGB:
+        return get_pixel(*p.to_client(width, height))
+
+    # Alone: peach either side, where No (or OK) would be.
+    if _is_request_peach(at(ok.offset(-2 * _REQUEST_DX, 0))) and _is_request_peach(at(ok.offset(2 * _REQUEST_DX, 0))):
+        return FriendsScreen("popup", yes=ok, no=ok, popup="OK")
     return None
 
 
@@ -430,8 +495,13 @@ def read_friends(width: int, height: int, get_pixel: PixelReader, dialogs: bool 
         rows = _name_rows(width, height, get_pixel)
         return FriendsScreen("list", rows=tuple(rows), whisper=_whispering(width, height, get_pixel))
     if ui.is_visible(PORTRAIT, width, height, get_pixel):
+        def at(p: ui.UIPoint) -> RGB:
+            return get_pixel(*p.to_client(width, height))
+
+        boarding = (all(min(at(p)) > 235 for p in _BOARDING_LABEL)
+                    and all(_is_boarding_green(at(p)) for p in _BOARDING_GREEN))
         return FriendsScreen("panel", details=ui.is_visible(DETAILS, width, height, get_pixel),
-                             whisper=_whispering(width, height, get_pixel))
+                             whisper=_whispering(width, height, get_pixel), boarding=boarding)
     return FriendsScreen()
 
 
@@ -442,11 +512,14 @@ FRIENDS_ACTIONS = {
     "select": "open the highlighted toon, or press the highlighted button (in a popup: Yes, OK, Ignore, Stop being Toon friends, or the Report reason hovered)",
     "back": "end a whisper (its X), then close Toon Details, the toon's panel, or the list (in a popup: No or Cancel)",
     "goTo": "teleport to the toon (Go To)", "whisper": "whisper to the toon",
+    "invite": "near a boarding group's elevator: invite the toon to your group (or kick them, as leader)",
 }
 
 
 def default_friends_bindings() -> Bindings:
-    press = {"a": "select", "b": "back", "x": "goTo", "y": "whisper"}
+    # RT: Invite (or Kick) to a boarding group; the catalog it opens otherwise isn't
+    # there while the list or a toon's panel is open (the user).
+    press = {"a": "select", "b": "back", "x": "goTo", "y": "whisper", "rt": "invite"}
     # Only the D-pad, so the left stick still walks.
     for direction in ("up", "down", "left", "right"):
         press[f"dpad_{direction}"] = direction
@@ -462,6 +535,8 @@ class FriendsMapper:
         self.set_bindings(self.bindings)
         self.row = 0
         self.button = 0
+        self._panel = PANEL_BUTTONS  # the toon panel's buttons as last read
+        self._invite_until = float("-inf")  # RT on the list: Invite once the toon's panel shows it
         self._kind: str | None = None
         self._from_popup = False  # a popup was answered: keep the panel's button when it's back
         self._dialog_until = float("-inf")  # Ignore's or Report's dialog may show until then
@@ -494,9 +569,17 @@ class FriendsMapper:
     def update(self, buttons: frozenset[str], now: float, screen: FriendsScreen) -> list[PointerCommand]:
         if screen.popup == "dialog":
             self._dialog_until = now + _DIALOG_SECONDS
+        if screen.kind == "panel":
+            self._panel = panel_buttons(screen)
         _, fired = self._actions.update(buttons, now)
+        invite = []
+        if now < self._invite_until and screen.kind == "panel" and screen.boarding:
+            # RT on the list opened this panel: Invite now its Boarding Group section shows.
+            self._invite_until = float("-inf")
+            invite = self._click(BOARDING, "invite or kick", now)
         commands = self._held_scroll.stop(finish=False) if screen.kind != "list" else []
         commands += self._held_scroll.update({self.bindings.press.get(b) for b in buttons})
+        commands += invite
         fired_rest = []
         for action in fired:
             held = self._held_scroll.repeat(action)
@@ -541,7 +624,8 @@ class FriendsMapper:
         return [PointerCommand("hover", screen.rows[self.row], f"friend {self.row + 1}")]
 
     def _hover_button(self) -> PointerCommand:
-        point, name = PANEL_BUTTONS[self.button]
+        self.button = min(self.button, len(self._panel) - 1)
+        point, name = self._panel[self.button]
         return PointerCommand("hover", point, name)
 
     def _click(self, point: ui.UIPoint, name: str, now: float) -> list[PointerCommand]:
@@ -609,16 +693,22 @@ class FriendsMapper:
             commands = self._click(screen.rows[self.row], f"open friend {self.row + 1}", now)
             self._settle_until = now + PANEL_OPEN_SECONDS + self.settle_seconds
             return commands + [PointerCommand("click", point, name, delay=PANEL_OPEN_SECONDS)]
+        if action == "invite" and screen.rows:
+            # Open the toon's panel; Invite is clicked once it shows (only near an elevator,
+            # where the panel has its Boarding Group section).
+            commands = self._click(screen.rows[self.row], f"open friend {self.row + 1}", now)
+            self._invite_until = now + PANEL_OPEN_SECONDS + self.settle_seconds + INVITE_WAIT_SECONDS
+            return commands
         if action == "back":
             return self._click(LIST_CLOSE, "close friends list", now)
         return []
 
     def _run_panel(self, action: str, screen: FriendsScreen, now: float) -> list[PointerCommand]:
         if action in ("up", "down"):
-            self.button = max(0, min(len(PANEL_BUTTONS) - 1, self.button + (-1 if action == "up" else 1)))
+            self.button = max(0, min(len(self._panel) - 1, self.button + (-1 if action == "up" else 1)))
             return [self._hover_button()]
         if action == "select":
-            point, name = PANEL_BUTTONS[self.button]
+            point, name = self._panel[self.button]
             if point == TOON_DETAILS:
                 # Toon Details opens beside the panel; stay on the same button.
                 self._details_opened_at = now
@@ -626,6 +716,8 @@ class FriendsMapper:
             if point in (IGNORE, REPORT):
                 self._dialog_until = now + self.settle_seconds + _DIALOG_SECONDS
             return self._click(point, name, now)
+        if action == "invite":
+            return self._click(BOARDING, "invite or kick", now) if screen.boarding else []
         if action == "goTo":
             self.button = 1
             return self._click(GO_TO, "go to", now)

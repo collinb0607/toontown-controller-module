@@ -20,6 +20,8 @@ from ttcontroller.book import read_book, read_pages  # noqa: E402
 from ttcontroller.ceo import read_leave  # noqa: E402
 from ttcontroller.elevator import read_hop_off  # noqa: E402
 from ttcontroller.makeatoon import read_make_a_toon  # noqa: E402
+from ttcontroller.boarding import read_boarding  # noqa: E402
+from ttcontroller.dialog import find_cancel_alone  # noqa: E402
 from ttcontroller.friends import read_friends  # noqa: E402
 from ttcontroller.garden import read_garden  # noqa: E402
 from ttcontroller.facility import read_facility  # noqa: E402
@@ -68,6 +70,8 @@ def main() -> None:
         read_leave(w, h, get_pixel)
         read_hop_off(w, h, get_pixel)
         mat = read_make_a_toon(w, h, get_pixel)
+        read_boarding(w, h, get_pixel)
+        find_cancel_alone(w, h, get_pixel)
         read_mailbox(w, h, get_pixel)
         read_golf_green(w, h, get_pixel)
         read_facility(w, h, get_pixel)

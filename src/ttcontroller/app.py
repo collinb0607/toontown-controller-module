@@ -8,7 +8,7 @@ from . import ttr_settings
 from .battle import BattleMapper, BattleScreen, read_screen
 from .combo import ButtonCombo
 from .controller import NEUTRAL, ControllerReader
-from .dialog import DialogMapper, find_ok_cancel
+from .dialog import DialogMapper, find_cancel_alone, find_ok_cancel
 from .cursor import MOVE_TOLERANCE, CursorHider
 from .book import BookMapper, BookScreen, read_book
 from .friends import FriendsMapper, FriendsScreen, read_friends
@@ -17,6 +17,7 @@ from .golf_green import AIM_RADIUS, PIVOT, GolfGreenMapper, GolfGreenScreen, aim
 from .hud import HudMapper, HudScreen, read_hud
 from .facility import FacilityMapper, FacilityScreen, read_facility
 from .mailbox import MailboxMapper, MailboxScreen, read_mailbox
+from .boarding import BoardingMapper, BoardingScreen, read_boarding
 from .vp import read_pie_round
 from .mapper import OverworldMapper, controller_buttons
 from .overlay import Highlighter
@@ -137,6 +138,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     facility_mapper = FacilityMapper()  # Cog HQ facility nametags and their teleport popup
     facility_screen = FacilityScreen()
     mailbox_screen = MailboxScreen()
+    boarding_mapper = BoardingMapper()  # the boarding group panel by a Cog HQ elevator
+    boarding_screen = BoardingScreen()
     dialog_mapper = DialogMapper()  # an OK/Cancel dialog nothing else owns
     stray_dialog = None  # its OK and Cancel, when one is showing
     pregame_mapper = PregameMapper()  # the start-up screen and toon selection
@@ -292,6 +295,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 pie_round = False
                 stray_dialog = None
                 mailbox_screen = MailboxScreen()
+                boarding_mapper.reset()
+                boarding_screen = BoardingScreen()
                 golf_screen = GolfGreenScreen()
                 facility_screen = FacilityScreen()
                 book_screen = BookScreen()
@@ -333,6 +338,11 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     # another one (the estate's "Do you want to teleport?"), handled below.
                     stray_dialog = (find_ok_cancel(frame.width, frame.height, frame.get_pixel)
                                     if screen.kind == "confirm_run" else None)
+                    if stray_dialog is None and in_game and screen.kind is None and not book.is_open:
+                        # A dialog with Cancel alone (a boarding group keeping you in the area):
+                        # A and B both click it.
+                        alone = find_cancel_alone(frame.width, frame.height, frame.get_pixel)
+                        stray_dialog = (alone, alone) if alone is not None else None
                     if ((book.is_open, book.page, book.dialog is not None)
                             != (book_screen.is_open, book_screen.page, book_screen.dialog is not None)
                             and (dry_run or debug)):
@@ -369,6 +379,12 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     if mailbox != mailbox_screen and (dry_run or debug):
                         log(f"Mailbox: {'open' if mailbox.is_open else 'closed'}")
                     mailbox_screen = mailbox
+                    boarding = (read_boarding(frame.width, frame.height, frame.get_pixel)
+                                if in_game and screen.kind is None and shop.kind is None and not book.is_open
+                                else BoardingScreen())
+                    if boarding.kind != boarding_screen.kind and (dry_run or debug):
+                        log(f"Boarding group: {boarding.kind or 'none'}")
+                    boarding_screen = boarding
                     golf = (read_golf_green(frame.width, frame.height, frame.get_pixel)
                             if in_game and screen.kind is None and shop.kind is None and not book.is_open
                             else GolfGreenScreen())
@@ -605,6 +621,16 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                               notches=command.notches, size=command.size, frame_at=command.frame_at)
                 else:
                     hud_mapper.update(frozenset(), now, HudScreen())
+                # The boarding group panel: the right stick opens and closes it; while open the
+                # D-pad and A work its list, and holding B leaves the group. Not over the HUD
+                # (it has the right stick) or a dialog (A and B are its).
+                in_boarding = (free and boarding_screen.kind is not None and not in_hud and stray_dialog is None)
+                if in_boarding:
+                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
+                    taken = boarding_mapper.buttons(boarding_screen)
+                    blocked = blocked | taken
+                    for command in boarding_mapper.update(buttons & (taken | {"b"}), now, boarding_screen):
+                        point(command.kind, command.point, command.name, view, restore=False)
                 controls = mapper.update(state, now, view, blocked=blocked, movement=walk, free=free,
                                          pies=pie_round and free)
                 output.sync(controls_to_keys(controls, watcher.settings))
@@ -617,6 +643,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                             or (free and garden_screen.planting and garden_mapper.hovering)
                             or (in_book and book_mapper.hovering(book_screen))
                             or (in_pregame and pregame_mapper.hovering(pregame_screen))
+                            or (in_boarding and boarding_mapper.hovering(boarding_screen))
                             or (in_options and options_mapper.hovering(options_screen))
                             or (in_mat and mat_mapper.hovering(mat_screen)))
                 if idle and hider.hidden and view is not None and not clicker.busy and not dry_run:

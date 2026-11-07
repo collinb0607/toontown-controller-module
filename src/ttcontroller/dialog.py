@@ -37,6 +37,42 @@ def is_dialog_yellow(c: RGB) -> bool:
     return c[0] > 240 and c[1] > 240 and 160 < c[2] < 215
 
 
+_ALONE_SCAN_X = -0.010  # down a lone Cancel's circle, left of its white X
+_ALONE_X = -0.002  # its middle
+_ALONE_FILL_XS = (-0.15, -0.06, 0.06, 0.15)  # dialog fill either side: no OK beside it
+
+
+def _is_alone_red(c: RGB) -> bool:
+    # A lone Cancel's red, lighter (pinker) at its top: (250, 144, 149) down to (168, 46, 49).
+    r, g, b = c
+    return r > 150 and r - g > 60 and r - b > 60
+
+
+def find_cancel_alone(width: int, height: int, get_pixel: PixelReader) -> ui.UIPoint | None:
+    """A centered dialog with just a red Cancel in its middle: "You cannot leave this area
+    because you are part of a Boarding Group." (boarding_groups_restricted_popup). A or B
+    clicks it."""
+    unit = min(width, height)
+    px = round(width / 2 + _ALONE_SCAN_X * unit)
+    top, bottom = (round(height / 2 + y * unit) for y in (_SCAN_TOP, _SCAN_BOTTOM))
+    reds = [py for py in range(max(top, 0), min(bottom, height)) if _is_alone_red(get_pixel(px, py))]
+    if not reds:
+        return None
+    run = [reds[0]]
+    for py in reds[1:]:
+        if py - run[-1] > 3:
+            break
+        run.append(py)
+    if not 0.018 * unit <= run[-1] - run[0] <= 0.05 * unit:
+        return None
+    y = ((run[0] + run[-1]) / 2 - height / 2) / unit
+    if not all(is_dialog_yellow(get_pixel(*_center(x, y).to_client(width, height))) for x in _ALONE_FILL_XS):
+        return None
+    if not is_dialog_yellow(get_pixel(*_center(0.0, y - 0.05).to_client(width, height))):
+        return None
+    return _center(_ALONE_X, y)
+
+
 def find_ok_cancel(width: int, height: int, get_pixel: PixelReader) -> tuple[ui.UIPoint, ui.UIPoint] | None:
     """The OK and Cancel buttons of the dialog showing, if one is."""
     unit = min(width, height)
