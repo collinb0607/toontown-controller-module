@@ -54,8 +54,11 @@ _RUN_GAP = 3  # pixels
 
 
 def _is_run(c: RGB) -> bool:
-    """Part of a highlighted row: the highlight color, or its dark text."""
-    return _is_colored(c) or sum(c) < 250
+    """Part of a highlighted row: the highlight color, its dark text, or a blend of the
+    two at a letter's edge. A pale highlight (lavender) blends into dimmer pixels that are
+    just as tinted for their brightness (MY PHRASES' S, speedchat_bug_2), while the gray
+    panel past the row's end barely is."""
+    return _is_colored(c) or sum(c) < 250 or max(c) - min(c) > 0.2 * max(c)
 
 
 @dataclass(frozen=True)

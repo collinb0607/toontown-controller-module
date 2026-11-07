@@ -38,6 +38,9 @@ def replay(name):
     # which used to end the row there, so the submenu went unseen.
     ("speedchat_submenu_broken_1920x1009", [(138, 19, 4), (335, 9, None)]),
     ("speedchat_submenu_working_1920x1009", [(138, 19, 9), (335, 18, 3)]),  # SORRY
+    # A pale (lavender) highlight blends into MY PHRASES' S in dim but tinted pixels,
+    # which used to end the row there too.
+    ("speedchat_bug_2_1920x1009", [(138, 18, 1), (335, 19, None)]),
 ])
 def test_reads_open_menus(name, menus):
     w, h, screen = replay(name)
