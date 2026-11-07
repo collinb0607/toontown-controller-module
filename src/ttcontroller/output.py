@@ -156,6 +156,11 @@ class MouseClicker:
     def hold(self, x: int, y: int) -> None:
         self._queue.append((x, y, "hold", False, 0, 0.0))
 
+    def drag(self, x: int, y: int, to_x: int, to_y: int) -> None:
+        """Press on a point, move to another with the button down, and let go there (a
+        slider's knob). Queued like a click, so it happens in order with the rest."""
+        self._queue.append((x, y, "drag", (to_x, to_y), 0, 0.0))
+
     def release(self) -> None:
         """Let go of a hold(), straight away (also safe when nothing is held)."""
         self._queue = deque(job for job in self._queue if job[2] != "hold")
@@ -180,13 +185,29 @@ class MouseClicker:
             if not self._queue:
                 return
             self._job = self._queue.popleft()
-            self._restore_to = self._get_pos() if self._job[3] else None
+            self._restore_to = self._get_pos() if self._job[3] is True else None
             self._step = 0
             self._next_at = now + self._job[5]
         if now < self._next_at:
             return
 
         x, y, click, _, notches, _ = self._job
+        if click == "drag":
+            # Onto the knob, press, halfway, the rest of the way, let go.
+            to_x, to_y = self._job[3]
+            if self._step == 1:
+                self._button(True)
+            elif self._step == 4:
+                self._button(False)
+                self._job = None
+                return
+            else:
+                spot = {0: (x, y), 2: ((x + to_x) // 2, (y + to_y) // 2), 3: (to_x, to_y)}[self._step]
+                self._move(*spot)
+                self.moved_to = spot
+            self._step += 1
+            self._next_at = now + self.STEP_SECONDS
+            return
         if click == "hold" and self._step == 1:
             self._button(True)
             self.holding = True

@@ -147,15 +147,15 @@ class Highlighter:
         # Whether screen captures (the module's own included) leave the frame out.
         self.excluded = bool(exclude_from_capture
                              and _user32.SetWindowDisplayAffinity(self.hwnd, WDA_EXCLUDEFROMCAPTURE))
-        self._shown: tuple | None = None  # (rect, unit) last drawn
+        self._shown: tuple | None = None  # (rect, unit, color) last drawn
         self.visible = False
 
-    def show(self, rect: tuple[int, int, int, int], unit: int) -> None:
+    def show(self, rect: tuple[int, int, int, int], unit: int, color: tuple[int, int, int] = COLOR) -> None:
         """rect: the item's left, top, width and height on screen. unit: the game window's
-        shorter side, which the frame's thickness scales with."""
-        if (rect, unit) != self._shown:
-            self._shown = (rect, unit)
-            self._draw(rect, unit)
+        shorter side, which the frame's thickness scales with. color: the frame's."""
+        if (rect, unit, color) != self._shown:
+            self._shown = (rect, unit, color)
+            self._draw(rect, unit, color)
         if not self.visible:
             _user32.ShowWindow(self.hwnd, SW_SHOWNOACTIVATE)
             self.visible = True
@@ -179,11 +179,11 @@ class Highlighter:
             _user32.DestroyWindow(self.hwnd)
             self.hwnd = None
 
-    def _draw(self, rect: tuple[int, int, int, int], unit: int) -> None:
+    def _draw(self, rect: tuple[int, int, int, int], unit: int, color: tuple[int, int, int] = COLOR) -> None:
         left, top, width, height = rect
         thickness = max(2, round(THICKNESS * unit))
         glow = max(3, round(GLOW * unit))
-        image = frame_image(width, height, thickness, glow, max(2, round(RADIUS * unit)))
+        image = frame_image(width, height, thickness, glow, max(2, round(RADIUS * unit)), color)
         h, w = image.shape[:2]
         pad = frame_pad(thickness, glow)
         screen_dc = _user32.GetDC(None)

@@ -114,3 +114,15 @@ def test_hold_keeps_the_button_down_until_release():
     assert events[-1] == ("up",) and not clicker.holding and not clicker.busy
     clicker.release()  # nothing held: does nothing
     assert events.count(("up",)) == 1
+
+
+def test_drag_presses_moves_and_lets_go_in_order():
+    events = []
+    clicker = MouseClicker(move=lambda x, y: events.append(("move", x, y)),
+                           button=lambda down: events.append(("down" if down else "up",)), get_pos=lambda: (0, 0))
+    clicker.drag(100, 50, 140, 50)
+    clicker.hover(140, 50)  # queued after it, not instead of it
+    for t in range(10):
+        clicker.update(t * 0.05)
+    assert events == [("move", 100, 50), ("down",), ("move", 120, 50), ("move", 140, 50), ("up",), ("move", 140, 50)]
+    assert not clicker.busy and not clicker.holding and clicker.moved_to == (140, 50)

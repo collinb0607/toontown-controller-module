@@ -463,6 +463,8 @@ class PointerCommand:
     # the highlight frame drawn around it. None draws no frame.
     size: tuple[float, float] | None = None
     frame_at: ui.UIPoint | None = None  # hover: draw the frame here instead of around the point
+    color: tuple[int, int, int] | None = None  # hover: the frame's color (None: the usual gold)
+    to: ui.UIPoint | None = None  # drag: press at point, move here, let go
 
 
 @dataclass

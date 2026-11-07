@@ -168,6 +168,13 @@ class PregameMapper:
         self._actions.reset(ignore_held=True)
         self._kind = None
 
+    def pause(self) -> None:
+        """While TTR's Options is open over these screens (read by its own reader): when it
+        closes, toon selection comes back on the same toon, and nothing held fires."""
+        self._actions.reset(ignore_held=True)
+        if self._kind is not None:
+            self._kind = "options"
+
     def hovering(self, screen: PregameScreen) -> bool:
         return screen.kind in ("toons", "confirm")
 

@@ -15,6 +15,7 @@ from .mapper import OverworldMapper, controller_buttons
 from .overlay import Highlighter
 from .output import KeyboardOutput, MouseClicker, cursor_pos, mouse_button_down, send_key
 from .npc import NpcMapper, NpcScreen, read_npc
+from .options import OptionsMapper, OptionsScreen, read_options
 from .pregame import PregameMapper, PregameScreen, read_pregame
 from .shop import ShopMapper, ShopScreen, read_shop
 from .speedchat import SpeedchatMapper, SpeedchatScreen, read_speedchat
@@ -119,6 +120,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     pregame_screen = PregameScreen()
     book_mapper = BookMapper(config.book)
     book_screen = BookScreen()
+    options_mapper = OptionsMapper()  # TTR's own Options window, over anything
+    options_screen = OptionsScreen()
     output = KeyboardOutput(logged_send if dry_run or debug else send_key)
     clicker = MouseClicker()
     hider = CursorHider()
@@ -135,13 +138,13 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     foreground = ForegroundWatcher()
 
     def point(kind: str, target, name: str, view, restore: bool = True, notches: int = 0,
-              delay: float = 0.0, size=None, frame_at=None) -> None:
+              delay: float = 0.0, size=None, frame_at=None, color=None, to=None) -> None:
         """Hover or click an on-screen point (a ui.UIPoint) in the TTR window."""
         nonlocal highlight
         if view is None:
             return
         if kind == "hover":
-            highlight = (frame_at or target, size) if size is not None else None
+            highlight = (frame_at or target, size, color) if size is not None else None
         elif kind == "scroll":
             # What was highlighted is moving; the next hover puts the frame back.
             highlight = None
@@ -156,6 +159,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
             clicker.hold(x, y)
         elif kind == "release":
             clicker.release()
+        elif kind == "drag":
+            clicker.drag(x, y, *view.to_screen(to))
         elif kind == "scroll":
             clicker.scroll(x, y, notches)
         elif kind == "type":
@@ -246,6 +251,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 book_mapper.reset_buttons()
                 pregame_mapper.reset_buttons()
                 pregame_screen = PregameScreen()
+                options_mapper.reset_buttons()
+                options_screen = OptionsScreen()
                 battle_screen = BattleScreen()
                 shop_screen = ShopScreen()
                 npc_screen = NpcScreen()
@@ -262,12 +269,19 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     # rest are skipped while it's open: a blank white page looks like the
                     # battle's waiting screen, the shop takes a dialog over the book for its
                     # own, and the NPC bubble search finds false arrows in its pages.
+                    # TTR's Options window is over everything, so it comes first, and the
+                    # rest aren't read while it's open (their screens are under it).
+                    opts = read_options(frame.width, frame.height, frame.get_pixel)
+                    if (opts.kind, opts.tab) != (options_screen.kind, options_screen.tab) and (dry_run or debug):
+                        log(f"Options: {opts.kind or 'closed'}" + (f" ({opts.tab + 1})" if opts.tab is not None else ""))
+                    options_screen = opts
                     # The start-up screen and toon selection come before all the rest.
-                    pregame = read_pregame(frame.width, frame.height, frame.get_pixel)
+                    pregame = (read_pregame(frame.width, frame.height, frame.get_pixel) if opts.kind is None
+                               else PregameScreen())
                     if pregame.kind != pregame_screen.kind and (dry_run or debug):
                         log(f"Pre-game screen: {pregame.kind or 'none'}")
                     pregame_screen = pregame
-                    in_game = pregame.kind is None
+                    in_game = pregame.kind is None and opts.kind is None
                     book = read_book(frame.width, frame.height, frame.get_pixel) if in_game else BookScreen()
                     screen = (read_screen(frame.width, frame.height, frame.get_pixel) if in_game and not book.is_open
                               else BattleScreen())
@@ -312,15 +326,27 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     last_battle_seen = now
                 if shop_screen.kind is not None:
                     last_shop_seen = now
+                in_options = options_screen.kind is not None
+                if in_options:
+                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
+                    for command in options_mapper.update(buttons, now, options_screen):
+                        point(command.kind, command.point, command.name, view, size=command.size, restore=False,
+                              notches=command.notches, delay=command.delay, frame_at=command.frame_at,
+                              color=command.color, to=command.to)
+                else:
+                    options_mapper.reset_buttons()
+                    options_mapper.update(frozenset(), now, OptionsScreen())
                 in_pregame = pregame_screen.kind is not None
                 if in_pregame:
                     buttons = controller_buttons(state, config.timing.stick_button_threshold)
                     for command in pregame_mapper.update(buttons, now, pregame_screen):
                         point(command.kind, command.point, command.name, view, restore=False, delay=command.delay)
+                elif in_options:
+                    pregame_mapper.pause()  # back to the same toon when Options closes over toon selection
                 else:
                     pregame_mapper.reset_buttons()
-                in_battle = now - last_battle_seen < BATTLE_GRACE_SECONDS
-                in_shop = not in_battle and now - last_shop_seen < BATTLE_GRACE_SECONDS
+                in_battle = not in_options and now - last_battle_seen < BATTLE_GRACE_SECONDS
+                in_shop = not (in_options or in_battle) and now - last_shop_seen < BATTLE_GRACE_SECONDS
                 if in_shop:
                     buttons = controller_buttons(state, config.timing.stick_button_threshold)
                     for command in shop_mapper.update(buttons, now, shop_screen):
@@ -383,7 +409,9 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     # are gone (a gag clicked, the round over) it goes too.
                     highlight = None
                 # In battle or the shop, their bindings own their buttons and the left stick doesn't walk.
-                if in_pregame:
+                if in_options:
+                    blocked = controller_buttons(state, config.timing.stick_button_threshold)
+                elif in_pregame:
                     # Toon selection takes every button. The start-up screen only Start and B:
                     # any other key enters, as TTR says.
                     blocked = (frozenset({"start", "b"}) if pregame_screen.kind == "startup"
@@ -407,7 +435,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 else:
                     blocked = frozenset()
                 # Walking still works mid-conversation (it walks away); not while choosing a task.
-                walk = not (in_battle or in_shop or in_book or npc_screen.kind == "tasks"
+                walk = not (in_options or in_battle or in_shop or in_book or npc_screen.kind == "tasks"
                             or (in_pregame and pregame_screen.kind != "startup"))
                 for control in book_mapper.take_taps():
                     mapper.tap(control, now)
@@ -415,7 +443,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     highlight = None
                 # The book and friends list let go of their own holds while open (the kart, a
                 # scroll triangle); one held when it closes, or the other opens, is let go here.
-                holder = "book" if in_book else "friends" if in_friends else None
+                holder = "options" if in_options else "book" if in_book else "friends" if in_friends else None
                 if holder is None or holder != last_holder:
                     clicker.release()
                 last_holder = holder
@@ -427,7 +455,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 # Book pages without controls of their own don't hover anything.
                 idle = not (in_battle or in_shop or in_speedchat or in_friends or npc_screen.kind == "tasks"
                             or (in_book and book_mapper.hovering(book_screen))
-                            or (in_pregame and pregame_mapper.hovering(pregame_screen)))
+                            or (in_pregame and pregame_mapper.hovering(pregame_screen))
+                            or (in_options and options_mapper.hovering(options_screen)))
                 if idle and hider.hidden and view is not None and not clicker.busy and not dry_run:
                     spot = view.park_spot()
                     # Checked against where the cursor really is: the mouse may have moved it.
@@ -459,12 +488,12 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
             if highlighter is not None:
                 view = TTRView(foreground.ttr_hwnd) if active and foreground.ttr_hwnd else None
                 if highlight is not None and view is not None and hider.hidden:
-                    target, (w, h) = highlight
+                    target, (w, h), color = highlight
                     left, top, width, height = client_rect(view.hwnd)
                     unit = min(width, height)
                     x, y = view.to_screen(target)
                     w, h = round(w * unit), round(h * unit)
-                    highlighter.show((x - w // 2, y - h // 2, w, h), unit)
+                    highlighter.show((x - w // 2, y - h // 2, w, h), unit, *([color] if color else []))
                 else:
                     highlighter.hide()
                 highlighter.pump()
