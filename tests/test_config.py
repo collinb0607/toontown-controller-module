@@ -107,3 +107,11 @@ def test_hide_cursor():
     assert parse({"hide_cursor": True})[0].hide_cursor
     config, warnings = parse({"hide_cursor": "yes"})
     assert not config.hide_cursor and warnings
+
+
+def test_toggle_hud():
+    from ttcontroller.config import parse
+    assert not parse({})[0].toggle_hud
+    assert parse({"toggle_hud": True})[0].toggle_hud
+    config, warnings = parse({"toggle_hud": 1})
+    assert not config.toggle_hud and warnings

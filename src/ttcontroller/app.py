@@ -11,6 +11,7 @@ from .controller import NEUTRAL, ControllerReader
 from .cursor import MOVE_TOLERANCE, CursorHider
 from .book import BookMapper, BookScreen, read_book
 from .friends import FriendsMapper, FriendsScreen, read_friends
+from .hud import HudMapper, HudScreen, read_hud
 from .mapper import OverworldMapper, controller_buttons
 from .overlay import Highlighter
 from .output import KeyboardOutput, MouseClicker, cursor_pos, mouse_button_down, send_key
@@ -77,7 +78,8 @@ def controller_used(state) -> bool:
 
 
 def make_mapper(config: module_config.Config) -> OverworldMapper:
-    return OverworldMapper(config.bindings, config.movement, config.timing, config.auto_sprint)
+    return OverworldMapper(config.bindings, config.movement, config.timing, config.auto_sprint,
+                           config.toggle_hud)
 
 
 def controls_to_keys(controls: set[str], settings: ttr_settings.TTRSettings) -> set[str]:
@@ -116,6 +118,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     speedchat_screen = SpeedchatScreen()
     friends_mapper = FriendsMapper(config.friends)
     friends_screen = FriendsScreen()
+    hud_mapper = HudMapper()
+    hud_screen = HudScreen()
     pregame_mapper = PregameMapper()  # the start-up screen and toon selection
     pregame_screen = PregameScreen()
     book_mapper = BookMapper(config.book)
@@ -258,6 +262,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 npc_screen = NpcScreen()
                 speedchat_screen = SpeedchatScreen()
                 friends_screen = FriendsScreen()
+                hud_screen = HudScreen()
                 book_screen = BookScreen()
                 output.release_all()
             else:
@@ -298,8 +303,21 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     if shop.kind != shop_screen.kind and (dry_run or debug):
                         log(f"Gag shop screen: {shop.kind or 'none'}")
                     shop_screen = shop
+                    # The gags/trunk and tasks HUDs, kept up by toggle_hud. Read before NPCs:
+                    # the bubble search finds arrows in the trunk's SOS cards, as in the book.
+                    # (They only take buttons with nothing else open; see free below.)
+                    shown = mapper.shown
+                    hud = (read_hud(frame.width, frame.height, frame.get_pixel,
+                                    gags="showGags" in shown, tasks="showTasks" in shown)
+                           if (in_game and {"showGags", "showTasks"} & shown and not book.is_open
+                               and screen.kind is None and shop.kind is None)
+                           else HudScreen())
+                    if hud.kind != hud_screen.kind and (dry_run or debug):
+                        log(f"HUD: {hud.kind or 'none'}")
+                    hud_screen = hud
                     npc = (read_npc(frame.width, frame.height, frame.get_pixel, frame.rgb())
-                           if in_game and screen.kind is None and shop.kind is None and not book.is_open
+                           if (in_game and screen.kind is None and shop.kind is None and not book.is_open
+                               and hud.kind != "trunk")
                            else NpcScreen())
                     if npc.kind != npc_screen.kind and (dry_run or debug):
                         log(f"NPC screen: {npc.kind or 'none'}")
@@ -448,12 +466,24 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     clicker.release()
                 last_holder = holder
                 controls = mapper.update(state, now, view, blocked=blocked, movement=walk)
+                free = not (in_options or in_pregame or in_battle or in_shop or npc_screen.kind is not None or in_speedchat
+                            or in_friends or book_screen.is_open)
+                in_hud = free and hud_screen.kind is not None
+                if in_hud:
+                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
+                    blocked = blocked | hud_mapper.buttons(hud_screen)
+                    for command in hud_mapper.update(buttons, now, hud_screen):
+                        point(command.kind, command.point, command.name, view, restore=False,
+                              notches=command.notches, size=command.size, frame_at=command.frame_at)
+                else:
+                    hud_mapper.update(frozenset(), now, HudScreen())
                 output.sync(controls_to_keys(controls, watcher.settings))
                 for button in mapper.take_clicks():
                     point("click", button.center, button.name, view)
                 # Nothing to hover: while the cursor is hidden, leave it off the game area.
                 # Book pages without controls of their own don't hover anything.
                 idle = not (in_battle or in_shop or in_speedchat or in_friends or npc_screen.kind == "tasks"
+                            or (in_hud and hud_mapper.hovering())
                             or (in_book and book_mapper.hovering(book_screen))
                             or (in_pregame and pregame_mapper.hovering(pregame_screen))
                             or (in_options and options_mapper.hovering(options_screen)))

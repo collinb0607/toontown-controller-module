@@ -32,6 +32,11 @@ SPECIAL_ACTIONS = {
 }
 
 
+# With toggle_hud on, these TTR controls stay held from one press to the
+# next instead of only while the button is held.
+TOGGLE_CONTROLS = frozenset({"showMap", "showTasks", "showGags"})
+
+
 def default_bindings() -> Bindings:
     return Bindings(
         press={
@@ -80,15 +85,17 @@ def controller_buttons(state: ControllerState, threshold: float) -> frozenset[st
 
 class OverworldMapper:
     def __init__(self, bindings: Bindings | None = None, tuning: MovementTuning = MovementTuning(),
-                 timing: Timing | None = None, auto_sprint: bool = False):
+                 timing: Timing | None = None, auto_sprint: bool = False, toggle_show: bool = False):
         self.bindings = bindings or default_bindings()
         self.tuning = tuning
         self.timing = timing or Timing()
         # When on, each run (a full tilt forward, not a walk) starts with a sprint.
         self.auto_sprint = auto_sprint
         self._sprint_toggled = False
+        # Map, tasks and gags: a press shows them and the next press hides them.
+        self.toggles = TOGGLE_CONTROLS if toggle_show else frozenset()
         self._actions = ButtonActions(self.bindings, self.timing.hold_seconds,
-                                      is_oneshot=lambda action: action in SPECIAL_ACTIONS)
+                                      is_oneshot=lambda action: action in SPECIAL_ACTIONS or action in self.toggles)
         self.reset()
 
     def reset(self, ignore_held: bool = False) -> None:
@@ -98,6 +105,12 @@ class OverworldMapper:
         self._unite = False
         self._was_running = False
         self._sprint_started_at: float | None = None
+        self._toggled: set[str] = set()  # toggle controls shown right now
+
+    @property
+    def shown(self) -> frozenset[str]:
+        """The toggle controls shown right now (showGags, showTasks, showMap)."""
+        return frozenset(self._toggled)
 
     def take_sprint_toggle(self) -> bool:
         """Whether auto-sprint was turned on or off since the last call."""
@@ -124,6 +137,11 @@ class OverworldMapper:
         controls |= held
         for action in fired:
             self._run(action, now, screen)
+        # A shown map, tasks or gags goes away when another mode takes its button
+        # (a battle, the book), as it would if the button were let go.
+        self._toggled = {c for c in self._toggled
+                         if not any(self.bindings.press.get(b) == c for b in blocked)}
+        controls |= self._toggled
 
         self._update_sprint(controls, now)
         self._pulses = {c: until for c, until in self._pulses.items() if now < until}
@@ -152,6 +170,8 @@ class OverworldMapper:
             self._unite = True
             if screen is None or not screen.is_visible(ui.SPEEDCHAT_MENU):
                 self._clicks.append(ui.SPEEDCHAT)
+        elif action in self.toggles:
+            self._toggled ^= {action}
         else:
             self._pulse(action, now)
 

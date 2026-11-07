@@ -191,6 +191,19 @@ TARGET = ui.Button("which cog/toon", TARGET_BACK,
 WAITING = ui.Button("waiting for other toons", WAITING_BACK,
                     tuple(_center(x, y) for y in (-0.02, 0.088) for x in (-0.12, -0.05, 0.05, 0.12, 0.19)),
                     is_white, min_hits=8)
+
+
+def _is_back_blue(c: RGB) -> bool:
+    r, g, b = c
+    return b > 150 and b - r > 90 and b - g > 50
+
+
+# Its Back button's blue too: the trunk HUD's SOS cards are white at all of WAITING's
+# spots (trunk_hud_bug), but its panel's blue is greyer.
+WAITING_BACK_BLUE = ui.Button("waiting back button", WAITING_BACK,
+                              tuple(WAITING_BACK.offset(dx, dy) for dx, dy in
+                                    ((0, 0), (-0.02, 0), (0.02, 0), (0, -0.012), (0, 0.012))),
+                              _is_back_blue, min_hits=4)
 TRUNK_RED = ui.Button("trunk", TRUNK, tuple(_center(0.302, y) for y in (-0.2, -0.1, 0.0, 0.1, 0.2)),
                       is_panel_red, min_hits=5)
 TRUNK_BLUE = ui.Button("trunk", TRUNK,
@@ -366,7 +379,7 @@ def read_screen(width: int, height: int, get_pixel: PixelReader) -> BattleScreen
         targets = (_scan_arrows(width, height, get_pixel, COG_ARROW_ROW)
                    or _scan_arrows(width, height, get_pixel, TOON_ARROW_ROW))
         return BattleScreen("target", targets=tuple(targets))
-    if ui.is_visible(WAITING, width, height, get_pixel):
+    if ui.is_visible(WAITING, width, height, get_pixel) and ui.is_visible(WAITING_BACK_BLUE, width, height, get_pixel):
         return BattleScreen("waiting", **_read_choices(width, height, get_pixel))
     # Other OK/Cancel dialogs (like the gag shop's) have their buttons lower down.
     buttons = find_ok_cancel(width, height, get_pixel)

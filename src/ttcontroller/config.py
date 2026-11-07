@@ -47,6 +47,8 @@ HELP = {
                  "Actions: " + "; ".join(f"{name} = {desc}" for name, desc in SPEEDCHAT_ACTIONS.items()),
     "friends": "Bindings used while the friends list or a toon's panel is open. "
                "Actions: " + "; ".join(f"{name} = {desc}" for name, desc in FRIENDS_ACTIONS.items()),
+    "toggle_hud": "true: the map, tasks and gags buttons (showMap, showTasks, showGags) "
+                             "show them on one press and hide them on the next. false: shown while held.",
     "book": "Bindings used while the shticker book is open. "
             "Actions: " + "; ".join(f"{name} = {desc}" for name, desc in BOOK_ACTIONS.items()),
 }
@@ -67,6 +69,9 @@ class Config:
     # Keep TTR's custom cursor turned off in its settings.json, so the cursor can be
     # fully hidden while the controller is in use.
     hide_cursor: bool = False
+    # The map, tasks and gags buttons (showMap, showTasks, showGags) toggle: a press
+    # shows them and the next press hides them, instead of showing them while held.
+    toggle_hud: bool = False
     timing: Timing = field(default_factory=Timing)
 
 
@@ -85,6 +90,7 @@ def to_json(config: Config) -> dict:
         },
         "auto_sprint": config.auto_sprint,
         "hide_cursor": config.hide_cursor,
+        "toggle_hud": config.toggle_hud,
         "movement": asdict(config.movement),
         "timing": asdict(config.timing),
     }
@@ -161,7 +167,7 @@ def parse(data: dict) -> tuple[Config, list[str]]:
         movement=_merge_numbers(defaults.movement, data.get("movement", {}), warnings, "movement"),
         timing=_merge_numbers(defaults.timing, data.get("timing", {}), warnings, "timing"),
     )
-    for name in ("auto_sprint", "hide_cursor"):
+    for name in ("auto_sprint", "hide_cursor", "toggle_hud"):
         value = data.get(name, getattr(defaults, name))
         if isinstance(value, bool):
             config = replace(config, **{name: value})

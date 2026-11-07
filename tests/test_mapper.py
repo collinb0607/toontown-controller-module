@@ -152,3 +152,33 @@ def test_left_trigger_is_the_unite_hotkey():
     m.update(ControllerState(), 1.05, FakeScreen(ui.SPEEDCHAT_MENU))
     assert m.take_unite()
     assert m.take_clicks() == []
+
+
+def test_map_tasks_and_gags_are_held_by_default():
+    m = OverworldMapper()
+    assert "showMap" in m.update(state("dpad_up"), 0.0)
+    assert "showMap" not in m.update(state(), 0.1)
+
+
+def test_toggle_hud_shows_on_one_press_and_hides_on_the_next():
+    m = OverworldMapper(toggle_show=True)
+    for button, control in (("dpad_up", "showMap"), ("x", "showTasks"), ("y", "showGags")):
+        assert control in m.update(state(button), 0.0)
+        assert control in m.update(state(), 0.1)  # let go: still shown
+        assert control in m.update(state(), 5.0)
+        assert control not in m.update(state(button), 5.1)  # pressed again: hidden
+        assert control not in m.update(state(), 5.2)
+
+
+def test_toggle_doesnt_change_other_held_controls():
+    m = OverworldMapper(toggle_show=True)
+    assert "jump" in m.update(state("a"), 0.0)
+    assert "jump" not in m.update(state(), 0.1)
+
+
+def test_a_toggled_control_goes_when_another_mode_takes_its_button():
+    m = OverworldMapper(toggle_show=True)
+    m.update(state("y"), 0.0)
+    assert "showGags" in m.update(state(), 0.1)
+    assert "showGags" not in m.update(state(), 0.2, blocked=frozenset({"y"}))  # a battle starts
+    assert "showGags" not in m.update(state(), 0.3)
