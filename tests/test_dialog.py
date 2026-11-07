@@ -35,3 +35,8 @@ def test_a_held_when_the_dialog_appears_does_nothing_until_let_go():
     assert m.update(frozenset({"a"}), 0.0, ("OK", "CANCEL")) == []
     m.update(frozenset(), 0.1, ("OK", "CANCEL"))
     assert [c.point for c in m.update(frozenset({"a"}), 0.2, ("OK", "CANCEL"))] == ["OK"]
+
+
+def test_a_red_picture_isnt_a_cancel_button():
+    # The new toon tutorial's popup: a red picture where Cancel would be, and only an OK.
+    assert replay("new_toon_popup_1920x1009", find_ok_cancel) is None

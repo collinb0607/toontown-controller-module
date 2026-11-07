@@ -13,7 +13,8 @@ The rows aren't kept as a fixed layout: each read scans a column through the
 right-aligned controls (and one down the middle, for centered buttons) and finds
 what's showing, so it works at any scroll position and on every tab.
 
-Popups over it: an open dropdown's list (the same blue, taller than the box), the
+Popups over it: an open dropdown's list (the same blue, taller than the box; a long
+one, like Video's Resolution, runs past the list's clip and scrolls with the page), the
 usual OK/Cancel-style dialog (ToonSync's Copy and Close) dimming the window, and the
 Pronoun Picker: three lavender lists, the choice in a purple band, green arrows.
 
@@ -58,6 +59,10 @@ _HELP_X, _HELP_SIDE_X = -0.4054, -0.4123  # the ?'s white middle, and its blue l
 _KNOB_X, _KNOB_TOP, _KNOB_BOTTOM = 0.4093, -0.1219, 0.2834
 DROPDOWN_STEP = 0.0446  # between the items of an open dropdown
 _DROPDOWN_PAD = 0.004  # from the list's outline to its first item
+# A list cut off by the clip: its items are found from their lines of text, down a strip
+# through the start of each (they're left-aligned), every few pixels across.
+_TEXT_STRIP = (0.03, 0.13)  # from the list's left edge
+_TEXT_MIN_HEIGHT = 0.012
 
 # The frame's color in Options: the tabs' blue (gold is hard to see on the beige).
 FRAME_BLUE = (29, 144, 227)
@@ -111,8 +116,10 @@ class OptionsScreen:
     rows: tuple[Row, ...] = ()  # fully in view, top to bottom
     cut: tuple[bool, bool] = (False, False)  # a control cut off at the top, at the bottom
     can_scroll: tuple[bool, bool] = (False, False)  # up, down (from the knob)
-    items: tuple[ui.UIPoint, ...] = ()  # an open dropdown's items, top to bottom
+    items: tuple[ui.UIPoint, ...] = ()  # an open dropdown's items in view, top to bottom
     item_size: tuple[float, float] = (0.0, 0.0)
+    more: tuple[bool, bool] = (False, False)  # an open dropdown cut off at the top, at the bottom
+    list_edges: tuple[float | None, float | None] = (None, None)  # its top and bottom, if in view
     dialog: tuple[ui.UIPoint, ui.UIPoint] | None = None
 
 
@@ -133,6 +140,15 @@ def _is_vivid(c: ui.RGB) -> bool:
     r, g, b = c
     return (_is_outline_blue(c) or (r > 235 and g > 225 and b < 120)
             or (r < 175 and g < 135 and b < 100 and r - b > 50))
+
+
+def _is_list_fill(c: ui.RGB) -> bool:
+    r, g, b = c
+    return b > 240 and g > 225 and 195 < r < 240
+
+
+def _is_text(c: ui.RGB) -> bool:
+    return max(c) < 130
 
 
 def _is_track_blue(c: ui.RGB) -> bool:
@@ -266,12 +282,42 @@ def read_options(width: int, height: int, get_pixel: PixelReader) -> OptionsScre
         return Row("slider", to_y(py), to_x(left), to_x(right), SLIDER_KNOB[1], knob=to_x(mid),
                    help_y=find_help(py))
 
+    def cut_list(a: int, b: int, qx: int) -> OptionsScreen | None:
+        """A dropdown's list running past the clip: mostly its pale blue fill down the
+        column, with its items where the lines of text are."""
+        if sum(_is_list_fill(get_pixel(qx, py)) for py in range(a, b + 1)) < 0.6 * (b - a + 1):
+            return None
+        hi, lo = a > top, b < bottom - 2  # its top and bottom outlines in view
+        if hi and not any(_is_outline_blue(get_pixel(qx, py)) for py in range(a, min(b, a + 4) + 1)):
+            return None
+        left, right = edges((a + b) // 2, qx)
+        xs = range(left + round(_TEXT_STRIP[0] * unit), left + round(_TEXT_STRIP[1] * unit), 3)
+        lines: list[list[int]] = []
+        for py in range(a, b + 1):
+            if any(_is_text(get_pixel(x, py)) for x in xs):
+                if lines and py - lines[-1][1] <= 2:
+                    lines[-1][1] = py
+                else:
+                    lines.append([py, py])
+        ys = [to_y((s + e) / 2) for s, e in lines
+              if s > top + 1 and e < bottom - 3 and (e - s + 1) / unit >= _TEXT_MIN_HEIGHT]
+        if not ys:
+            return None
+        mid = (to_x(left) + to_x(right)) / 2
+        return OptionsScreen("dropdown", tab, items=tuple(_center(mid, y) for y in ys),
+                             item_size=((right - left) / unit, DROPDOWN_STEP), more=(not hi, not lo),
+                             list_edges=(to_y(a) if hi else None, to_y(b) if lo else None))
+
     rows: list[Row] = []
     cut = [False, False]
     for column in (_RIGHT_X, _MIDDLE_X):
         qx = round(width / 2 + column * unit)
         for a, b in runs(column):
             h = (b - a + 1) / unit
+            if column == _RIGHT_X and h > _MAX_HEIGHT and (a <= top or b >= bottom - 2):
+                found = cut_list(a, b, qx)
+                if found is not None:
+                    return found
             if a <= top or b >= bottom - 2:
                 if column == _RIGHT_X:
                     cut[0 if a <= top else 1] = True
@@ -293,7 +339,8 @@ def read_options(width: int, height: int, get_pixel: PixelReader) -> OptionsScre
                 ys = [to_y(a) + _DROPDOWN_PAD + DROPDOWN_STEP * (i + 0.5) for i in range(count)]
                 mid = (to_x(left) + to_x(right)) / 2
                 return OptionsScreen("dropdown", tab, items=tuple(_center(mid, y) for y in ys),
-                                     item_size=((right - left) / unit, DROPDOWN_STEP))
+                                     item_size=((right - left) / unit, DROPDOWN_STEP),
+                                     list_edges=(to_y(a), to_y(b)))
             if h > _MAX_HEIGHT:
                 continue
             mid_y = (a + b) // 2
@@ -397,6 +444,14 @@ _MOVES = ("up", "down", "left", "right", "scrollUp", "scrollDown")
 
 
 @dataclass
+class _ListScroll:
+    """A wheel notch turned past the end of a dropdown's list in view."""
+    direction: int  # +1 down, -1 up
+    edges: tuple[float | None, float | None]  # the list's top and bottom before, if in view
+    y: float  # the hovered item's middle before
+
+
+@dataclass
 class _Scroll:
     direction: int  # +1 down, -1 up
     before: tuple[Row, ...]
@@ -429,6 +484,8 @@ class OptionsMapper:
         self.column = 0  # in the Pronoun Picker
         self._settle_until = 0.0
         self._scroll: _Scroll | None = None
+        self._list_scroll: _ListScroll | None = None
+        self._notch: float | None = None  # how far a notch moved a dropdown's list, once seen
         self._stick: tuple[float, float | None] | None = None  # (when, row y) after a right stick scroll
         # Where the last drag left a slider's knob (row y, knob x, when): a read taken
         # while it's still moving would be behind.
@@ -487,6 +544,8 @@ class OptionsMapper:
             commands += self._arrive(screen)
         elif screen.kind == "options":
             commands += self._follow_scroll(screen, now)
+        elif screen.kind == "dropdown" and self._list_scroll is not None:
+            commands += self._follow_list(screen)
         for action in fired:
             if now < self._settle_until:
                 break
@@ -495,7 +554,7 @@ class OptionsMapper:
 
     def _arrive(self, screen: OptionsScreen) -> list[PointerCommand]:
         came_from, self._kind = self._kind, screen.kind
-        self._scroll = self._stick = None
+        self._scroll = self._stick = self._list_scroll = None
         if screen.kind == "options":
             if screen.tab != self.tab:
                 # A new tab (or Options just opened): nothing hovered until a direction is pressed.
@@ -545,6 +604,29 @@ class OptionsMapper:
         row = self._row(screen, y, near=0.05)
         return self._hover_row(row) if row is not None else []
 
+    def _follow_list(self, screen: OptionsScreen) -> list[PointerCommand]:
+        """After a notch past the end of a dropdown's list: the item that came next. How
+        far the list moved comes from an edge in view both times (or the last notch's)."""
+        s, self._list_scroll = self._list_scroll, None
+        d = None
+        for before, after in zip(s.edges, screen.list_edges):
+            if before is not None and after is not None:
+                d = after - before
+                break
+        if d is not None and abs(d) > 0.002:
+            self._notch = abs(d)
+        elif d is None and self._notch is not None:
+            d = -s.direction * self._notch
+        ys = [p.y for p in screen.items]
+        if d is None:
+            # Not known how far it went: the last item in view that way.
+            self.item = len(ys) - 1 if s.direction > 0 else 0
+        else:
+            # The next item, or the same one if it didn't move (the end of the list).
+            y = s.y + d + (s.direction * DROPDOWN_STEP if abs(d) > 0.002 else 0.0)
+            self.item = min(range(len(ys)), key=lambda i: abs(ys[i] - y))
+        return [self._hover_item(screen)]
+
     def _slide(self, row: Row, direction: int, now: float) -> list[PointerCommand]:
         """Drag a slider's knob a step along its track."""
         knob = row.knob
@@ -568,9 +650,21 @@ class OptionsMapper:
             return self._run_options(action, screen, now)
         if screen.kind == "dropdown":
             if action in ("up", "down"):
-                self.item = max(0, min(len(screen.items) - 1, self.item + (1 if action == "down" else -1)))
+                direction = 1 if action == "down" else -1
+                self.item = max(0, min(len(screen.items) - 1, self.item))
+                item = self.item + direction
+                if 0 <= item < len(screen.items):
+                    self.item = item
+                    return [self._hover_item(screen)]
+                if screen.more[direction > 0]:
+                    # Past the items in view: the list scrolls with the page, a notch at a time.
+                    point = screen.items[self.item]
+                    self._list_scroll = _ListScroll(direction, screen.list_edges, point.y)
+                    self._settle_until = now + self.settle_seconds
+                    return [PointerCommand("scroll", point, "dropdown list", notches=-direction)]
                 return [self._hover_item(screen)]
             if action == "select":
+                self.item = max(0, min(len(screen.items) - 1, self.item))
                 return self._click(screen.items[self.item], f"dropdown item {self.item + 1}", now)
             if action in ("back", "close"):
                 return self._click(_center(DROPDOWN_CLOSE_X, screen.items[0].y), "close dropdown", now)

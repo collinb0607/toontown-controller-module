@@ -82,6 +82,14 @@ def test_reads_an_open_dropdown():
     assert [px(p) for p in screen.items] == [(1246, 587), (1246, 632), (1246, 677)]
 
 
+def test_reads_a_long_dropdown_cut_off_by_the_clip():
+    # Video's Resolution: its list runs past the bottom; the item cut in half is left out.
+    screen = replay("options_video_resolution_dropdown_1920x1009")
+    assert screen.kind == "dropdown" and screen.more == (False, True)
+    assert [px(p) for p in screen.items] == [(1101, y) for y in (554, 598, 642, 686, 730, 774)]
+    assert screen.list_edges[0] is not None and screen.list_edges[1] is None
+
+
 def test_reads_the_toonsync_popup_as_a_dialog():
     screen = replay("options_gameplay_toonsync_popup_1920x1009")
     assert [px(p) for p in screen.dialog] == [(904, 812), (1015, 812)]
@@ -381,3 +389,44 @@ def test_frames_in_options_are_the_tabs_blue():
     assert c.color == o.FRAME_BLUE
     (c,) = OptionsMapper().update(frozenset(), 0.0, PRONOUNS)
     assert c.color == o.FRAME_BLUE
+
+
+def _list(ys, more, edges):
+    return OptionsScreen("dropdown", 3, items=tuple(o._center(0.14, y) for y in ys), item_size=(0.46, 0.0446),
+                         more=more, list_edges=edges)
+
+
+def test_past_the_items_in_view_a_long_dropdown_scrolls_a_notch():
+    step = o.DROPDOWN_STEP
+    first = _list([0.05 + step * i for i in range(6)], (False, True), (0.024, None))
+    m = OptionsMapper()
+    m.update(frozenset(), 0.0, first)
+    m.item = 5  # the last in view
+    (c,) = press(m, "dpad_down", 1.0, first)
+    assert (c.kind, c.notches, c.point) == ("scroll", -1, first.items[5])
+    # It moved up by 2.5 items: the top's still in view, so the next item is known.
+    moved = _list([0.05 - 2.5 * step + step * i for i in range(2, 9)], (False, True), (0.024 - 2.5 * step, None))
+    (c,) = m.update(frozenset(), 2.0, moved)
+    assert c.kind == "hover" and abs(c.point.y - (first.items[5].y - 2.5 * step + step)) < 1e-9
+    # Its top gone and its bottom not yet in view: the last notch's distance is used.
+    m.item = len(moved.items) - 1
+    (c,) = press(m, "dpad_down", 3.0, moved)
+    assert c.kind == "scroll"
+    again = _list([moved.items[-1].y - 2.5 * step + step * i for i in range(-5, 3)], (True, True), (None, None))
+    (c,) = m.update(frozenset(), 4.0, again)
+    assert abs(c.point.y - (moved.items[-1].y - 2.5 * step + step)) < 1e-9
+    # At the very end (nothing more below) it stays put.
+    end = _list([0.1, 0.1 + step], (True, False), (None, 0.1 + 1.5 * step))
+    m.item = 1
+    (c,) = press(m, "dpad_down", 5.0, end)
+    assert (c.kind, c.point) == ("hover", end.items[1])
+
+
+def test_up_past_the_top_of_a_long_dropdown_scrolls_up():
+    step = o.DROPDOWN_STEP
+    screen = _list([-0.1 + step * i for i in range(6)], (True, False), (None, -0.1 + 5.5 * step))
+    m = OptionsMapper()
+    m.update(frozenset(), 0.0, screen)
+    m.item = 0
+    (c,) = press(m, "dpad_up", 1.0, screen)
+    assert (c.kind, c.notches) == ("scroll", 1)

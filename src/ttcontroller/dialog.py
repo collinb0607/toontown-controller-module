@@ -1,7 +1,9 @@
 """TTR's OK/Cancel dialogs: a pale yellow panel centered on the window, with a blue
 OK circle and a red Cancel circle side by side near its bottom. Dialogs differ in
 height (the run prompt, saving and loading a gag preset), so the buttons are found
-by scanning for the Cancel circle rather than at a fixed spot.
+by scanning for the Cancel circle rather than at a fixed spot. OK's blue circle must
+be beside it too: the new toon tutorial's popup has a red picture where Cancel would
+be (new_toon_popup), and only an OK (read by the garden's OK-only popup reader).
 """
 
 from collections.abc import Callable
@@ -14,6 +16,7 @@ PixelReader = Callable[[int, int], RGB]
 _OK_X, _CANCEL_X = -0.0555, 0.0541
 _SCAN_X = 0.047  # through the Cancel circle, left of its white X
 _SCAN_TOP, _SCAN_BOTTOM = -0.1, 0.35
+_OK_SIDE = 0.012  # OK's blue either side of its white tick
 _FILL_XS = (-0.15, -0.13, 0.13, 0.15)  # dialog fill on either side of the buttons (the narrowest dialog, Exit Toontown?, is 0.34 wide)
 
 
@@ -23,6 +26,11 @@ def _center(x: float, y: float) -> ui.UIPoint:
 
 def _is_cancel_red(c: RGB) -> bool:
     return c[0] > 170 and c[1] < 90 and c[2] < 95 and c[0] - c[1] > 100
+
+
+def _is_ok_blue(c: RGB) -> bool:
+    r, g, b = c
+    return b > 140 and b - r > 50
 
 
 def is_dialog_yellow(c: RGB) -> bool:
@@ -41,7 +49,10 @@ def find_ok_cancel(width: int, height: int, get_pixel: PixelReader) -> tuple[ui.
     fill = sum(is_dialog_yellow(get_pixel(*_center(x, y).to_client(width, height))) for x in _FILL_XS)
     if fill < 3:
         return None
-    return _center(_OK_X, y), _center(_CANCEL_X, y)
+    ok = _center(_OK_X, y)
+    if not all(_is_ok_blue(get_pixel(*ok.offset(dx, 0.0).to_client(width, height))) for dx in (-_OK_SIDE, _OK_SIDE)):
+        return None
+    return ok, _center(_CANCEL_X, y)
 
 
 class DialogMapper:

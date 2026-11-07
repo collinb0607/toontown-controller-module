@@ -153,3 +153,12 @@ def test_a_or_b_clicks_ok():
     assert press(m, screen, "a", 0.0) == [("click", screen.ok)]
     assert press(m, screen, "b", 1.0) == [("click", screen.ok)]
     assert press(m, screen, "y", 2.0) == []
+
+
+def test_the_new_toon_tutorials_ok_popup_is_read_too():
+    # The same OK-only card (and not a gag shop dialog: its red picture isn't a Cancel).
+    from ttcontroller.shop import read_shop
+    assert replay("new_toon_popup_1920x1009", read_shop).kind is None
+    screen = replay("new_toon_popup_1920x1009", read_garden)
+    assert near(screen.ok, 960, 817) and screen.popup
+    assert press(GardenMapper(), screen, "a", 0.0) == [("click", screen.ok)]
