@@ -67,6 +67,25 @@ FRIENDS_CLOSE = Button("friends list close", _FRIENDS_X, around(_FRIENDS_X, 0.00
 # The green button in the top-left. Clicking it opens speedchat, and clicking again closes it.
 SPEEDCHAT = Button("speedchat", UIPoint("left", 0.1015, 0.035))
 
+
+def _is_whisper_x(c: RGB) -> bool:
+    return is_red(c) or (c[0] > 220 and c[1] > 170 and c[2] < 100)  # gold while hovered
+
+
+def _is_whisper_yellow(c: RGB) -> bool:
+    return c[0] > 240 and c[1] > 240 and 160 < c[2] < 215
+
+
+# Whispering to a toon: a pale yellow "Whisper To: <name>" bar next to the speedchat
+# buttons, with a red X right of them that ends the whisper (friends_whisper_popup,
+# 1920x1009; left-anchored like the speedchat buttons). Its fill is checked near its
+# left end, which every name length has.
+_WHISPER_X = UIPoint("left", 0.1695, 0.0332)
+WHISPER_CLOSE = Button("whisper close", _WHISPER_X, around(_WHISPER_X, 0.011), _is_whisper_x, min_hits=3)
+WHISPER_BAR = Button("whisper bar", _WHISPER_X,
+                     tuple(UIPoint("left", x, y) for x, y in ((0.21, 0.013), (0.25, 0.013), (0.21, 0.09), (0.25, 0.09))),
+                     _is_whisper_yellow, min_hits=4)
+
 # The open speedchat menu, detected by a column of points down its light left
 # margin (no text ever reaches it). The menu's top sits about 0.49 above the
 # window's center; measured at 1920x1009, 1552x611 and 539x786.

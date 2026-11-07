@@ -75,6 +75,16 @@ def test_b_closes_speedchat_before_friends_list():
     assert m.take_clicks() == [ui.SPEEDCHAT]
 
 
+def test_b_ends_a_whisper_after_speedchat_and_before_the_friends_list():
+    whisper = (ui.WHISPER_CLOSE, ui.WHISPER_BAR)
+    m = OverworldMapper()
+    m.update(state("b"), 0.0, FakeScreen(ui.SPEEDCHAT_MENU, *whisper))
+    assert m.take_clicks() == [ui.SPEEDCHAT]
+    m.update(state(), 0.1)
+    m.update(state("b"), 0.2, FakeScreen(*whisper, ui.FRIENDS_CLOSE))
+    assert m.take_clicks() == [ui.WHISPER_CLOSE]
+
+
 def test_holding_rb_clicks_once():
     m = OverworldMapper()
     screen = FakeScreen(ui.FRIENDS_CLOSE)

@@ -31,7 +31,7 @@ class ScreenView(Protocol):
 SPECIAL_ACTIONS = {
     "sprint": "turn auto-sprint on or off (when on, every run starts with a sprint)",
     "friendsList": "open the friends list, or close it if it's open",
-    "back": "close whatever is open (speedchat, then the friends list); at the CEO, leave a seltzer bottle or golf ball, and at the CFO, a crane",
+    "back": "close whatever is open (speedchat, then a whisper, then the friends list); at the CEO, leave a seltzer bottle or golf ball, and at the CFO, a crane",
     "speedchat": "open speedchat, or close it if it's open",
     "unite": "open speedchat at the UNITE! menu, on Toon-Up (works in battle too)",
     "mail": "close Clarabelle's mail popup, or click her icon if there's no popup (only "
@@ -176,6 +176,9 @@ class OverworldMapper:
             self._was_running = False
         elif action == "back" and screen is not None and screen.is_visible(ui.SPEEDCHAT_MENU):
             self._clicks.append(ui.SPEEDCHAT)
+        elif (action == "back" and screen is not None and screen.is_visible(ui.WHISPER_CLOSE)
+              and screen.is_visible(ui.WHISPER_BAR)):
+            self._clicks.append(ui.WHISPER_CLOSE)  # stop whispering
         elif action == "back" and self._free and screen is not None and (leave := screen.read(read_leave)):
             # The CEO's seltzer bottle or golf ball, or the CFO's crane: its X leave button (read on the press).
             self._clicks.append(ui.Button("leave", leave))

@@ -345,7 +345,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     if speedchat.is_open != speedchat_screen.is_open and (dry_run or debug):
                         log(f"Speedchat menu: {'open' if speedchat.is_open else 'closed'}")
                     speedchat_screen = speedchat
-                    friends = read_friends(frame.width, frame.height, frame.get_pixel) if menus else FriendsScreen()
+                    friends = (read_friends(frame.width, frame.height, frame.get_pixel,
+                                            dialogs=friends_mapper.expects_dialog(now)) if menus else FriendsScreen())
                     if friends.kind != friends_screen.kind and (dry_run or debug):
                         log(f"Friends screen: {friends.kind or 'none'}")
                     friends_screen = friends
@@ -360,7 +361,10 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 if screenshot:
                     log("Screenshot (LB + RB).")
                     mapper.tap("screenshot", now)
-                if battle_screen.kind is not None:
+                # The run prompt only follows a battle screen: one out of nowhere is another
+                # dialog laid out the same (Ignore A Player's), not a battle.
+                if battle_screen.kind is not None and (battle_screen.kind != "confirm_run"
+                                                       or now - last_battle_seen < BATTLE_GRACE_SECONDS):
                     last_battle_seen = now
                 if shop_screen.kind is not None:
                     last_shop_seen = now

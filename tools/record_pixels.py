@@ -51,6 +51,7 @@ def main() -> None:
         npc = read_npc(w, h, get_pixel)
         speedchat = read_speedchat(w, h, get_pixel, look_for_unite=True)
         friends = read_friends(w, h, get_pixel)
+        read_friends(w, h, get_pixel, dialogs=True)  # Ignore's and Report's dialogs too
         book = read_book(w, h, get_pixel)
         read_pages(w, h, get_pixel)
         pregame = read_pregame(w, h, get_pixel)

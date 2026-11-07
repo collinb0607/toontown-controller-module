@@ -84,6 +84,11 @@ Working now:
 | Speedchat | D-pad up/down move · right or A open a submenu · left or B go back · A say the phrase · B in the top menu closes speedchat |
 | Friends list | D-pad up/down move (scrolls at the ends) · left/right change page · A open the toon · X Go To (teleport) · Y Whisper · B close |
 | Go To's "switch district?" popup | A Yes · B No |
+| Friends on someone already a friend | A Stop being Toon friends · B Cancel · then "Are you sure?": A Yes · B No · "no longer your friend": A or B OK |
+| Asking a toon to be friends | B Cancel (while waiting for their answer) |
+| A toon asks to be your friend | A OK · B No |
+| Ignore and Report (from a toon's panel) | A Ignore or Stop Ignoring · B Cancel · Report: D-pad up/down move through the reasons, A pick one, B Cancel |
+| Whispering (the "Whisper To:" bar) | B ends the whisper (its X), after closing speedchat if it's open and before closing the toon's panel or the list |
 | A toon's panel | D-pad up/down move between its buttons · A press · X Go To (teleport) · Y Whisper · B close Toon Details, then the panel |
 | Shticker book | LB/RB previous/next page · LT/RT previous/next tab along the page's top · B close |
 | Options & Codes page | Stick/D-pad up/down move · left/right change the SpeedChat color · A press · Exit Toontown's dialog: A OK · B cancel |
