@@ -103,7 +103,8 @@ def test_task_choice_up_down_choose_and_cancel():
     assert press(m, screen, 3.0, "dpad_down")[-1].point == screen.choices[2]  # stays at the bottom
     assert [(c.kind, c.point) for c in press(m, screen, 4.0, "a")] == [("click", screen.choices[2])]
     m.update(frozenset(), 5.0, screen)
-    assert [c.point for c in press(m, screen, 6.0, "b")] == [TASK_CANCEL]
+    assert [c.point for c in press(m, screen, 6.0, "b")] == [screen.cancel]
+    assert screen.cancel.y == pytest.approx(TASK_CANCEL.y, abs=0.002)  # three tasks: Cancel at the bottom
 
 
 def test_one_task():
@@ -111,3 +112,39 @@ def test_one_task():
     m = NpcMapper()
     m.update(frozenset(), 0.0, screen)
     assert press(m, screen, 1.0, "dpad_down")[-1].name == "task 1"
+
+
+def test_handing_in_a_task_shows_a_shorter_panel():
+    """Handing one in shows only the tasks that are done (here one), so Cancel is higher."""
+    screen = replay("task_turn_in_1920x1009")
+    assert screen.kind == "tasks"
+    assert [c.y for c in screen.choices] == pytest.approx([-0.175], abs=0.005)
+    assert screen.cancel.y == pytest.approx(0.184, abs=0.005)
+    m = NpcMapper()
+    assert [c.point for c in m.update(frozenset(), 0.0, screen)] == [screen.choices[0]]
+    assert press(m, screen, 1.0, "dpad_down")[-1].point == screen.choices[0]  # only one
+    assert [(c.kind, c.point) for c in press(m, screen, 2.0, "a")] == [("click", screen.choices[0])]
+    m.update(frozenset(), 3.0, screen)
+    assert [c.point for c in press(m, screen, 4.0, "b")] == [screen.cancel]
+
+
+def test_after_speedchat_the_hover_goes_back_to_the_same_task():
+    screen = replay("task_choice_1920x1009")
+    m = NpcMapper()
+    m.update(frozenset(), 0.0, screen)
+    press(m, screen, 1.0, "dpad_down")
+    assert m.choosing
+    # Speedchat opens over the panel (the app stops running this mapper), then closes.
+    m.reset_buttons()
+    m.rehover()
+    assert [c.point for c in m.update(frozenset(), 5.0, screen)] == [screen.choices[1]]
+
+
+def test_a_new_panel_after_the_old_one_went_starts_at_the_top():
+    screen = replay("task_choice_1920x1009")
+    m = NpcMapper()
+    m.update(frozenset(), 0.0, screen)
+    press(m, screen, 1.0, "dpad_down")
+    m.forget()  # the panel timed out
+    assert not m.choosing
+    assert [c.point for c in m.update(frozenset(), 5.0, screen)] == [screen.choices[0]]

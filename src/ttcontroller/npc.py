@@ -8,7 +8,9 @@ for that arrow or circle with white bubble around it, using numpy.
 
 The task choice panel is anchored to the left edge and centered vertically, in
 units of the window's shorter side (see ui.py). It holds one to three tasks, each
-with a Choose button down its right side, and a Cancel button at the bottom.
+with a Choose button down its right side, and a Cancel button at the bottom. It's
+only as tall as its tasks, so Cancel moves: choosing a new task can offer three,
+handing one in shows only the tasks that are done.
 """
 
 from collections.abc import Callable
@@ -28,7 +30,9 @@ def _left(x: float, y: float) -> ui.UIPoint:
     return ui.UIPoint("left", x, y, "center")
 
 
-TASK_CANCEL = _left(0.325, 0.3964)
+TASK_CANCEL = _left(0.325, 0.3964)  # with three tasks
+_CANCEL_XS = (0.265, 0.39)  # either end of the Cancel button
+_CANCEL_BOTTOM = 0.48  # the lowest the panel goes
 _CHOOSE_X = 0.423  # right of the "Choose" lettering
 _CHOOSE_TOP, _CHOOSE_BOTTOM = -0.49, 0.25
 
@@ -45,10 +49,9 @@ def _is_hover_blue(c: RGB) -> bool:
     return c[2] > 200 and c[0] < 120 and c[1] > 150
 
 
-TASK_BORDER = ui.Button("task choice", TASK_CANCEL, tuple(_left(0.474, y) for y in (-0.3, -0.1, 0.1, 0.3)),
-                        _is_border_olive, min_hits=4)
-TASK_CANCEL_BUTTON = ui.Button("task choice cancel", TASK_CANCEL,
-                               (_left(0.265, 0.401), _left(0.39, 0.401)), _is_button_yellow, min_hits=2)
+# The panel's right border, where even a one-task panel (handing one in) has it.
+TASK_BORDER = ui.Button("task choice", TASK_CANCEL, tuple(_left(0.474, 0.05 * i) for i in range(-3, 4)),
+                        _is_border_olive, min_hits=7)
 
 
 @dataclass(frozen=True)
@@ -73,6 +76,23 @@ def _scan_choose(width: int, height: int, get_pixel: PixelReader) -> list[ui.UIP
             else:
                 runs.append([py, py])
     return [_left(_CHOOSE_X - 0.035, ((a + b) / 2 - height / 2) / unit) for a, b in runs if b - a >= 0.01 * unit]
+
+
+def _find_cancel(width: int, height: int, get_pixel: PixelReader, below: ui.UIPoint) -> ui.UIPoint | None:
+    """The Cancel button below the last Choose button: yellow at both its ends."""
+    unit = min(width, height)
+    xs = [_left(x, 0).to_client(width, height)[0] for x in _CANCEL_XS]
+    top = below.to_client(width, height)[1] + round(0.05 * unit)
+    bottom = min(height - 1, round(height / 2 + _CANCEL_BOTTOM * unit))
+    run = None
+    for py in range(top, bottom + 1, 2):
+        if all(_is_button_yellow(get_pixel(px, py)) for px in xs):
+            run = (run[0], py) if run else (py, py)
+        elif run:
+            break
+    if run is None or run[1] - run[0] < 0.015 * unit:
+        return None
+    return _left(TASK_CANCEL.x, ((run[0] + run[1]) / 2 - height / 2) / unit)
 
 
 def _is_bubble_corner(rgb: np.ndarray, x: int, y: int, unit: int) -> bool:
@@ -130,11 +150,11 @@ def find_bubble_button(rgb: np.ndarray) -> tuple[bool, float, float] | None:
 
 
 def read_npc(width: int, height: int, get_pixel: PixelReader, rgb: np.ndarray | None = None) -> NpcScreen:
-    if ui.is_visible(TASK_BORDER, width, height, get_pixel) and ui.is_visible(TASK_CANCEL_BUTTON, width, height,
-                                                                             get_pixel):
-        choices = _scan_choose(width, height, get_pixel)
-        if choices:
-            return NpcScreen("tasks", choices=tuple(choices[:3]), cancel=TASK_CANCEL)
+    if ui.is_visible(TASK_BORDER, width, height, get_pixel):
+        choices = _scan_choose(width, height, get_pixel)[:3]
+        cancel = _find_cancel(width, height, get_pixel, choices[-1]) if choices else None
+        if cancel is not None:
+            return NpcScreen("tasks", choices=tuple(choices), cancel=cancel)
     if rgb is not None:
         found = find_bubble_button(rgb)
         if found is not None:
@@ -170,6 +190,7 @@ class NpcMapper:
         self.choice = 0
         self._kind: str | None = None
         self._settle_until = 0.0
+        self._rehover = False
 
     def set_bindings(self, bindings: Bindings) -> None:
         self.bindings = bindings
@@ -188,6 +209,21 @@ class NpcMapper:
     def reset_buttons(self) -> None:
         self._actions.reset(ignore_held=True)
 
+    @property
+    def choosing(self) -> bool:
+        """Whether the task panel was showing when this last ran."""
+        return self._kind == "tasks"
+
+    def forget(self) -> None:
+        """The NPC screen has gone: whatever shows next is set up fresh."""
+        self._kind = None
+        self._rehover = False
+
+    def rehover(self) -> None:
+        """Put the hover back on the same task, e.g. after speedchat moved the cursor."""
+        self._kind = None
+        self._rehover = True
+
     def update(self, buttons: frozenset[str], now: float, screen: NpcScreen) -> list[PointerCommand]:
         _, fired = self._actions.update(buttons & self.buttons(screen), now)
         if now < self._settle_until:
@@ -196,8 +232,10 @@ class NpcMapper:
         if screen.kind != self._kind:
             self._kind = screen.kind
             if screen.kind == "tasks":
-                self.choice = 0
+                if not self._rehover:
+                    self.choice = 0
                 commands.append(self._hover_choice(screen))
+            self._rehover = False
         for action in fired:
             commands += self._run(action, screen, now)
         return commands

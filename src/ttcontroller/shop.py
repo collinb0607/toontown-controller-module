@@ -5,6 +5,9 @@ The shop panel is centered on the window like the battle panels, so positions
 are offsets from the center in units of the window's shorter side (see ui.py).
 Measured from captures at 1920x1009, 1156x326 and tall 502x821. In narrow
 windows TTR pushes the preset and trash buttons off the left edge.
+
+After a trolley game the shop has two buttons on the right instead of Done:
+Exit to Playground above, and Play Again where Done is.
 """
 
 from collections.abc import Callable
@@ -37,11 +40,22 @@ SAVE_PRESET = _center(-0.5352, 0.0104)
 LOAD_PRESET = _center(-0.4262, 0.0104)
 TRASH = _center(-0.4807, 0.1343)  # turns delete mode on and off
 DONE = _center(0.4787, 0.1343)
+PLAY_AGAIN = DONE  # the trolley shop's, in Done's place
+EXIT = _center(0.4782, 0.0208)  # the trolley shop's Exit to Playground
+# Spots on Exit's blue edges, away from its door icon and lettering (green panel in
+# the normal shop).
+_EXIT_PROBES = tuple(_center(x, y) for x, y in ((0.3964, -0.0045), (0.5600, -0.0045), (0.4787, -0.0223)))
+GAG_SIZE = (0.072, 0.050)  # a gag button, for the highlight frame
 
 
 def is_shop_green(c: RGB) -> bool:
     r, g, b = c
     return g > 180 and g - r > 80 and g - b > 55
+
+
+def is_button_blue(c: RGB) -> bool:
+    r, g, b = c
+    return b > 200 and b - r > 100
 
 
 def is_delete_red(c: RGB) -> bool:
@@ -75,6 +89,7 @@ class ShopScreen:
     delete_mode: bool = False
     ok: ui.UIPoint | None = None  # dialog
     cancel: ui.UIPoint | None = None
+    trolley: bool = False  # after a trolley game: Exit to Playground and Play Again instead of Done
 
 
 def read_shop(width: int, height: int, get_pixel: PixelReader) -> ShopScreen:
@@ -90,7 +105,8 @@ def read_shop(width: int, height: int, get_pixel: PixelReader) -> ShopScreen:
             delete_mode = any(is_delete_red(c) for row in colors for c in row)
             test = is_delete_red if delete_mode else is_usable_gag
             usable = tuple(tuple(test(c) for c in row) for row in colors)
-            return ShopScreen("shop", usable=usable, delete_mode=delete_mode)
+            trolley = all(looks(p, is_button_blue) for p in _EXIT_PROBES)
+            return ShopScreen("shop", usable=usable, delete_mode=delete_mode, trolley=trolley)
     # A preset dialog dims the shop behind it.
     buttons = find_ok_cancel(width, height, get_pixel)
     if buttons is not None:
@@ -105,13 +121,14 @@ SHOP_ACTIONS = {
     "buy_max": "buy as many of the highlighted gag as fit (delete them all in delete mode)",
     "delete_mode": "turn delete mode on or off",
     "save_preset": "save your gags as your usual set", "load_preset": "buy your usual set",
-    "back": "leave delete mode, cancel a dialog, or leave the shop",
+    "back": "leave delete mode, cancel a dialog, or leave the shop (Exit to Playground after a trolley game)",
+    "play_again": "after a trolley game: Play Again",
 }
 
 
 def default_shop_bindings() -> Bindings:
     press = {"a": "select", "b": "back", "x": "delete_mode", "y": "buy_max",
-             "lb": "save_preset", "rb": "load_preset"}
+             "lb": "save_preset", "rb": "load_preset", "rt": "play_again"}
     for direction in DIRECTIONS:
         press[f"dpad_{direction}"] = direction
         press[f"ls_{direction}"] = direction
@@ -190,7 +207,7 @@ class ShopMapper:
 
     def _hover_gag(self) -> PointerCommand:
         r, c = self.gag
-        return PointerCommand("hover", cell(r, c), self._gag_name())
+        return PointerCommand("hover", cell(r, c), self._gag_name(), size=GAG_SIZE)
 
     def _gag_name(self) -> str:
         r, c = self.gag
@@ -245,5 +262,9 @@ class ShopMapper:
             if screen.delete_mode:
                 self._toggled = True
                 return self._click(TRASH, "leave delete mode", now)
+            if screen.trolley:
+                return self._click(EXIT, "exit to playground", now)
             return self._click(DONE, "done", now)
+        if action == "play_again" and screen.trolley:
+            return self._click(PLAY_AGAIN, "play again", now)
         return []

@@ -176,6 +176,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     last_battle_seen = -BATTLE_GRACE_SECONDS
     last_shop_seen = -BATTLE_GRACE_SECONDS
     was_in_menu = False
+    npc_was_paused = False  # the task panel was showing when speedchat or the friends list opened
     bumper_combo = ButtonCombo()  # LB + RB: a screenshot
     last_holder: str | None = None  # the menu that may hold the mouse button down ("book"/"friends")
     log("Running. Press Ctrl+C to quit." + (" (dry run: keys are printed, not sent)" if dry_run else ""))
@@ -326,20 +327,35 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                         point(command.kind, command.point, command.name, view, size=command.size, restore=False)
                 else:
                     shop_mapper.reset_buttons()
+                if in_shop and shop_screen.kind != "shop":
+                    highlight = None
                 # NPC screens come and go with the conversation, so no grace period.
-                in_npc = not (in_battle or in_shop) and npc_screen.kind is not None
+                npc_open = not (in_battle or in_shop) and npc_screen.kind is not None
+                # Speedchat first when both are open: it closes as soon as a phrase is said.
+                # Both are above battles and NPC screens too (a conversation, the task panel),
+                # which pause while one is open.
+                in_speedchat = not in_shop and speedchat_screen.is_open
+                in_friends = not (in_shop or in_speedchat) and friends_screen.kind is not None
+                in_npc = npc_open and not (in_speedchat or in_friends)
+                if (in_speedchat or in_friends) and npc_mapper.choosing:
+                    # The task panel is under it (speedchat can cover the panel, so it may
+                    # not be read until speedchat closes).
+                    npc_was_paused = True
                 if in_npc:
+                    if npc_was_paused:
+                        npc_mapper.rehover()  # back on the task it was on
+                        npc_was_paused = False
                     buttons = controller_buttons(state, config.timing.stick_button_threshold)
                     for command in npc_mapper.update(buttons, now, npc_screen):
                         point(command.kind, command.point, command.name, view, size=command.size, restore=False)
                 else:
                     npc_mapper.reset_buttons()
-                # Speedchat first when both are open: it closes as soon as a phrase is said.
-                # Both are above battles too, which pause while one is open.
-                in_speedchat = not (in_shop or in_npc) and speedchat_screen.is_open
-                in_friends = not (in_shop or in_npc or in_speedchat) and friends_screen.kind is not None
+                    if not (npc_open or in_speedchat or in_friends):
+                        # Gone (the panel's timer can close it): nothing to come back to.
+                        npc_mapper.forget()
+                        npc_was_paused = False
                 # The book is under both (speedchat and the friends list open over it).
-                in_book = not (in_battle or in_shop or in_npc or in_speedchat or in_friends) and book_screen.is_open
+                in_book = not (in_battle or in_shop or npc_open or in_speedchat or in_friends) and book_screen.is_open
                 in_menu = in_speedchat or in_friends or in_book
                 for menu_open, menu_mapper, menu_screen in ((in_speedchat, speedchat_mapper, speedchat_screen),
                                                             (in_friends, friends_mapper, friends_screen),

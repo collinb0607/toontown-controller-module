@@ -142,3 +142,42 @@ def test_presets_and_their_dialogs():
 def test_rb_and_lb_are_shop_buttons():
     assert {"lb", "rb", "x", "y"} <= ShopMapper().buttons
     assert shop.default_shop_bindings().press["rb"] == "load_preset"
+
+
+# --- After a trolley game: Exit to Playground and Play Again instead of Done ---
+
+@pytest.mark.parametrize("name", ["shop_trolley_1920x1009", "shop_trolley_2_1920x1009", "shop_trolley_3_1920x1009"])
+def test_trolley_shop(name):
+    screen = replay(name)
+    assert screen.kind == "shop" and screen.trolley
+    assert screen.usable == grid(*["......."] * 7)  # pouch full (80/80)
+
+
+@pytest.mark.parametrize("name", ["shop_1920x1009", "shop_1156x326", "shop_502x821", "shop_done_hover_1920x1009",
+                                  "shop_delete_mode_1920x1009"])
+def test_the_normal_shop_isnt_the_trolley_one(name):
+    assert not replay(name).trolley
+
+
+TROLLEY = ShopScreen("shop", usable=BUYABLE, trolley=True)
+
+
+def test_trolley_shop_b_exits_and_rt_plays_again():
+    m = ShopMapper()
+    m.update(frozenset(), 0.0, TROLLEY)
+    assert [(c.kind, c.point) for c in press(m, TROLLEY, 1.0, "b")] == [("click", shop.EXIT)]
+    m.update(frozenset(), 2.0, TROLLEY)
+    assert [(c.kind, c.point) for c in press(m, TROLLEY, 3.0, "rt")] == [("click", shop.PLAY_AGAIN)]
+
+
+def test_rt_does_nothing_in_the_normal_shop():
+    m = ShopMapper()
+    m.update(frozenset(), 0.0, SHOP)
+    assert press(m, SHOP, 1.0, "rt") == []
+
+
+def test_gags_carry_the_highlight_frame():
+    m = ShopMapper()
+    hover = m.update(frozenset(), 0.0, SHOP)[0]
+    assert hover.kind == "hover" and hover.size == shop.GAG_SIZE
+    assert press(m, SHOP, 1.0, "dpad_left")[-1].size == shop.GAG_SIZE
