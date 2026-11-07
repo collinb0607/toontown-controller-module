@@ -28,6 +28,9 @@ _X_SEARCH = 0.06
 _X_COLUMNS = (-0.01, 0.01)  # either side of the X's white strokes
 
 ICON = ui.UIPoint("right", -0.2061, 0.0595)  # Clarabelle's icon, measured at 1920x1009
+# With the Silly Meter's gauge up too, the gauge takes that slot and Clarabelle moves one
+# slot left (clarabelle_bug, 1920x1009: about 1575, 60), so that slot is searched next.
+_SLOT_STEP = 138 / 1009
 _ICON_SEARCH = 0.02  # how far from ICON its center is looked for
 _ICON_STEP = 2  # pixels
 
@@ -113,8 +116,16 @@ def _find_close(width: int, height: int, get_pixel: PixelReader) -> ui.UIPoint |
 
 
 def _find_icon(width: int, height: int, get_pixel: PixelReader) -> ui.UIPoint | None:
+    for slot in range(2):
+        found = _find_icon_near(width, height, get_pixel, ICON.offset(-slot * _SLOT_STEP, 0))
+        if found is not None:
+            return found
+    return None
+
+
+def _find_icon_near(width: int, height: int, get_pixel: PixelReader, where: ui.UIPoint) -> ui.UIPoint | None:
     unit = min(width, height)
-    cx, cy = ICON.to_client(width, height)
+    cx, cy = where.to_client(width, height)
     reach = round(_ICON_SEARCH * unit)
 
     def count(x: int, y: int, ring) -> int:

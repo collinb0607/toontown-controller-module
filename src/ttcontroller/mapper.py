@@ -16,6 +16,7 @@ from typing import Any, Protocol
 from . import ui
 from .ceo import read_leave
 from .elevator import read_hop_off
+from .silly import read_silly, toggle as silly_toggle
 from .mail import read_mail
 from .bindings import Bindings, ButtonActions, stick_buttons
 from .controller import ControllerState
@@ -37,7 +38,9 @@ SPECIAL_ACTIONS = {
     "unite": "open speedchat at the UNITE! menu, on Toon-Up (works in battle too)",
     "mail": "close Clarabelle's mail popup, or click her icon if there's no popup (only "
             "while walking around, with nothing else open); in the VP's pie round, throw a pie "
-            "(TTR's performAction, held while the button is)",
+            "(TTR's performAction, held while the button is). A tap: it fires when let go of, since holding it "
+            "is the Silly Meter",
+    "sillyMeter": "hold: open the Silly Meter (top right), or close it if it's open",
 }
 
 
@@ -64,7 +67,8 @@ def default_bindings() -> Bindings:
             "rs_up": "lookUp",
             "rs_down": "lookDown",
         },
-        hold={"start": "options"},
+        # Holding RT: the Silly Meter (a tap, let go of before the hold, is still Clarabelle's mail).
+        hold={"start": "options", "rt": "sillyMeter"},
     )
 
 
@@ -199,6 +203,11 @@ class OverworldMapper:
             self._unite = True
             if screen is None or not screen.is_visible(ui.SPEEDCHAT_MENU):
                 self._clicks.append(ui.SPEEDCHAT)
+        elif action == "sillyMeter":
+            # Open the Silly Meter, or close it if it's open (only while walking around).
+            if self._free and not self._pies and screen is not None:
+                for command in silly_toggle(screen.read(read_silly)):
+                    self._clicks.append(ui.Button(command.name, command.point))
         elif action == "mail":
             # Read only on the press: the popup's size follows its message, so it's searched for.
             if self._free and not self._pies and screen is not None:

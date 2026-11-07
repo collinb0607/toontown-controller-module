@@ -18,6 +18,7 @@ from .hud import HudMapper, HudScreen, read_hud
 from .facility import FacilityMapper, FacilityScreen, read_facility
 from .mailbox import MailboxMapper, MailboxScreen, read_mailbox
 from .boarding import BoardingMapper, BoardingScreen, read_boarding
+from .silly import SillyMapper, SillyScreen, read_silly
 from .vp import read_pie_round
 from .mapper import OverworldMapper, controller_buttons
 from .overlay import Highlighter
@@ -140,6 +141,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     mailbox_screen = MailboxScreen()
     boarding_mapper = BoardingMapper()  # the boarding group panel by a Cog HQ elevator
     boarding_screen = BoardingScreen()
+    silly_mapper = SillyMapper()  # the Silly Meter's card, open
+    silly_screen = SillyScreen()
     dialog_mapper = DialogMapper()  # an OK/Cancel dialog nothing else owns
     stray_dialog = None  # its OK and Cancel, when one is showing
     pregame_mapper = PregameMapper()  # the start-up screen and toon selection
@@ -297,6 +300,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 mailbox_screen = MailboxScreen()
                 boarding_mapper.reset()
                 boarding_screen = BoardingScreen()
+                silly_mapper.reset_buttons()
+                silly_screen = SillyScreen()
                 golf_screen = GolfGreenScreen()
                 facility_screen = FacilityScreen()
                 book_screen = BookScreen()
@@ -385,6 +390,12 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     if boarding.kind != boarding_screen.kind and (dry_run or debug):
                         log(f"Boarding group: {boarding.kind or 'none'}")
                     boarding_screen = boarding
+                    silly = (read_silly(frame.width, frame.height, frame.get_pixel)
+                             if in_game and screen.kind is None and shop.kind is None and not book.is_open
+                             else SillyScreen())
+                    if silly.card != silly_screen.card and (dry_run or debug):
+                        log(f"Silly Meter: {'open' if silly.card else 'closed'}")
+                    silly_screen = silly
                     golf = (read_golf_green(frame.width, frame.height, frame.get_pixel)
                             if in_game and screen.kind is None and shop.kind is None and not book.is_open
                             else GolfGreenScreen())
@@ -624,6 +635,14 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 # The boarding group panel: the right stick opens and closes it; while open the
                 # D-pad and A work its list, and holding B leaves the group. Not over the HUD
                 # (it has the right stick) or a dialog (A and B are its).
+                # The Silly Meter's card: D-pad left its details, B closes the top card.
+                if free and silly_screen.card and stray_dialog is None:
+                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
+                    blocked = blocked | SillyMapper.BUTTONS
+                    for command in silly_mapper.update(buttons, now, silly_screen):
+                        point(command.kind, command.point, command.name, view)
+                else:
+                    silly_mapper.reset_buttons()
                 in_boarding = (free and boarding_screen.kind is not None and not in_hud and stray_dialog is None)
                 if in_boarding:
                     buttons = controller_buttons(state, config.timing.stick_button_threshold)
