@@ -499,6 +499,7 @@ class PointerCommand:
     size: tuple[float, float] | None = None
     frame_at: ui.UIPoint | None = None  # hover: draw the frame here instead of around the point
     color: tuple[int, int, int] | None = None  # hover: the frame's color (None: the usual gold)
+    pointer: bool = False  # hover: a pulsing pointer left of the item instead of a frame round it
     to: ui.UIPoint | None = None  # drag: press at point, move here, let go
 
 

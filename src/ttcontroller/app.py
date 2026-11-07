@@ -23,6 +23,7 @@ from .output import KeyboardOutput, MouseClicker, cursor_pos, mouse_button_down,
 from .npc import NpcMapper, NpcScreen, read_npc
 from .options import OptionsMapper, OptionsScreen, read_options
 from .pregame import PregameMapper, PregameScreen, read_pregame
+from .makeatoon import MakeAToonMapper, MakeAToonScreen, read_make_a_toon
 from .shop import ShopMapper, ShopScreen, read_shop
 from .speedchat import SpeedchatMapper, SpeedchatScreen, read_speedchat
 from .window import ForegroundWatcher, TTRView, client_rect, make_dpi_aware
@@ -141,6 +142,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     book_screen = BookScreen()
     options_mapper = OptionsMapper()  # TTR's own Options window, over anything
     options_screen = OptionsScreen()
+    mat_mapper = MakeAToonMapper()  # Make-a-Toon, from an empty slot on toon selection
+    mat_screen = MakeAToonScreen()
     output = KeyboardOutput(logged_send if dry_run or debug else send_key)
     clicker = MouseClicker()
     hider = CursorHider()
@@ -159,13 +162,13 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     foreground = ForegroundWatcher()
 
     def point(kind: str, target, name: str, view, restore: bool = True, notches: int = 0,
-              delay: float = 0.0, size=None, frame_at=None, color=None, to=None) -> None:
+              delay: float = 0.0, size=None, frame_at=None, color=None, to=None, pointer=False) -> None:
         """Hover or click an on-screen point (a ui.UIPoint) in the TTR window."""
         nonlocal highlight
         if view is None:
             return
         if kind == "hover":
-            highlight = (frame_at or target, size, color) if size is not None else None
+            highlight = (frame_at or target, size, color, pointer) if size is not None else None
         elif kind == "scroll":
             # What was highlighted is moving; the next hover puts the frame back.
             highlight = None
@@ -274,6 +277,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 pregame_screen = PregameScreen()
                 options_mapper.reset_buttons()
                 options_screen = OptionsScreen()
+                mat_mapper.reset_buttons()
+                mat_screen = MakeAToonScreen()
                 battle_screen = BattleScreen()
                 shop_screen = ShopScreen()
                 npc_screen = NpcScreen()
@@ -302,13 +307,18 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     if (opts.kind, opts.tab) != (options_screen.kind, options_screen.tab) and (dry_run or debug):
                         log(f"Options: {opts.kind or 'closed'}" + (f" ({opts.tab + 1})" if opts.tab is not None else ""))
                     options_screen = opts
-                    # The start-up screen and toon selection come before all the rest.
-                    pregame = (read_pregame(frame.width, frame.height, frame.get_pixel) if opts.kind is None
-                               else PregameScreen())
+                    # Make-a-Toon, the start-up screen and toon selection come before all the rest.
+                    mat = (read_make_a_toon(frame.width, frame.height, frame.get_pixel) if opts.kind is None
+                           else MakeAToonScreen())
+                    if mat.kind != mat_screen.kind and (dry_run or debug):
+                        log(f"Make-a-Toon: {mat.kind or 'closed'}")
+                    mat_screen = mat
+                    pregame = (read_pregame(frame.width, frame.height, frame.get_pixel)
+                               if opts.kind is None and mat.kind is None else PregameScreen())
                     if pregame.kind != pregame_screen.kind and (dry_run or debug):
                         log(f"Pre-game screen: {pregame.kind or 'none'}")
                     pregame_screen = pregame
-                    in_game = pregame.kind is None and opts.kind is None
+                    in_game = pregame.kind is None and opts.kind is None and mat.kind is None
                     book = read_book(frame.width, frame.height, frame.get_pixel) if in_game else BookScreen()
                     screen = (read_screen(frame.width, frame.height, frame.get_pixel) if in_game and not book.is_open
                               else BattleScreen())
@@ -410,6 +420,14 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 else:
                     options_mapper.reset_buttons()
                     options_mapper.update(frozenset(), now, OptionsScreen())
+                in_mat = mat_screen.kind is not None and not in_options
+                if in_mat:
+                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
+                    for command in mat_mapper.update(buttons, now, mat_screen):
+                        point(command.kind, command.point, command.name, view, size=command.size, restore=False,
+                              pointer=command.pointer)
+                else:
+                    mat_mapper.reset_buttons()
                 in_pregame = pregame_screen.kind is not None
                 if in_pregame:
                     buttons = controller_buttons(state, config.timing.stick_button_threshold)
@@ -483,7 +501,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     # are gone (a gag clicked, the round over) it goes too.
                     highlight = None
                 # In battle or the shop, their bindings own their buttons and the left stick doesn't walk.
-                if in_options:
+                if in_options or in_mat:
                     blocked = controller_buttons(state, config.timing.stick_button_threshold)
                 elif in_pregame:
                     # Toon selection takes every button. The start-up screen only Start and B:
@@ -509,10 +527,10 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 else:
                     blocked = frozenset()
                 # The golf green: the left stick aims instead of walking.
-                in_golf = golf_screen.is_open and not (in_options or in_pregame or in_battle or in_shop
+                in_golf = golf_screen.is_open and not (in_options or in_mat or in_pregame or in_battle or in_shop
                                                        or in_speedchat or in_friends or book_screen.is_open)
                 # Walking still works mid-conversation (it walks away); not while choosing a task.
-                walk = not (in_options or in_battle or in_shop or in_book or npc_screen.kind == "tasks"
+                walk = not (in_options or in_mat or in_battle or in_shop or in_book or npc_screen.kind == "tasks"
                             or (in_pregame and pregame_screen.kind != "startup") or in_golf)
                 for control in book_mapper.take_taps():
                     mapper.tap(control, now)
@@ -520,11 +538,11 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     highlight = None
                 # The book and friends list let go of their own holds while open (the kart, a
                 # scroll triangle); one held when it closes, or the other opens, is let go here.
-                holder = "options" if in_options else "book" if in_book else "friends" if in_friends else None
+                holder = "options" if in_options else "makeatoon" if in_mat else "book" if in_book else "friends" if in_friends else None
                 if holder is None or holder != last_holder:
                     clicker.release()
                 last_holder = holder
-                free = not (in_options or in_pregame or in_battle or in_shop or npc_screen.kind is not None or in_speedchat
+                free = not (in_options or in_mat or in_pregame or in_battle or in_shop or npc_screen.kind is not None or in_speedchat
                             or in_friends or book_screen.is_open)
                 if in_golf:
                     buttons = controller_buttons(state, config.timing.stick_button_threshold)
@@ -580,7 +598,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                             or (free and garden_screen.planting and garden_mapper.hovering)
                             or (in_book and book_mapper.hovering(book_screen))
                             or (in_pregame and pregame_mapper.hovering(pregame_screen))
-                            or (in_options and options_mapper.hovering(options_screen)))
+                            or (in_options and options_mapper.hovering(options_screen))
+                            or (in_mat and mat_mapper.hovering(mat_screen)))
                 if idle and hider.hidden and view is not None and not clicker.busy and not dry_run:
                     spot = view.park_spot()
                     # Checked against where the cursor really is: the mouse may have moved it.
@@ -612,12 +631,15 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
             if highlighter is not None:
                 view = TTRView(foreground.ttr_hwnd) if active and foreground.ttr_hwnd else None
                 if highlight is not None and view is not None and hider.hidden:
-                    target, (w, h), color = highlight
+                    target, (w, h), color, pointer = highlight
                     left, top, width, height = client_rect(view.hwnd)
                     unit = min(width, height)
                     x, y = view.to_screen(target)
                     w, h = round(w * unit), round(h * unit)
-                    highlighter.show((x - w // 2, y - h // 2, w, h), unit, *([color] if color else []))
+                    if pointer:
+                        highlighter.show_pointer(x - w // 2, y, unit)
+                    else:
+                        highlighter.show((x - w // 2, y - h // 2, w, h), unit, *([color] if color else []))
                 else:
                     highlighter.hide()
                 highlighter.pump()

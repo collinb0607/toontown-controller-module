@@ -7,6 +7,8 @@ module's own pixel reading (screen.py) never sees it.
 """
 
 import ctypes
+import math
+import time
 from ctypes import wintypes
 
 import numpy as np
@@ -16,6 +18,47 @@ COLOR = (255, 214, 64)
 THICKNESS = 0.004  # the outline, in units of the window's shorter side (see ui.py)
 GLOW = 0.006  # how far the glow reaches past the outline
 RADIUS = 0.010  # the corners' rounding
+
+
+# The pointer (Make-a-Toon): a gold triangle left of the item, pointing at it, that
+# gently grows and shrinks.
+POINTER_SIZE = 0.032  # its length, in units of the window's shorter side
+POINTER_GAP = 0.006  # between its tip and the item
+POINTER_PULSE = 0.15  # grows and shrinks this much either way
+POINTER_PERIOD = 0.9  # seconds a pulse takes
+POINTER_STEPS = 12  # sizes drawn per pulse (each is cached)
+POINTER_OUTLINE = (70, 45, 0)
+
+
+def pointer_image(length: int, color: tuple[int, int, int] = COLOR) -> np.ndarray:
+    """A right-pointing triangle `length` long (and 1.2 times that tall), gold with a dark
+    outline, its tip at the image's right middle, as premultiplied BGRA rows."""
+    pad = 2
+    s = float(length)
+    h, w = int(math.ceil(1.2 * s)) + 2 * pad, int(math.ceil(s)) + 2 * pad
+    ys, xs = np.mgrid[0:h, 0:w].astype(np.float32) + 0.5
+    corners = ((pad, pad), (pad + s, pad + 0.6 * s), (pad, pad + 1.2 * s))
+
+    def inside(a, b):  # distance inside the edge from a to b (clockwise on screen)
+        (ax, ay), (bx, by) = a, b
+        nx, ny = -(by - ay), bx - ax
+        return ((xs - ax) * nx + (ys - ay) * ny) / math.hypot(nx, ny)
+
+    depth = np.minimum.reduce([inside(corners[i], corners[(i + 1) % 3]) for i in range(3)])
+    alpha = np.clip(depth + 0.5, 0, 1)
+    outline = max(1.5, s / 12)
+    fill = np.clip(depth + 0.5 - outline, 0, 1)[..., None]
+    rgb = np.array(POINTER_OUTLINE, np.float32) * (1 - fill) + np.array(color, np.float32) * fill
+    image = np.empty((h, w, 4), np.uint8)
+    image[..., [2, 1, 0]] = np.round(rgb * alpha[..., None])
+    image[..., 3] = np.round(alpha * 255)
+    return image
+
+
+def pointer_scale(t: float) -> float:
+    """How big the pointer is at time t (seconds), stepped so each size is drawn once."""
+    step = round((t / POINTER_PERIOD) % 1 * POINTER_STEPS) % POINTER_STEPS
+    return 1 + POINTER_PULSE * math.sin(2 * math.pi * step / POINTER_STEPS)
 
 
 def frame_pad(thickness: int, glow: int) -> int:
@@ -148,6 +191,7 @@ class Highlighter:
         self.excluded = bool(exclude_from_capture
                              and _user32.SetWindowDisplayAffinity(self.hwnd, WDA_EXCLUDEFROMCAPTURE))
         self._shown: tuple | None = None  # (rect, unit, color) last drawn
+        self._pointers: dict[int, np.ndarray] = {}  # pointer images by length
         self.visible = False
 
     def show(self, rect: tuple[int, int, int, int], unit: int, color: tuple[int, int, int] = COLOR) -> None:
@@ -172,6 +216,17 @@ class Highlighter:
             _user32.ShowWindow(self.hwnd, SW_SHOWNOACTIVATE)
             self.visible = True
         _user32.SetWindowPos(self.hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
+
+    def show_pointer(self, left: int, middle: int, unit: int, now: float | None = None) -> None:
+        """The pulsing pointer, pointing at an item whose left edge is at `left` and middle
+        at `middle` on screen. It grows from its tip, so it never covers the item."""
+        length = max(8, round(POINTER_SIZE * unit * pointer_scale(time.monotonic() if now is None else now)))
+        image = self._pointers.get(length)
+        if image is None:
+            image = self._pointers[length] = pointer_image(length)
+        h, w = image.shape[:2]
+        tip = left - round(POINTER_GAP * unit)
+        self.show_image(tip - w + 2, middle - h // 2, image, ("pointer", tip, middle, length))
 
     def hide(self) -> None:
         if self.visible:

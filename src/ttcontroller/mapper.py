@@ -15,6 +15,7 @@ from typing import Any, Protocol
 
 from . import ui
 from .ceo import read_leave
+from .elevator import read_hop_off
 from .mail import read_mail
 from .bindings import Bindings, ButtonActions, stick_buttons
 from .controller import ControllerState
@@ -31,7 +32,7 @@ class ScreenView(Protocol):
 SPECIAL_ACTIONS = {
     "sprint": "turn auto-sprint on or off (when on, every run starts with a sprint)",
     "friendsList": "open the friends list, or close it if it's open",
-    "back": "close whatever is open (speedchat, then a whisper, then the friends list); at the CEO, leave a seltzer bottle or golf ball, and at the CFO, a crane",
+    "back": "close whatever is open (speedchat, then a whisper, then the friends list); at the CEO, leave a seltzer bottle or golf ball, and at the CFO, a crane; in an elevator or golf kart, Hop off",
     "speedchat": "open speedchat, or close it if it's open",
     "unite": "open speedchat at the UNITE! menu, on Toon-Up (works in battle too)",
     "mail": "close Clarabelle's mail popup, or click her icon if there's no popup (only "
@@ -182,6 +183,9 @@ class OverworldMapper:
         elif action == "back" and self._free and screen is not None and (leave := screen.read(read_leave)):
             # The CEO's seltzer bottle or golf ball, or the CFO's crane: its X leave button (read on the press).
             self._clicks.append(ui.Button("leave", leave))
+        elif action == "back" and self._free and screen is not None and (hop := screen.read(read_hop_off)):
+            # In an elevator or a golf kart: Hop off (read on the press; speedchat closes first, above).
+            self._clicks.append(ui.Button("hop off", hop))
         elif action in ("friendsList", "back"):
             # The friends list key only opens it; closing takes a click on its X.
             # The screen is only checked on a press, since reading pixels is slow.

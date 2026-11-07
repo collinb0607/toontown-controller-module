@@ -4,7 +4,7 @@ Play **Toontown Rewritten** with a controller.
 
 Toontown Rewritten's own controller support is experimental: it covers movement and a virtual mouse, but has no menu navigation and no remapping. This module runs alongside the game, reads your controller, and turns its input into the keyboard and mouse actions the game expects. Controller buttons press on-screen buttons for you directly, so you never have to steer a mouse cursor around. Every button can be remapped.
 
-> **Status:** early development. Overworld controls, battles, the gag shop, NPCs, speedchat menus, the friends list, every page of the shticker book, the start-up screen, toon selection, TTR's own Options window, gardening, the estate mailbox and the CFO and CEO fights work. Next: the rest of the boss fights (M9). See [plan.md](plan.md) for the full design.
+> **Status:** early development. Overworld controls, battles, the gag shop, NPCs, speedchat menus, the friends list, every page of the shticker book, the start-up screen, toon selection, TTR's own Options window, Make-a-Toon, gardening, the estate mailbox and the CFO and CEO fights work. Next: boarding groups (the end of M10), then the hints overlay (M11). See [plan.md](plan.md) for the full design.
 
 ## Features
 
@@ -108,8 +108,9 @@ Working now:
 | Events page | Calendar: opens on today's first event · Stick/D-pad move around the days, up/down going event by event (hovering one shows what it is) · Right stick left/right change month · L3 next filter (back to the first after the last) · Hosting, Invitations: nothing yet |
 | Golf page | Records: Stick/D-pad or right stick up/down scroll the courses · Trophy: Stick/D-pad hover the trophies |
 | Start-up screen | Start opens Options (Start or B closes it) · hold B to Quit · any other button enters |
-| Toon selection | Start opens Options (Start or B closes it) · hold B to Quit · Stick/D-pad move between the toons (starting top middle) · A plays the toon, or makes one in an empty slot · X delete: A OK / B Cancel, then Y types "delete" and presses OK (A won't), B Cancel |
+| Toon selection | Start opens Options (Start or B closes it) · hold B to Quit · Stick/D-pad move between the toons (starting top middle) · A plays the toon, or makes one in an empty slot · X delete: A OK / B Cancel, then Y types "delete" and presses OK (A won't), B Cancel · Y Name Your Toon! (a toon whose name was skipped in Make-a-Toon) |
 | TTR's Options | LT/RT previous/next tab · Stick/D-pad up/down move between settings (scrolling at the ends; a blue frame shows which) · A flip the toggle, open the dropdown or press the button · left/right turn a toggle off/on, or move a volume slider · Y show what the setting does (its ?), again to go back · right stick up/down scroll · B or Start close · in a dropdown: up/down, A pick, B close it · ToonSync code: A Copy, B Close · Pronoun Picker: left/right pick the list, up/down change it, X Reset, A or B Looks fine! |
+| Make-a-Toon | LB/RB back/next step · B back a step (on the first step, or renaming a toon from Name Your Toon!: the X, cancel) · Start next (the check mark on the Name step) · right stick left/right turn the toon · Style: left/right pick (a pulsing gold pointer shows which), A choose · Type, Color, Clothes: up/down move between rows and Shuffle (the pointer), left/right click the row's arrows, A or X Shuffle · Name: left/right pick the list (Title, First, Last's two), up/down scroll it (hold to scroll fast), A tick its checkbox, X Shuffle, Y Type-A-Name (type with the keyboard; A Submit, Y or B back to Pick-A-Name), RT submit the toon without a name yet (the arrow above the check mark) · dialogs: A Yes / Continue Submission / Enter Toontorial, B No / Cancel Submission / Skip Toontorial |
 
 | Boss fights | Controls |
 |---|---|
@@ -117,6 +118,7 @@ Working now:
 | CJ cannon round | Same as the trolley's Cannon game (already works) |
 | CFO | Left stick move crane · hold X magnet · B leave the crane (clicks its red X) |
 | CEO | Left stick turn · hold X charge, release to fire · B leaves the seltzer bottle or golf ball (clicks its red X) |
+| Elevators and golf karts | B Hop off (with speedchat open, B closes it first, and B again hops off) |
 | Cog Golf golf green (colored balls) | Left stick aims (an aim line and crosshair show where) · D-pad left/right fine-tune the aim · A shoot · Y How to Play · hold B Exit for Now |
 
 ## Requirements

@@ -49,6 +49,12 @@ SLOTS = (_center(-0.4232, -0.1749), _center(0.0089, -0.1531), _center(0.4316, -0
 TRASH = (_center(-0.3186, -0.0411), _center(0.1645, -0.0639), _center(0.5481, -0.0342),
          _center(-0.2696, 0.3246), _center(0.1288, 0.3820), _center(0.5778, 0.3326))
 _TRASH_PROBES = ((0.0, 0.0), (-0.006, 0.0), (0.006, 0.0), (0.0, -0.010), (0.0, 0.010))
+# A toon whose name was skipped in Make-a-Toon has a yellow Name Your Toon! button in its
+# card's bottom left (toon_selection_name_your_toon: the first slot's, 0.18 wide and 0.067
+# tall), placed from the card's trash can. The probes are along the button's middle,
+# between its two lines of text.
+NAME_BUTTONS = tuple(t.offset(-0.2037, 0.0129) for t in TRASH)
+_NAME_PROBES = ((-0.0723, 0.0), (-0.0327, 0.0), (0.0268, 0.0), (0.0714, 0.0))
 START_SLOT = 1  # the top row's middle
 
 # The "Delete Toon?" dialog: its text box, OK and Cancel.
@@ -64,6 +70,7 @@ class PregameScreen:
     # or "type" (type "delete")
     kind: str | None = None
     trash: tuple[bool, ...] = ()  # on toon selection: which slots have a toon to delete
+    names: tuple[bool, ...] = ()  # and which have a Name Your Toon! button
     dialog: tuple[ui.UIPoint, ui.UIPoint] | None = None  # the OK/Cancel confirm's buttons
 
 
@@ -92,6 +99,12 @@ def _is_trash(c: ui.RGB) -> bool:
     return r < 110 and b > r + 40 and b > 105 and max(c) < 180
 
 
+def _is_name_yellow(c: ui.RGB) -> bool:
+    # (241, 241, 32): greener than the yellow card's (the sixth slot's) own yellow.
+    r, g, b = c
+    return r > 220 and g > 220 and b < 90 and abs(r - g) < 15
+
+
 def _is_blue(c: ui.RGB) -> bool:
     return c[2] > 140 and c[2] - c[0] > 50
 
@@ -117,7 +130,9 @@ def read_pregame(width: int, height: int, get_pixel: PixelReader) -> PregameScre
         if dialog is not None:
             return PregameScreen("confirm", dialog=dialog)
         trash = tuple(sum(_is_trash(at(t.offset(*d))) for d in _TRASH_PROBES) >= 3 for t in TRASH)
-        return PregameScreen("toons", trash=trash)
+        names = tuple(has and all(_is_name_yellow(at(n.offset(*d))) for d in _NAME_PROBES)
+                      for has, n in zip(trash, NAME_BUTTONS))
+        return PregameScreen("toons", trash=trash, names=names)
     press = sum(at(_center(x, _PRESS_Y))[0] > 200 and at(_center(x, _PRESS_Y))[1] > 160
                 and at(_center(x, _PRESS_Y))[2] < 100 for x in _PRESS_XS)
     if press >= 15:
@@ -137,7 +152,8 @@ PREGAME_ACTIONS = {
     "select": "pick the toon (or empty slot) hovered, or OK in the first delete confirm",
     "back": "Cancel in a delete confirm, or close Options",
     "delete": "delete the toon hovered (its trash can)",
-    "confirmDelete": "in the second delete confirm, type \"delete\" and press OK",
+    "confirmDelete": "in the second delete confirm, type \"delete\" and press OK; on toon selection, the "
+                     "hovered toon's Name Your Toon! button (a toon whose name was skipped)",
     "options": "the Options button (start-up screen and toon selection), or close Options again",
     "quit": "hold: the Quit button (start-up screen and toon selection)",
     "up": "toon selection: the card above", "down": "the card below",
@@ -224,6 +240,8 @@ class PregameMapper:
                 return self._click(SLOTS[self.slot], f"pick toon {self.slot + 1}", now)
             if action == "delete" and screen.trash and screen.trash[self.slot]:
                 return self._click(TRASH[self.slot], f"delete toon {self.slot + 1}", now)
+            if action == "confirmDelete" and screen.names and screen.names[self.slot]:
+                return self._click(NAME_BUTTONS[self.slot], f"name toon {self.slot + 1}", now)
         elif screen.kind == "confirm":
             if action == "select":
                 return self._click(screen.dialog[0], "OK", now)

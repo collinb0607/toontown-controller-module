@@ -6,11 +6,12 @@ and sends keyboard keys and real mouse clicks (SendInput) to drive the game.
 
 - Repo: `collinb0607/toontown-controller-module` (public). Plan and progress: [plan.md](plan.md).
   Player-facing controls: [README.md](README.md).
-- Milestones done: M0 to M7 (overworld, hotkeys, battles, menus, the whole shticker book,
-  start-up, toon selection and TTR's Options window). Boss fights (M9) started early: CFO, CEO
+- Milestones done: M0 to M8 (overworld, hotkeys, battles, menus, the whole shticker book,
+  start-up, toon selection, TTR's Options window, auto-detection) and M10's Make-a-Toon
+  (boarding groups, folded into M10, still to do). Boss fights (M9) started early: CFO, CEO
   and the CJ's cannon round work; the VP's pie round and the CJ's evidence round (one
-  reader) are built, waiting on testing in game. Then M8 auto-detection, M9 boss fights, M10 Make-a-Toon, M11 hints overlay,
-  M12 settings window, M13 release (1.0). Minigames are in Future, not 1.0. After 1.0:
+  reader) are built, waiting on testing in game. Then boarding groups (end of M10), M11 hints
+  overlay, M12 settings window, M13 release (1.0). Minigames are in Future, not 1.0. After 1.0:
   two toons on one machine (keyboard-and-mouse toon plus a controller toon driven by posted
   window messages: paced clicks, hover by a middle-button press since TTR ignores posted
   mouse moves; findings and experiments are in plan.md and tools/background_*). M3 no longer
@@ -38,7 +39,8 @@ and sends keyboard keys and real mouse clicks (SendInput) to drive the game.
   show themselves (a lifted scroll, a tinted trophy).
 - **A new page or screen starts with nothing hovered.** The first stick or D-pad press
   hovers the first item. Exceptions the user asked for: the Events calendar opens on
-  today's first event, and toon selection opens on the top middle toon.
+  today's first event, toon selection opens on the top middle toon, and each Make-a-Toon
+  step opens on its first item (the left style, the top row, the First name list).
 - **After any popup is cancelled or confirmed, the hover goes back to the item it was
   opened from.**
 - **A screen's controls must not swallow the global ones.** In the book, route only the
@@ -74,7 +76,8 @@ and sends keyboard keys and real mouse clicks (SendInput) to drive the game.
 
 0. `options.read_options`: TTR's own Options window (and its dropdowns and popups), over
    anything; nothing else is read while it's open.
-1. `pregame.read_pregame`: start-up screen, toon selection, and the delete confirms.
+1. `makeatoon.read_make_a_toon` (its five steps and the name dialogs), then `pregame.read_pregame`:
+   start-up screen, toon selection, and the delete confirms.
 2. `book.read_book`: the shticker book. Read before the rest, because its pages fool them:
    a blank page looks like the battle waiting screen, the shop takes book dialogs, and the
    NPC search sees arrows in the SOS cards.
@@ -91,7 +94,8 @@ settings.json via `ttr_settings`).
 `PointerCommand(kind, point, name, notches, delay, size, frame_at)`:
 - `kind` is "hover", "click", "scroll", "hold", "release" or "type" (types `name` letter by letter).
 - `size` draws the gold highlight frame (`overlay.Highlighter`); `frame_at` puts the
-  frame somewhere other than the hover point.
+  frame somewhere other than the hover point; `color` changes its color (Options' blue);
+  `pointer` draws a pulsing gold pointer left of the item instead (Make-a-Toon).
 
 `output.MouseClicker` is a queue: click, hover, scroll, hold/release. `busy` includes holding.
 

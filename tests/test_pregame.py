@@ -120,3 +120,15 @@ def test_toon_selection_has_options_and_quit_too_and_b_closes_options():
     m.update(frozenset({"b"}), 7.0, TOONS)
     [click] = m.update(frozenset({"b"}), 7.6, TOONS)
     assert click.point == p.QUIT
+
+
+def test_name_your_toon_button():
+    screen = replay("toon_selection_name_your_toon_1920x1009")
+    assert screen.names == (True, False, False, False, False, False)
+    assert p.NAME_BUTTONS[0].to_client(1920, 1009) == (433, 476)
+    m = PregameMapper()
+    m.update(frozenset(), 0.0, screen)  # opens on the top middle toon: no button there
+    assert press(m, "y", 1.0, screen) == []
+    press(m, "dpad_left", 2.0, screen)
+    [click] = press(m, "y", 3.0, screen)
+    assert click.kind == "click" and click.point == p.NAME_BUTTONS[0] and click.name == "name toon 1"
