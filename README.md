@@ -52,6 +52,7 @@ Working now:
 | RT | Clarabelle's mail: closes her popup if one is showing, otherwise clicks her icon (only while walking around with nothing else open) |
 | Y / X | Show gags / show tasks (while held, or press to show and again to hide with `toggle_hud`) |
 | Gardening (its panel on the left) | Y clicks the top button (Pick, Plant Flower, Full) · X the bottom one (Water) · instead of showing gags and tasks · selling the basket: A Sell All, B Cancel |
+| Cog HQ facility nametags (in the margins) | LB click the first facility's nametag (RB is still the friends list) · with its popup up: LB/RB the previous/next facility, A Teleport Here!, B close |
 | Estate mailbox (open) | D-pad left/right go through the items · A take this item · X discard it · B close mailbox |
 | Planting a gag tree (the gag panel) | Same as picking a gag in battle · B closes it (its red X) |
 | Bean picker (Plant Flower) | D-pad left/right moves along the beans (wraps) · A adds the hovered bean (plants once no more beans fit) · Y plant · X reset · B cancel |

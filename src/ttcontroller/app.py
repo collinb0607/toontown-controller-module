@@ -15,6 +15,7 @@ from .friends import FriendsMapper, FriendsScreen, read_friends
 from .garden import GardenMapper, GardenScreen, read_garden
 from .golf_green import AIM_RADIUS, PIVOT, GolfGreenMapper, GolfGreenScreen, aim_image, read_golf_green
 from .hud import HudMapper, HudScreen, read_hud
+from .facility import FacilityMapper, FacilityScreen, read_facility
 from .mailbox import MailboxMapper, MailboxScreen, read_mailbox
 from .vp import read_pie_round
 from .mapper import OverworldMapper, controller_buttons
@@ -133,6 +134,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     golf_screen = GolfGreenScreen()
     golf_aim = None  # its aim angle, while aiming (for the aim line and crosshair)
     mailbox_mapper = MailboxMapper()  # the estate mailbox, open
+    facility_mapper = FacilityMapper()  # Cog HQ facility nametags and their teleport popup
+    facility_screen = FacilityScreen()
     mailbox_screen = MailboxScreen()
     dialog_mapper = DialogMapper()  # an OK/Cancel dialog nothing else owns
     stray_dialog = None  # its OK and Cancel, when one is showing
@@ -290,6 +293,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 stray_dialog = None
                 mailbox_screen = MailboxScreen()
                 golf_screen = GolfGreenScreen()
+                facility_screen = FacilityScreen()
                 book_screen = BookScreen()
                 output.release_all()
             else:
@@ -371,10 +375,17 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     if golf.is_open != golf_screen.is_open and (dry_run or debug):
                         log(f"Golf green: {'up' if golf.is_open else 'gone'}")
                     golf_screen = golf
+                    facility = (read_facility(frame.width, frame.height, frame.get_pixel)
+                                if in_game and screen.kind is None and shop.kind is None and not book.is_open
+                                and not golf.is_open else FacilityScreen())
+                    if ((facility.popup, len(facility.tags)) != (facility_screen.popup, len(facility_screen.tags))
+                            and (dry_run or debug)):
+                        log(f"Facility: {len(facility.tags)} nametags" + (", popup up" if facility.popup else ""))
+                    facility_screen = facility
                     npc = (read_npc(frame.width, frame.height, frame.get_pixel, frame.rgb())
                            if (in_game and screen.kind is None and shop.kind is None and not book.is_open
                                and hud.kind != "trunk" and not garden.popup and not mailbox.is_open
-                               and not golf.is_open)
+                               and not golf.is_open and not facility.popup)
                            else NpcScreen())
                     if npc.kind != npc_screen.kind and (dry_run or debug):
                         log(f"NPC screen: {npc.kind or 'none'}")
@@ -563,6 +574,14 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 else:
                     garden_mapper.reset_buttons()
                     garden_mapper.update(frozenset(), now, GardenScreen())
+                facility_buttons = facility_mapper.buttons(facility_screen) if free else frozenset()
+                if facility_buttons:
+                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
+                    blocked = blocked | facility_buttons
+                    for command in facility_mapper.update(buttons & facility_buttons, now, facility_screen):
+                        point(command.kind, command.point, command.name, view)
+                else:
+                    facility_mapper.reset_buttons()
                 if free and mailbox_screen.is_open:
                     buttons = controller_buttons(state, config.timing.stick_button_threshold)
                     blocked = blocked | mailbox_mapper.buttons
