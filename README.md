@@ -4,7 +4,7 @@ Play **Toontown Rewritten** with a controller.
 
 Toontown Rewritten's own controller support is experimental: it covers movement and a virtual mouse, but has no menu navigation and no remapping. This module runs alongside the game, reads your controller, and turns its input into the keyboard and mouse actions the game expects. Controller buttons press on-screen buttons for you directly, so you never have to steer a mouse cursor around. Every button can be remapped.
 
-> **Status:** early development. Overworld controls, battles, the gag shop, NPCs, speedchat menus, the friends list, every page of the shticker book, TTR's own Options window, gardening and the CFO and CEO fights work. Next: testing the start-up screen and toon selection (M7), then the rest of the boss fights. See [plan.md](plan.md) for the full design.
+> **Status:** early development. Overworld controls, battles, the gag shop, NPCs, speedchat menus, the friends list, every page of the shticker book, the start-up screen, toon selection, TTR's own Options window, gardening, the estate mailbox and the CFO and CEO fights work. Next: the rest of the boss fights (M9). See [plan.md](plan.md) for the full design.
 
 ## Features
 
@@ -28,9 +28,8 @@ Working now:
 
 Planned:
 
-- **Shticker book pages:** controller navigation on every page.
-- **Boss fights:** VP and CJ throwing, CFO crane, CEO charge attacks.
-- **Trolley games:** support for each minigame. Treasure Dive already works with the stick alone.
+- **Make-a-Toon:** creating a toon with the controller, naming included.
+- **Trolley games and fishing (after 1.0):** support for each minigame. Treasure Dive and Cannon already work with the existing controls.
 - **On-screen hints:** button prompts that change with what you're doing in game.
 - **Settings window:** remap buttons without editing a file.
 
@@ -112,15 +111,13 @@ Working now:
 | Toon selection | Start opens Options (Start or B closes it) · hold B to Quit · Stick/D-pad move between the toons (starting top middle) · A plays the toon, or makes one in an empty slot · X delete: A OK / B Cancel, then Y types "delete" and presses OK (A won't), B Cancel |
 | TTR's Options | LT/RT previous/next tab · Stick/D-pad up/down move between settings (scrolling at the ends; a blue frame shows which) · A flip the toggle, open the dropdown or press the button · left/right turn a toggle off/on, or move a volume slider · Y show what the setting does (its ?), again to go back · right stick up/down scroll · B or Start close · in a dropdown: up/down, A pick, B close it · ToonSync code: A Copy, B Close · Pronoun Picker: left/right pick the list, up/down change it, X Reset, A or B Looks fine! |
 
-Planned:
-
-| State | Controls |
+| Boss fights | Controls |
 |---|---|
-| Shticker book pages | Stick/D-pad move · A select |
-| VP pie round | RT throws a pie (TTR's throw key, Delete by default): press for one, hold to wind up, as with the key |
-| CJ | Hold RT to charge a throw, release to throw (planned) |
+| VP pie round, CJ evidence round | RT throws (TTR's throw key, Delete by default): press for one, hold to wind up, as with the key |
+| CJ cannon round | Same as the trolley's Cannon game (already works) |
 | CFO | Left stick move crane · hold X magnet · B leave the crane (clicks its red X) |
 | CEO | Left stick turn · hold X charge, release to fire · B leaves the seltzer bottle or golf ball (clicks its red X) |
+| Cog Golf golf green (colored balls) | Left stick aims (an aim line and crosshair show where) · D-pad left/right fine-tune the aim · A shoot · Y How to Play · hold B Exit for Now |
 
 ## Requirements
 
