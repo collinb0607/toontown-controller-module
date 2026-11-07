@@ -4,7 +4,7 @@ Play **Toontown Rewritten** with a controller.
 
 Toontown Rewritten's own controller support is experimental: it covers movement and a virtual mouse, but has no menu navigation and no remapping. This module runs alongside the game, reads your controller, and turns its input into the keyboard and mouse actions the game expects. Controller buttons press on-screen buttons for you directly, so you never have to steer a mouse cursor around. Every button can be remapped.
 
-> **Status:** early development. Overworld controls, battles, the gag shop, NPCs, speedchat menus, the friends list, every page of the shticker book, the start-up screen, toon selection, TTR's own Options window, Make-a-Toon, gardening, the estate mailbox and the CFO and CEO fights work. Next: boarding groups (the end of M10), then the hints overlay (M11). See [plan.md](plan.md) for the full design.
+> **Status:** early development. Overworld controls, battles, the gag shop, NPCs, speedchat menus, the friends list, every page of the shticker book, the start-up screen, toon selection, TTR's own Options window, Make-a-Toon, boarding groups, gardening, the estate mailbox and the CFO and CEO fights work. Next: the hints overlay (M11). See [plan.md](plan.md) for the full design.
 
 ## Features
 
@@ -49,7 +49,8 @@ Working now:
 | LB + RB | Take a screenshot (TTR's own Screenshot key), anywhere: walking, battles, the book |
 | View | Speedchat (press again to close) |
 | LT | Unite: opens speedchat at UNITE! with Toon-Up highlighted (in battle too) |
-| RT | Clarabelle's mail: closes her popup if one is showing, otherwise clicks her icon (only while walking around with nothing else open) |
+| RT | Clarabelle's mail: closes her popup if one is showing, otherwise clicks her icon (only while walking around with nothing else open; fires on letting go) |
+| Hold RT | The Silly Meter (top right): opens it, or closes it if it's open · with it open: D-pad left the reward's details, B closes the top card |
 | Y / X | Show gags / show tasks (while held, or press to show and again to hide with `toggle_hud`) |
 | Gardening (its panel on the left) | Y clicks the top button (Pick, Plant Flower, Full) · X the bottom one (Water) · instead of showing gags and tasks · selling the basket: A Sell All, B Cancel |
 | Cog HQ facility nametags (in the margins) | LB click the first facility's nametag (RB is still the friends list) · with its popup up: LB/RB the previous/next facility, A Teleport Here!, B close |
@@ -84,13 +85,14 @@ Working now:
 | Menus | Controls |
 |---|---|
 | Speedchat | D-pad up/down move · right or A open a submenu · left or B go back · A say the phrase · B in the top menu closes speedchat |
-| Friends list | D-pad up/down move (scrolls at the ends) · left/right change page · A open the toon · X Go To (teleport) · Y Whisper · B close |
+| Friends list | D-pad up/down move (scrolls at the ends) · left/right change page · A open the toon · X Go To (teleport) · Y Whisper · RT Invite to your boarding group (near an elevator) · B close |
 | Go To's "switch district?" popup | A Yes · B No |
 | Friends on someone already a friend | A Stop being Toon friends · B Cancel · then "Are you sure?": A Yes · B No · "no longer your friend": A or B OK |
 | Asking a toon to be friends | B Cancel (while waiting for their answer) |
 | A toon asks to be your friend | A OK · B No |
 | Other OK/Cancel popups while walking around (e.g. "teleport to your Estate?") | A OK · B Cancel |
 | Ignore and Report (from a toon's panel) | A Ignore or Stop Ignoring · B Cancel · Report: D-pad up/down move through the reasons, A pick one, B Cancel |
+| A toon's panel near an elevator | Its Invite (or Kick, for the leader) joins the up/down list last, after Toon Details: A clicks it, or RT straight away · inviting: B Cancel · invited: A OK, B No · declined: A or B OK |
 | Whispering (the "Whisper To:" bar) | B ends the whisper (its X), after closing speedchat if it's open and before closing the toon's panel or the list |
 | A toon's panel | D-pad up/down move between its buttons · A press · X Go To (teleport) · Y Whisper · B close Toon Details, then the panel |
 | Shticker book | LB/RB previous/next page · LT/RT previous/next tab along the page's top · B close |
@@ -120,6 +122,7 @@ Working now:
 | CFO | Left stick move crane · hold X magnet · B leave the crane (clicks its red X) |
 | CEO | Left stick turn · hold X charge, release to fire · B leaves the seltzer bottle or golf ball (clicks its red X) |
 | Elevators and golf karts | B Hop off (with speedchat open, B closes it first, and B again hops off) |
+| Boarding groups (by a Cog HQ elevator) | Right stick right opens the panel (the tab at the left edge), left closes it · while open: D-pad up/down hover a member (Start a Group is hovered as soon as it opens), A click it (a member opens their toon panel) · hold B leave the group (or disband it, as leader): A Yes / B No · "You cannot leave this area": A or B Cancel · walking still works |
 | Cog Golf golf green (colored balls) | Left stick aims (an aim line and crosshair show where) · D-pad left/right fine-tune the aim · A shoot · Y How to Play · hold B Exit for Now |
 
 ## Requirements

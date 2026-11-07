@@ -7,10 +7,10 @@ and sends keyboard keys and real mouse clicks (SendInput) to drive the game.
 - Repo: `collinb0607/toontown-controller-module` (public). Plan and progress: [plan.md](plan.md).
   Player-facing controls: [README.md](README.md).
 - Milestones done: M0 to M8 (overworld, hotkeys, battles, menus, the whole shticker book,
-  start-up, toon selection, TTR's Options window, auto-detection) and M10's Make-a-Toon
-  (boarding groups, folded into M10, still to do). Boss fights (M9) started early: CFO, CEO
+  start-up, toon selection, TTR's Options window, auto-detection) and M10 (Make-a-Toon and
+  boarding groups). Boss fights (M9) started early: CFO, CEO
   and the CJ's cannon round work; the VP's pie round and the CJ's evidence round (one
-  reader) are built, waiting on testing in game. Then boarding groups (end of M10), M11 hints
+  reader) are built, waiting on testing in game. Then M11 hints
   overlay, M12 settings window, M13 release (1.0). Minigames are in Future, not 1.0. After 1.0:
   two toons on one machine (keyboard-and-mouse toon plus a controller toon driven by posted
   window messages: paced clicks, hover by a middle-button press since TTR ignores posted
