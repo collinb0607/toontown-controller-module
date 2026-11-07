@@ -10,6 +10,26 @@ def test_reads_the_pie_round():
     assert replay("vp_pies_1920x1009", read_pie_round)
 
 
+def test_any_icon_in_the_blue_box_counts():
+    """The CJ's evidence round has the same box with another icon."""
+    import json
+    from pathlib import Path
+    from ttcontroller import vp
+    data = json.loads((Path(__file__).parent / "fixtures" / "battle" / "vp_pies_1920x1009.json").read_text())
+    w, h = data["size"]
+    pixels = data["pixels"]
+    icon = vp.PIE_ICON.to_client(w, h)
+    others = {vp._top(-0.0149, 0.0436).to_client(w, h), vp._top(-0.0050, 0.0436).to_client(w, h)}
+
+    def evidence(x, y):  # the pie's cream swapped for a brown folder's color
+        return (150, 110, 60) if (x, y) == icon or (x, y) in others else tuple(pixels[f"{x},{y}"])
+    assert read_pie_round(w, h, evidence)
+
+    def empty(x, y):  # just the box's blue: no icon
+        return (60, 150, 240) if (x, y) == icon else tuple(pixels[f"{x},{y}"])
+    assert not read_pie_round(w, h, empty)
+
+
 def test_not_on_other_screens():
     for name in ("clarabelle_popup_1920x1009", "gags_hud_1920x1009", "test_1920x1009"):
         assert not replay(name, read_pie_round), name

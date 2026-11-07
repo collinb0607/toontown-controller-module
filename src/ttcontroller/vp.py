@@ -1,7 +1,12 @@
-"""The VP's pie round: a blue pie icon shows at the top center of the screen.
+"""Throwing rounds in boss fights: the VP's pie round, and the CJ's evidence round,
+which is the same with a different icon. A blue box with the icon shows at the top
+center of the screen.
 
-While it's up, pies are thrown with TTR's performAction key (Delete by default),
-pressed for one or held to wind up. Measured at 1920x1009.
+While it's up, pies (or evidence) are thrown with TTR's performAction key (Delete by
+default), pressed for one or held to wind up. Measured at 1920x1009 (vp_pies). The
+box alone is told by its blue at four spots (no other capture has even three); its
+middle only has to be something other than that blue, so the CJ's icon counts too
+(the user, in game: the same box with another icon; no capture of it yet).
 """
 
 from collections.abc import Callable
@@ -33,7 +38,9 @@ PIE_ICON = _top(-0.0010, 0.0481)
 
 
 def read_pie_round(width: int, height: int, get_pixel: PixelReader) -> bool:
+    """The VP's pie round or the CJ's evidence round."""
     def hits(points, test) -> int:
         return sum(test(get_pixel(*p.to_client(width, height))) for p in points)
 
-    return hits(_BLUE, is_icon_blue) >= 4 and hits(_CREAM, is_cream) >= 1
+    return (hits(_BLUE, is_icon_blue) >= 4
+            and not is_icon_blue(get_pixel(*PIE_ICON.to_client(width, height))))  # an icon in it
