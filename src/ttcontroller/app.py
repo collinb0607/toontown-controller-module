@@ -13,6 +13,7 @@ from .cursor import MOVE_TOLERANCE, CursorHider
 from .book import BookMapper, BookScreen, read_book
 from .friends import FriendsMapper, FriendsScreen, read_friends
 from .garden import GardenMapper, GardenScreen, read_garden
+from .golf_green import AIM_RADIUS, PIVOT, GolfGreenMapper, GolfGreenScreen, aim_image, read_golf_green
 from .hud import HudMapper, HudScreen, read_hud
 from .mailbox import MailboxMapper, MailboxScreen, read_mailbox
 from .vp import read_pie_round
@@ -127,6 +128,9 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     garden_mapper = GardenMapper()
     garden_screen = GardenScreen()
     pie_round = False
+    golf_mapper = GolfGreenMapper()  # the Cog Golf golf green puzzle
+    golf_screen = GolfGreenScreen()
+    golf_aim = None  # its aim angle, while aiming (for the aim line and crosshair)
     mailbox_mapper = MailboxMapper()  # the estate mailbox, open
     mailbox_screen = MailboxScreen()
     dialog_mapper = DialogMapper()  # an OK/Cancel dialog nothing else owns
@@ -147,6 +151,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
             "so it's turned off (it needs Windows 10 version 2004 or later).")
         highlighter.close()
         highlighter = None
+    # The golf green's aim line and crosshair, in a window of their own.
+    aimer = Highlighter() if highlighter is not None else None
     # What the frame goes around: the hovered point and the item's size, if it has one.
     highlight = None
     last_buttons = frozenset()
@@ -278,6 +284,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 pie_round = False
                 stray_dialog = None
                 mailbox_screen = MailboxScreen()
+                golf_screen = GolfGreenScreen()
                 book_screen = BookScreen()
                 output.release_all()
             else:
@@ -348,9 +355,16 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     if mailbox != mailbox_screen and (dry_run or debug):
                         log(f"Mailbox: {'open' if mailbox.is_open else 'closed'}")
                     mailbox_screen = mailbox
+                    golf = (read_golf_green(frame.width, frame.height, frame.get_pixel)
+                            if in_game and screen.kind is None and shop.kind is None and not book.is_open
+                            else GolfGreenScreen())
+                    if golf.is_open != golf_screen.is_open and (dry_run or debug):
+                        log(f"Golf green: {'up' if golf.is_open else 'gone'}")
+                    golf_screen = golf
                     npc = (read_npc(frame.width, frame.height, frame.get_pixel, frame.rgb())
                            if (in_game and screen.kind is None and shop.kind is None and not book.is_open
-                               and hud.kind != "trunk" and not garden.popup and not mailbox.is_open)
+                               and hud.kind != "trunk" and not garden.popup and not mailbox.is_open
+                               and not golf.is_open)
                            else NpcScreen())
                     if npc.kind != npc_screen.kind and (dry_run or debug):
                         log(f"NPC screen: {npc.kind or 'none'}")
@@ -494,9 +508,12 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     blocked = frozenset(book_mapper.buttons)
                 else:
                     blocked = frozenset()
+                # The golf green: the left stick aims instead of walking.
+                in_golf = golf_screen.is_open and not (in_options or in_pregame or in_battle or in_shop
+                                                       or in_speedchat or in_friends or book_screen.is_open)
                 # Walking still works mid-conversation (it walks away); not while choosing a task.
                 walk = not (in_options or in_battle or in_shop or in_book or npc_screen.kind == "tasks"
-                            or (in_pregame and pregame_screen.kind != "startup"))
+                            or (in_pregame and pregame_screen.kind != "startup") or in_golf)
                 for control in book_mapper.take_taps():
                     mapper.tap(control, now)
                 if book_mapper.take_left_page():
@@ -509,6 +526,16 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 last_holder = holder
                 free = not (in_options or in_pregame or in_battle or in_shop or npc_screen.kind is not None or in_speedchat
                             or in_friends or book_screen.is_open)
+                if in_golf:
+                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
+                    blocked = blocked | golf_mapper.buttons
+                    for command in golf_mapper.update(buttons, state.left_stick, now, golf_screen):
+                        point(command.kind, command.point, command.name, view, restore=False)
+                    golf_aim = golf_mapper.angle
+                else:
+                    if golf_aim is not None or golf_mapper.angle is not None:
+                        golf_mapper.reset()
+                    golf_aim = None
                 # The gardening HUD's buttons on Y and X, instead of showing gags and tasks.
                 if free and garden_screen.is_open:
                     buttons = controller_buttons(state, config.timing.stick_button_threshold)
@@ -548,7 +575,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     point("click", button.center, button.name, view)
                 # Nothing to hover: while the cursor is hidden, leave it off the game area.
                 # Book pages without controls of their own don't hover anything.
-                idle = not (in_battle or in_shop or in_speedchat or in_friends or npc_screen.kind == "tasks"
+                idle = not (in_battle or in_shop or in_speedchat or in_friends or npc_screen.kind == "tasks" or in_golf
                             or (in_hud and hud_mapper.hovering())
                             or (free and garden_screen.planting and garden_mapper.hovering)
                             or (in_book and book_mapper.hovering(book_screen))
@@ -594,6 +621,17 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 else:
                     highlighter.hide()
                 highlighter.pump()
+            if aimer is not None:
+                view = TTRView(foreground.ttr_hwnd) if active and foreground.ttr_hwnd else None
+                if golf_aim is not None and view is not None and hider.hidden:
+                    unit = min(client_rect(view.hwnd)[2:])
+                    px, py = view.to_screen(PIVOT)
+                    key = (px, py, round(golf_aim, 2), unit)
+                    image, (ox, oy) = aim_image(round(AIM_RADIUS * unit), golf_aim, unit)
+                    aimer.show_image(px - ox, py - oy, image, key)
+                else:
+                    aimer.hide()
+                aimer.pump()
 
             time.sleep(max(0.0, FRAME_SECONDS - (time.monotonic() - now)))
     except KeyboardInterrupt:
@@ -603,5 +641,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
         hider.show()
         if highlighter is not None:
             highlighter.close()
+        if aimer is not None:
+            aimer.close()
         output.release_all()
         reader.close()

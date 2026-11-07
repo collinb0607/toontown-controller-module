@@ -162,6 +162,17 @@ class Highlighter:
         # Stay above TTR, which can be topmost-ish in fullscreen-like modes.
         _user32.SetWindowPos(self.hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
 
+    def show_image(self, left: int, top: int, image: np.ndarray, key) -> None:
+        """Show a premultiplied BGRA image with its top left at (left, top) on screen
+        (the golf green's aim line and crosshair). key: redrawn only when it changes."""
+        if key != self._shown:
+            self._shown = key
+            self._blit(left, top, image)
+        if not self.visible:
+            _user32.ShowWindow(self.hwnd, SW_SHOWNOACTIVATE)
+            self.visible = True
+        _user32.SetWindowPos(self.hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
+
     def hide(self) -> None:
         if self.visible:
             _user32.ShowWindow(self.hwnd, SW_HIDE)
@@ -184,8 +195,12 @@ class Highlighter:
         thickness = max(2, round(THICKNESS * unit))
         glow = max(3, round(GLOW * unit))
         image = frame_image(width, height, thickness, glow, max(2, round(RADIUS * unit)), color)
-        h, w = image.shape[:2]
         pad = frame_pad(thickness, glow)
+        self._blit(left - pad, top - pad, image)
+
+    def _blit(self, left: int, top: int, image: np.ndarray) -> None:
+        h, w = image.shape[:2]
+        image = np.ascontiguousarray(image)
         screen_dc = _user32.GetDC(None)
         mem_dc = _gdi32.CreateCompatibleDC(screen_dc)
         header = BITMAPINFOHEADER(ctypes.sizeof(BITMAPINFOHEADER), w, -h, 1, 32, 0, 0, 0, 0, 0, 0)
@@ -195,7 +210,7 @@ class Highlighter:
             ctypes.memmove(bits, image.ctypes.data, image.nbytes)
             old = _gdi32.SelectObject(mem_dc, bitmap)
             blend = BLENDFUNCTION(AC_SRC_OVER, 0, 255, AC_SRC_ALPHA)
-            _user32.UpdateLayeredWindow(self.hwnd, screen_dc, ctypes.byref(wintypes.POINT(left - pad, top - pad)),
+            _user32.UpdateLayeredWindow(self.hwnd, screen_dc, ctypes.byref(wintypes.POINT(left, top)),
                                         ctypes.byref(wintypes.SIZE(w, h)), mem_dc,
                                         ctypes.byref(wintypes.POINT(0, 0)), 0, ctypes.byref(blend), ULW_ALPHA)
             _gdi32.SelectObject(mem_dc, old)
