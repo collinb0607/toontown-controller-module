@@ -80,6 +80,7 @@ _ARROW_SCAN_HALF_WIDTH = 0.42
 _PANEL_SPACING = {True: {2: 0.254, 3: 0.276, 4: 0.251}, False: {2: 0.187, 3: 0.2055, 4: 0.187}}
 _PANEL_MIDDLE = -0.0075
 _PANEL_HALF_WIDTH = 0.088
+_PANEL_MIN_COLUMNS = 7  # of 11
 _CHOICE_OFFSET = 0.0415  # choice circle center, right of the panel center
 _CHOICE_ROW = 0.412
 _PANEL_ROWS = tuple(0.37 + 0.01 * i for i in range(11))
@@ -269,13 +270,14 @@ def panel_centers(count: int, wide: bool) -> list[float]:
 
 def _has_panel(width: int, height: int, get_pixel: PixelReader, x: float) -> bool:
     """Check the left part of a toon panel (left of its choice circle) column by column.
-    Nametags, faces and toons can cover some rows, so each column only needs a few."""
+    Nametags, faces and toons can cover some rows, so each column only needs a few,
+    and a big face (a laff meter) can cover a few columns (battle_waiting_hover: 7 left)."""
     columns = 0
     for i in range(11):
         cx = x - _PANEL_HALF_WIDTH + 0.005 + 0.008 * i
         hits = sum(_is_panel_green(get_pixel(*_center(cx, y).to_client(width, height))) for y in _PANEL_ROWS)
         columns += hits >= 4
-    return columns >= 8
+    return columns >= _PANEL_MIN_COLUMNS
 
 
 def _read_choices(width: int, height: int, get_pixel: PixelReader) -> dict:

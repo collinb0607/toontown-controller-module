@@ -234,6 +234,8 @@ def test_b_closes_trunk_back_to_picker():
     ("battle_teammates_4_1283x307", [-0.343, -0.091, 0.16]),
     ("battle_teammates_4_1920x1009", [-0.343, -0.091, 0.16]),
     ("battle_teammates_4_673x907", [-0.246, -0.06, 0.128]),
+    # Your "?" third; the first toon's big laff meter covers much of its panel's green.
+    ("battle_waiting_hover_1920x1009", [-0.343, -0.091, 0.41]),
     ("battle_gags_1920x1009", []),  # solo
 ])
 def test_teammate_choices(name, xs):
@@ -304,6 +306,16 @@ def test_lb_toggles_teammate_hover():
     press(m, screen, 8.0, "lb")
     assert [c.kind for c in press(m, screen, 9.0, "a")] == ["hover"]  # A leaves too, without clicking
     assert [c.kind for c in press(m, screen, 10.0, "a")] == ["click"]
+
+
+def test_lb_moves_between_teammates_with_a_face_covering_a_panel():
+    # Read as two toons before, so left/right stayed on the one teammate found.
+    screen = replay("battle_waiting_hover_1920x1009")
+    m = BattleMapper()
+    m.update(frozenset(), 0.0, screen)
+    assert press(m, screen, 1.0, "lb")[-1].point == screen.teammates[0]
+    assert press(m, screen, 2.0, "dpad_right")[-1].point == screen.teammates[1]
+    assert press(m, screen, 3.0, "dpad_right")[-1].point == screen.teammates[2]
 
 
 def test_rb_is_left_for_the_friends_list():
