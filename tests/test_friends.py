@@ -156,3 +156,26 @@ def test_holding_at_the_end_of_the_list_holds_the_triangle_down():
     assert m.update(up, 2.0, screen) == []
     release, hover = m.update(frozenset(), 3.0, screen)
     assert release.kind == "release" and (hover.kind, hover.point) == ("hover", screen.rows[0])
+
+
+def test_reads_go_tos_teleport_popup_over_the_panel():
+    screen = replay("friends_teleport_popup_1920x1009")
+    assert screen.kind == "teleport"
+    yes, no = (p.to_client(1920, 1009) for p in (screen.yes, screen.no))
+    assert abs(yes[0] - 1334) <= 3 and abs(yes[1] - 250) <= 3
+    assert abs(no[0] - 1485) <= 3 and abs(no[1] - 251) <= 3
+
+
+@pytest.mark.parametrize("button,answer", [("a", "yes"), ("b", "no")])
+def test_teleport_popup_a_yes_b_no_then_back_to_go_to(button, answer):
+    m = FriendsMapper()
+    panel = FriendsScreen("panel")
+    popup = FriendsScreen("teleport", yes=f._right(-0.58, 0.25), no=f._right(-0.43, 0.25))
+    m.update(frozenset(), 0.0, panel)
+    press(m, panel, 1.0, "dpad_down")
+    press(m, panel, 2.0, "a")  # Go To
+    assert m.update(frozenset(), 3.0, popup) == []  # nothing hovered over the popup
+    assert press(m, popup, 4.0, "dpad_down") == []
+    clicked = press(m, popup, 5.0, button)
+    assert [c.point for c in clicked] == [popup.yes if answer == "yes" else popup.no]
+    assert [c.point for c in m.update(frozenset(), 6.0, panel)] == [f.GO_TO]
