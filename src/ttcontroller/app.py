@@ -13,6 +13,7 @@ from .book import BookMapper, BookScreen, read_book
 from .friends import FriendsMapper, FriendsScreen, read_friends
 from .garden import GardenMapper, GardenScreen, read_garden
 from .hud import HudMapper, HudScreen, read_hud
+from .vp import read_pie_round
 from .mapper import OverworldMapper, controller_buttons
 from .overlay import Highlighter
 from .output import KeyboardOutput, MouseClicker, cursor_pos, mouse_button_down, send_key
@@ -123,6 +124,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     hud_screen = HudScreen()
     garden_mapper = GardenMapper()
     garden_screen = GardenScreen()
+    pie_round = False
     pregame_mapper = PregameMapper()  # the start-up screen and toon selection
     pregame_screen = PregameScreen()
     book_mapper = BookMapper(config.book)
@@ -267,6 +269,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 friends_screen = FriendsScreen()
                 hud_screen = HudScreen()
                 garden_screen = GardenScreen()
+                pie_round = False
                 book_screen = BookScreen()
                 output.release_all()
             else:
@@ -346,6 +349,11 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     if friends.kind != friends_screen.kind and (dry_run or debug):
                         log(f"Friends screen: {friends.kind or 'none'}")
                     friends_screen = friends
+                    pies = in_game and screen.kind is None and not book.is_open and read_pie_round(
+                        frame.width, frame.height, frame.get_pixel)
+                    if pies != pie_round and (dry_run or debug):
+                        log(f"VP pie round: {'on' if pies else 'off'}")
+                    pie_round = pies
 
                 state = state or NEUTRAL
                 state, screenshot = bumper_combo.update(state, now)
@@ -477,7 +485,6 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 if holder is None or holder != last_holder:
                     clicker.release()
                 last_holder = holder
-                controls = mapper.update(state, now, view, blocked=blocked, movement=walk)
                 free = not (in_options or in_pregame or in_battle or in_shop or npc_screen.kind is not None or in_speedchat
                             or in_friends or book_screen.is_open)
                 # The gardening HUD's buttons on Y and X, instead of showing gags and tasks.
@@ -498,6 +505,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                               notches=command.notches, size=command.size, frame_at=command.frame_at)
                 else:
                     hud_mapper.update(frozenset(), now, HudScreen())
+                controls = mapper.update(state, now, view, blocked=blocked, movement=walk, free=free,
+                                         pies=pie_round and free)
                 output.sync(controls_to_keys(controls, watcher.settings))
                 for button in mapper.take_clicks():
                     point("click", button.center, button.name, view)

@@ -17,14 +17,17 @@ import pygame  # noqa: E402
 
 from ttcontroller.battle import read_screen  # noqa: E402
 from ttcontroller.book import read_book, read_pages  # noqa: E402
+from ttcontroller.ceo import read_leave  # noqa: E402
 from ttcontroller.friends import read_friends  # noqa: E402
 from ttcontroller.garden import read_garden  # noqa: E402
 from ttcontroller.hud import read_hud  # noqa: E402
+from ttcontroller.mail import read_mail  # noqa: E402
 from ttcontroller.npc import read_npc  # noqa: E402
 from ttcontroller.options import read_options  # noqa: E402
 from ttcontroller.pregame import read_pregame  # noqa: E402
 from ttcontroller.shop import read_shop  # noqa: E402
 from ttcontroller.speedchat import read_speedchat  # noqa: E402
+from ttcontroller.vp import read_pie_round  # noqa: E402
 
 OUT = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "battle"
 
@@ -52,8 +55,11 @@ def main() -> None:
         read_pages(w, h, get_pixel)
         pregame = read_pregame(w, h, get_pixel)
         options = read_options(w, h, get_pixel)
+        read_mail(w, h, get_pixel)
         hud = read_hud(w, h, get_pixel)
+        read_pie_round(w, h, get_pixel)
         read_garden(w, h, get_pixel)
+        read_leave(w, h, get_pixel)
         path = OUT / f"{capture.stem}.json"
         path.write_text(json.dumps({"size": [w, h], "pixels": seen}, separators=(",", ":")), encoding="utf-8")
         print(f"wrote {path.name}: {(options.kind and f'options {options.kind}') or pregame.kind or screen.kind or shop.kind or npc.kind or ('speedchat' if speedchat.is_open else friends.kind) or (book.page and f'book {book.page}') or (hud.kind and f'{hud.kind} HUD')}, {len(seen)} pixels")

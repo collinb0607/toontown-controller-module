@@ -9,10 +9,13 @@ Bindings map a button to an action. An action is either a TTR control name
 (held while the button is held) or one of the special actions below.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 from . import ui
+from .ceo import read_leave
+from .mail import read_mail
 from .bindings import Bindings, ButtonActions, stick_buttons
 from .controller import ControllerState
 from .movement import MovementTuning, stick_to_movement
@@ -21,14 +24,19 @@ from .movement import MovementTuning, stick_to_movement
 class ScreenView(Protocol):
     def is_visible(self, button: ui.Button) -> bool: ...
 
+    def read(self, reader: Callable[..., Any]) -> Any: ...
+
 
 # Actions that do more than hold a TTR key.
 SPECIAL_ACTIONS = {
     "sprint": "turn auto-sprint on or off (when on, every run starts with a sprint)",
     "friendsList": "open the friends list, or close it if it's open",
-    "back": "close whatever is open (speedchat, then the friends list)",
+    "back": "close whatever is open (speedchat, then the friends list); at the CEO, leave a seltzer bottle or golf ball, and at the CFO, a crane",
     "speedchat": "open speedchat, or close it if it's open",
     "unite": "open speedchat at the UNITE! menu, on Toon-Up (works in battle too)",
+    "mail": "close Clarabelle's mail popup, or click her icon if there's no popup (only "
+            "while walking around, with nothing else open); in the VP's pie round, throw a pie "
+            "(TTR's performAction, held while the button is)",
 }
 
 
@@ -51,6 +59,7 @@ def default_bindings() -> Bindings:
             "start": "stickerBook",
             "view": "speedchat",
             "lt": "unite",
+            "rt": "mail",
             "rs_up": "lookUp",
             "rs_down": "lookDown",
         },
@@ -106,6 +115,8 @@ class OverworldMapper:
         self._was_running = False
         self._sprint_started_at: float | None = None
         self._toggled: set[str] = set()  # toggle controls shown right now
+        self._free = True
+        self._pies = False
 
     @property
     def shown(self) -> frozenset[str]:
@@ -128,13 +139,21 @@ class OverworldMapper:
         return clicks
 
     def update(self, state: ControllerState, now: float, screen: ScreenView | None = None,
-               blocked: frozenset[str] = frozenset(), movement: bool = True) -> set[str]:
-        """blocked: buttons another mode is using right now. movement: whether the left stick walks."""
+               blocked: frozenset[str] = frozenset(), movement: bool = True, free: bool = True,
+               pies: bool = False) -> set[str]:
+        """blocked: buttons another mode is using right now. movement: whether the left stick walks.
+        free: walking around with nothing else open (no battle, book, menu or conversation).
+        pies: the VP's pie round is on (the mail button throws pies instead)."""
+        self._free = free
+        self._pies = pies
         buttons = controller_buttons(state, self.timing.stick_button_threshold) - blocked
         controls = stick_to_movement(*state.left_stick, self.tuning) if movement else set()
 
         held, fired = self._actions.update(buttons, now)
         controls |= held
+        if pies and any(self.bindings.press.get(b) == "mail" for b in buttons):
+            # TTR throws on the key, and winds up while it's held.
+            controls.add("performAction")
         for action in fired:
             self._run(action, now, screen)
         # A shown map, tasks or gags goes away when another mode takes its button
@@ -157,6 +176,9 @@ class OverworldMapper:
             self._was_running = False
         elif action == "back" and screen is not None and screen.is_visible(ui.SPEEDCHAT_MENU):
             self._clicks.append(ui.SPEEDCHAT)
+        elif action == "back" and self._free and screen is not None and (leave := screen.read(read_leave)):
+            # The CEO's seltzer bottle or golf ball, or the CFO's crane: its X leave button (read on the press).
+            self._clicks.append(ui.Button("leave", leave))
         elif action in ("friendsList", "back"):
             # The friends list key only opens it; closing takes a click on its X.
             # The screen is only checked on a press, since reading pixels is slow.
@@ -170,6 +192,14 @@ class OverworldMapper:
             self._unite = True
             if screen is None or not screen.is_visible(ui.SPEEDCHAT_MENU):
                 self._clicks.append(ui.SPEEDCHAT)
+        elif action == "mail":
+            # Read only on the press: the popup's size follows its message, so it's searched for.
+            if self._free and not self._pies and screen is not None:
+                mail = screen.read(read_mail)
+                if mail.close is not None:
+                    self._clicks.append(ui.Button("mail popup close", mail.close))
+                elif mail.icon is not None:
+                    self._clicks.append(ui.Button("clarabelle", mail.icon))
         elif action in self.toggles:
             self._toggled ^= {action}
         else:

@@ -12,6 +12,9 @@ class FakeScreen:
     def is_visible(self, button):
         return button in self.visible
 
+    def read(self, reader):
+        return None  # nothing found: no mail, no leave button
+
 
 def state(*buttons, left=(0.0, 0.0), right=(0.0, 0.0)):
     return ControllerState(buttons=frozenset(buttons), left_stick=left, right_stick=right)

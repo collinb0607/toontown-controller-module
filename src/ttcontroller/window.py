@@ -115,6 +115,11 @@ class TTRView:
         frame = self.snapshot()
         return ui.is_visible(button, frame.width, frame.height, frame.get_pixel)
 
+    def read(self, reader):
+        """Run a screen reader (width, height, get_pixel) on a fresh snapshot."""
+        frame = self.snapshot()
+        return reader(frame.width, frame.height, frame.get_pixel)
+
     def park_spot(self) -> tuple[int, int] | None:
         """Where to leave the cursor when nothing needs hovering: on the title bar, just
         above the game area, where Windows draws the cursor instead of TTR (so it can be
