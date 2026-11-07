@@ -11,6 +11,7 @@ from .controller import NEUTRAL, ControllerReader
 from .cursor import MOVE_TOLERANCE, CursorHider
 from .book import BookMapper, BookScreen, read_book
 from .friends import FriendsMapper, FriendsScreen, read_friends
+from .garden import GardenMapper, GardenScreen, read_garden
 from .hud import HudMapper, HudScreen, read_hud
 from .mapper import OverworldMapper, controller_buttons
 from .overlay import Highlighter
@@ -120,6 +121,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     friends_screen = FriendsScreen()
     hud_mapper = HudMapper()
     hud_screen = HudScreen()
+    garden_mapper = GardenMapper()
+    garden_screen = GardenScreen()
     pregame_mapper = PregameMapper()  # the start-up screen and toon selection
     pregame_screen = PregameScreen()
     book_mapper = BookMapper(config.book)
@@ -263,6 +266,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 speedchat_screen = SpeedchatScreen()
                 friends_screen = FriendsScreen()
                 hud_screen = HudScreen()
+                garden_screen = GardenScreen()
                 book_screen = BookScreen()
                 output.release_all()
             else:
@@ -315,9 +319,17 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     if hud.kind != hud_screen.kind and (dry_run or debug):
                         log(f"HUD: {hud.kind or 'none'}")
                     hud_screen = hud
+                    # Gardening, before NPCs too: the bubble search finds one in the bean picker.
+                    garden = (read_garden(frame.width, frame.height, frame.get_pixel)
+                              if in_game and screen.kind is None and shop.kind is None and not book.is_open
+                              else GardenScreen())
+                    if garden != garden_screen and (dry_run or debug):
+                        log(f"Gardening: {'bean picker' if garden.planting else 'sell popup' if garden.selling else 'OK popup' if garden.ok else 'panel' if garden.is_open else 'none'}"
+                            + (" (no beans)" if garden.planting and not garden.beans else ""))
+                    garden_screen = garden
                     npc = (read_npc(frame.width, frame.height, frame.get_pixel, frame.rgb())
                            if (in_game and screen.kind is None and shop.kind is None and not book.is_open
-                               and hud.kind != "trunk")
+                               and hud.kind != "trunk" and not garden.popup)
                            else NpcScreen())
                     if npc.kind != npc_screen.kind and (dry_run or debug):
                         log(f"NPC screen: {npc.kind or 'none'}")
@@ -468,6 +480,15 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 controls = mapper.update(state, now, view, blocked=blocked, movement=walk)
                 free = not (in_options or in_pregame or in_battle or in_shop or npc_screen.kind is not None or in_speedchat
                             or in_friends or book_screen.is_open)
+                # The gardening HUD's buttons on Y and X, instead of showing gags and tasks.
+                if free and garden_screen.is_open:
+                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
+                    blocked = blocked | garden_mapper.buttons(garden_screen)
+                    for command in garden_mapper.update(buttons, now, garden_screen):
+                        point(command.kind, command.point, command.name, view, size=command.size)
+                else:
+                    garden_mapper.reset_buttons()
+                    garden_mapper.update(frozenset(), now, GardenScreen())
                 in_hud = free and hud_screen.kind is not None
                 if in_hud:
                     buttons = controller_buttons(state, config.timing.stick_button_threshold)
@@ -484,6 +505,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 # Book pages without controls of their own don't hover anything.
                 idle = not (in_battle or in_shop or in_speedchat or in_friends or npc_screen.kind == "tasks"
                             or (in_hud and hud_mapper.hovering())
+                            or (free and garden_screen.planting and garden_mapper.hovering)
                             or (in_book and book_mapper.hovering(book_screen))
                             or (in_pregame and pregame_mapper.hovering(pregame_screen))
                             or (in_options and options_mapper.hovering(options_screen)))

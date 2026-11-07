@@ -18,6 +18,7 @@ import pygame  # noqa: E402
 from ttcontroller.battle import read_screen  # noqa: E402
 from ttcontroller.book import read_book, read_pages  # noqa: E402
 from ttcontroller.friends import read_friends  # noqa: E402
+from ttcontroller.garden import read_garden  # noqa: E402
 from ttcontroller.hud import read_hud  # noqa: E402
 from ttcontroller.npc import read_npc  # noqa: E402
 from ttcontroller.options import read_options  # noqa: E402
@@ -52,6 +53,7 @@ def main() -> None:
         pregame = read_pregame(w, h, get_pixel)
         options = read_options(w, h, get_pixel)
         hud = read_hud(w, h, get_pixel)
+        read_garden(w, h, get_pixel)
         path = OUT / f"{capture.stem}.json"
         path.write_text(json.dumps({"size": [w, h], "pixels": seen}, separators=(",", ":")), encoding="utf-8")
         print(f"wrote {path.name}: {(options.kind and f'options {options.kind}') or pregame.kind or screen.kind or shop.kind or npc.kind or ('speedchat' if speedchat.is_open else friends.kind) or (book.page and f'book {book.page}') or (hud.kind and f'{hud.kind} HUD')}, {len(seen)} pixels")
