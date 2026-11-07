@@ -318,3 +318,15 @@ def test_ignore_opens_the_dialog_gate_and_it_closes_again():
     assert [c.point for c in press(m, panel, 4.0, "a")] == [f.IGNORE]
     assert m.expects_dialog(4.5)
     assert not m.expects_dialog(10.0)
+
+
+@pytest.mark.parametrize("name,rows", [
+    ("friends_all_1920x1009", [195, 216, 240, 260, 284, 303, 326, 346]),  # 8, about 21.6 px apart
+    ("friends_list_bug_1920x1009", [196, 213, 228]),  # closer together, the first hovered (yellow)
+    ("friends_online_1920x1009", [195, 218, 235]),  # Brig's g touches Princess Isla: split
+])
+def test_each_name_is_found_where_it_is(name, rows):
+    screen = replay(name)
+    assert screen.kind == "list"
+    found = [r.to_client(1920, 1009)[1] for r in screen.rows]
+    assert len(found) == len(rows) and all(abs(a - b) <= 2 for a, b in zip(found, rows)), found

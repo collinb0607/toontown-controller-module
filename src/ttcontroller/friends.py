@@ -178,20 +178,64 @@ class FriendsScreen:
 
 
 def _row(i: int) -> ui.UIPoint:
+    """A row of an evenly spaced list (friends_all's spacing; the reader finds the real ones)."""
     return _right(_NAME_X, _ROW0 + i * _ROW_STEP)
 
 
-def _has_name(width: int, height: int, get_pixel: PixelReader, i: int) -> bool:
-    """Names are colored text on white (or on yellow while hovered)."""
+# The names' rows aren't evenly spaced the same way every time (21.6 px apart in
+# friends_all, 16.5 in friends_list_bug, both 1920x1009), so each name is found as its
+# own band of text down the list. The hovered one sits on a yellow highlight that can
+# touch the next name's text, so highlight and text are told apart.
+_LIST_TOP, _LIST_BOTTOM = 0.1834, 0.3650  # the list's names lie between these, from the top
+_BAND_MIN = 0.006  # a name's band is at least this tall
+_BAND_GAP = 2  # pixels of nothing a name's band may have inside it (an i's dot)
+_BAND_TALL = 0.024  # taller than this, a band is two names touching (a g's tail on the next): split
+_BAND_EDGE = 0.007  # where to look for the split: this far inside either end
+
+
+def _is_highlight(c: RGB) -> bool:
+    r, g, b = c
+    return r > 220 and g > 200 and b < 120
+
+
+def _name_rows(width: int, height: int, get_pixel: PixelReader) -> list[ui.UIPoint]:
+    """Where to click each name in the list, top to bottom."""
     unit = min(width, height)
     left = _right(_NAME_LEFT, 0).to_client(width, height)[0]
-    y = _row(i).to_client(width, height)[1]
-    hits = 0
-    for dy in (-0.004, 0, 0.004):
-        for k in range(20):
-            if min(get_pixel(left + round(k * 0.004 * unit), y + round(dy * unit))) < 180:
-                hits += 1
-    return hits >= 3
+    xs = [left + round(k * 0.004 * unit) for k in range(20)]
+    top, bottom = (round(y * unit) for y in (_LIST_TOP, _LIST_BOTTOM))
+    kinds, inks = [], []
+    for y in range(top, min(bottom, height)):
+        pixels = [get_pixel(x, y) for x in xs if x < width]
+        ink = sum(min(c) < 180 for c in pixels)
+        inks.append(ink)
+        if sum(_is_highlight(c) for c in pixels) >= 3:
+            kinds.append("h")
+        elif ink >= 2:
+            kinds.append("t")
+        else:
+            kinds.append(".")
+    bands: list[list] = []  # [kind, first y, last y]
+    for i, kind in enumerate(kinds):
+        y = top + i
+        if kind == ".":
+            continue
+        if bands and bands[-1][0] == kind and y - bands[-1][2] <= _BAND_GAP + 1:
+            bands[-1][2] = y
+        else:
+            bands.append([kind, y, y])
+    split: list[tuple[int, int]] = []
+    for kind, first, last in bands:
+        while kind == "t" and last - first + 1 > _BAND_TALL * unit:
+            # Two names touching: split at the thinnest row away from the ends.
+            edge = round(_BAND_EDGE * unit)
+            cut = min(range(first + edge, last - edge + 1), key=lambda y: inks[y - top])
+            split.append((first, cut - 1))
+            first = cut + 1
+        split.append((first, last))
+    rows = [ui.UIPoint("right", _NAME_X, (first + last) / 2 / unit, "top") for first, last in split
+            if last - first + 1 >= _BAND_MIN * unit]
+    return rows[:VISIBLE_ROWS]
 
 
 def _red_run(width: int, height: int, get_pixel: PixelReader, x: int, top: int, bottom: int,
@@ -383,10 +427,7 @@ def read_friends(width: int, height: int, get_pixel: PixelReader, dialogs: bool 
             return dialog
     if ui.is_visible(ui.FRIENDS_CLOSE, width, height, get_pixel):
         rows = []
-        for i in range(VISIBLE_ROWS):
-            if not _has_name(width, height, get_pixel, i):
-                break
-            rows.append(_row(i))
+        rows = _name_rows(width, height, get_pixel)
         return FriendsScreen("list", rows=tuple(rows), whisper=_whispering(width, height, get_pixel))
     if ui.is_visible(PORTRAIT, width, height, get_pixel):
         return FriendsScreen("panel", details=ui.is_visible(DETAILS, width, height, get_pixel),
