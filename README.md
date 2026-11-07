@@ -4,7 +4,7 @@ Play **Toontown Rewritten** with a controller.
 
 Toontown Rewritten's own controller support is experimental: it covers movement and a virtual mouse, but has no menu navigation and no remapping. This module runs alongside the game, reads your controller, and turns its input into the keyboard and mouse actions the game expects. Controller buttons press on-screen buttons for you directly, so you never have to steer a mouse cursor around. Every button can be remapped.
 
-> **Status:** early development. Overworld controls, battles, the gag shop, NPCs, speedchat menus, the friends list and every page of the shticker book work. Next: controller navigation for the start-up screen, toon selection and TTR's own settings (M7). See [plan.md](plan.md) for the full design.
+> **Status:** early development. Overworld controls, battles, the gag shop, NPCs, speedchat menus, the friends list, every page of the shticker book, TTR's own Options window, gardening and the CFO and CEO fights work. Next: testing the start-up screen and toon selection (M7), then the rest of the boss fights. See [plan.md](plan.md) for the full design.
 
 ## Features
 
@@ -14,14 +14,14 @@ Working now:
 - **Overworld hotkeys:** shticker book, options, gags, tasks, map, camera.
 - **Friends list and speedchat:** open and close them with one button. The module checks the screen to see what's open, then clicks the right on-screen button and puts your mouse back.
 - **Battles:** move a highlight across your gags with the D-pad or stick, pick a cog or toon, hover teammates' gags (LB, then left/right), pass, and hold B to run (A/B answer the "are you sure" prompt). Your last gag stays highlighted between rounds and battles.
-- **Gag shop:** move across the gags, buy one or as many as fit, delete mode, and save/load your usual set.
+- **Gag shop:** move across the gags, buy one or as many as fit, delete mode, and save/load your usual set. After a trolley game, exit to the playground or play again.
 - **Talking to NPCs:** A clicks through speech bubbles; pick a ToonTask with the D-pad.
 - **Speedchat menus:** move through the menus and submenus with the D-pad and say a phrase with A. Works with any speedchat color. LT jumps straight to UNITE! > Toon-Up, in battle too.
 - **Friends list:** move down the list (it scrolls for you; hold the direction at the end to scroll fast), switch pages, open a toon, teleport to them (X) or whisper (Y). Nearby toons work too.
 - **Shticker book:** LB/RB flip through the pages and LT/RT switch a page's tabs (like Gags and Trunk). Each page's own controls are next.
 - **Trunk:** SOS cards (scrolling the list as you go, and filtering them from the dropdown or with LS), pink slips, remotes and doodle tricks, all with the D-pad or stick.
 - **Remapping:** a config file lets you rebind any button.
-- **Highlight frame:** where it's hard to tell what's hovered with the cursor hidden (battle gags, the trunk and the which cog/toon arrows, and the shticker book's Gags and Trunk tabs), a glowing frame is drawn around it, like a console game.
+- **Highlight frame:** where it's hard to tell what's hovered with the cursor hidden (battle gags, the trunk and the which cog/toon arrows, the gag shop, and the shticker book's Gags and Trunk tabs), a glowing frame is drawn around it, like a console game.
 - **Hidden cursor:** the cursor disappears while you use the controller and comes back as soon as you move the mouse. When nothing needs hovering it waits on the window's title bar, out of the way. TTR's custom cursor can't be hidden and has no switch in TTR's Options, so set `"hide_cursor": true` in the config and the module turns it off in TTR's settings.json for you (it takes effect the next time TTR starts).
 - **Mouse pauses the controller:** move or click the mouse in TTR and the controller pauses, like switching away from TTR. Press any controller button to resume (that press only resumes; it isn't sent).
 - Uses your TTR keybinds automatically, works at any window size, and never blocks your keyboard or mouse.
@@ -30,7 +30,7 @@ Planned:
 
 - **Shticker book pages:** controller navigation on every page.
 - **Boss fights:** VP and CJ throwing, CFO crane, CEO charge attacks.
-- **Trolley games:** support for each minigame.
+- **Trolley games:** support for each minigame. Treasure Dive already works with the stick alone.
 - **On-screen hints:** button prompts that change with what you're doing in game.
 - **Settings window:** remap buttons without editing a file.
 
@@ -50,8 +50,13 @@ Working now:
 | LB + RB | Take a screenshot (TTR's own Screenshot key), anywhere: walking, battles, the book |
 | View | Speedchat (press again to close) |
 | LT | Unite: opens speedchat at UNITE! with Toon-Up highlighted (in battle too) |
-| Y / X | Show gags / show tasks |
-| D-pad up | Map |
+| RT | Clarabelle's mail: closes her popup if one is showing, otherwise clicks her icon (only while walking around with nothing else open) |
+| Y / X | Show gags / show tasks (while held, or press to show and again to hide with `toggle_hud`) |
+| Gardening (its panel on the left) | Y clicks the top button (Pick, Plant Flower, Full) · X the bottom one (Water) · instead of showing gags and tasks · selling the basket: A Sell All, B Cancel |
+| Bean picker (Plant Flower) | D-pad left/right moves along the beans (wraps) · A adds the hovered bean (plants once no more beans fit) · Y plant · X reset · B cancel |
+| "That didn't work" (a failed bean combination) | A or B clicks OK |
+| Gags, trunk or tasks up (with `toggle_hud`) | D-pad hovers the gags, trunk items or tasks, as in the shticker book · right stick right/left switches from gags to the trunk and back · on the trunk: A clicks what's hovered (a tab, the SOS filter), right stick up/down scrolls the SOS cards, LS cycles the SOS filter (instead of auto-sprint, which LS still is on gags and tasks) · left stick still walks |
+| D-pad up | Map (the same) |
 | Start | Shticker book (tap) · Options (hold) |
 
 | Battle screen | Controls |
@@ -65,18 +70,20 @@ Working now:
 | Gag shop | Controls |
 |---|---|
 | Gags | Stick/D-pad move highlight · A buy one · Y buy max · X delete mode on/off · LB save preset · RB load preset · B done |
+| After a trolley game | Same as Gags, but B exit to playground · RT play again |
 | Delete mode | A delete one · Y delete all of that gag · X or B back to buying |
 | Preset prompt | A OK · B cancel |
 
 | Talking to NPCs | Controls |
 |---|---|
 | Speech bubble | A continue (or close the last one) |
-| Choosing a ToonTask | Stick/D-pad up/down choose · A pick · B cancel |
+| Choosing or handing in a ToonTask | Stick/D-pad up/down choose · A pick · B cancel |
 
 | Menus | Controls |
 |---|---|
 | Speedchat | D-pad up/down move · right or A open a submenu · left or B go back · A say the phrase · B in the top menu closes speedchat |
 | Friends list | D-pad up/down move (scrolls at the ends) · left/right change page · A open the toon · X Go To (teleport) · Y Whisper · B close |
+| Go To's "switch district?" popup | A Yes · B No |
 | A toon's panel | D-pad up/down move between its buttons · A press · X Go To (teleport) · Y Whisper · B close Toon Details, then the panel |
 | Shticker book | LB/RB previous/next page · LT/RT previous/next tab along the page's top · B close |
 | Options & Codes page | Stick/D-pad up/down move · left/right change the SpeedChat color · A press · Exit Toontown's dialog: A OK · B cancel |
@@ -95,15 +102,17 @@ Working now:
 | Golf page | Records: Stick/D-pad or right stick up/down scroll the courses · Trophy: Stick/D-pad hover the trophies |
 | Start-up screen | Start opens Options (Start or B closes it) · hold B to Quit · any other button enters |
 | Toon selection | Start opens Options (Start or B closes it) · hold B to Quit · Stick/D-pad move between the toons (starting top middle) · A plays the toon, or makes one in an empty slot · X delete: A OK / B Cancel, then Y types "delete" and presses OK (A won't), B Cancel |
+| TTR's Options | LT/RT previous/next tab · Stick/D-pad up/down move between settings (scrolling at the ends; a blue frame shows which) · A flip the toggle, open the dropdown or press the button · left/right turn a toggle off/on, or move a volume slider · Y show what the setting does (its ?), again to go back · right stick up/down scroll · B or Start close · in a dropdown: up/down, A pick, B close it · ToonSync code: A Copy, B Close · Pronoun Picker: left/right pick the list, up/down change it, X Reset, A or B Looks fine! |
 
 Planned:
 
 | State | Controls |
 |---|---|
 | Shticker book pages | Stick/D-pad move · A select |
-| VP / CJ | Hold RT to charge a throw, release to throw |
-| CFO | Left stick move crane · hold X magnet · B leave |
-| CEO | Left stick turn · hold X charge, release to fire · B leave |
+| VP pie round | RT throws a pie (TTR's throw key, Delete by default): press for one, hold to wind up, as with the key |
+| CJ | Hold RT to charge a throw, release to throw (planned) |
+| CFO | Left stick move crane · hold X magnet · B leave the crane (clicks its red X) |
+| CEO | Left stick turn · hold X charge, release to fire · B leaves the seltzer bottle or golf ball (clicks its red X) |
 
 ## Requirements
 
@@ -130,7 +139,7 @@ On first run the module creates `%APPDATA%\ToontownControllerModule\config.json`
 
 - **`press`:** button → action. An action is any TTR control name from TTR's Options > Controls (e.g. `jump`, `showGags`), or one of `sprint`, `friendsList`, `speedchat`, `unite` or `back`. The triggers are `lt` and `rt`. Set a button to `null` to unbind it.
 - **`hold`:** button → action after holding it for `timing.hold_seconds`. That button's `press` action then fires as a tap when it's released early.
-- **`movement`** and **`timing`** hold the stick deadzone, walk threshold, hold time and sprint timing. **`auto_sprint`** (true or false) is the auto-sprint setting; LS flips it and saves it here.
+- **`movement`** and **`timing`** hold the stick deadzone, walk threshold, hold time and sprint timing. **`auto_sprint`** (true or false) is the auto-sprint setting; LS flips it and saves it here. **`toggle_hud`** (true or false, default false): when true, the map, tasks and gags buttons show them on one press and hide them on the next, instead of only while held.
 
 If something in the file is wrong, the console prints `Config problem: ...` and the module uses the default for that setting.
 

@@ -7,8 +7,9 @@ and sends keyboard keys and real mouse clicks (SendInput) to drive the game.
 - Repo: `collinb0607/toontown-controller-module` (public). Plan and progress: [plan.md](plan.md).
   Player-facing controls: [README.md](README.md).
 - Milestones done: M0 to M6 (overworld, hotkeys, battles, menus, the whole shticker book).
-  M7 is in progress: start-up and toon selection are built; **TTR's own Options window is
-  next**. Then M8 auto-detection, M9 boss fights, M10 Make-a-Toon, M11 hints overlay,
+  M7 is in progress: TTR's own Options window is done and tested in game; start-up and toon
+  selection are built, waiting on testing in game. Boss fights (M9) started early: CFO and
+  CEO work, leave buttons and the VP pie round are built. Then M8 auto-detection, M9 boss fights, M10 Make-a-Toon, M11 hints overlay,
   M12 settings window, M13 release (1.0). Minigames are in Future, not 1.0. After 1.0:
   two toons on one machine (keyboard-and-mouse toon plus a controller toon driven by posted
   window messages: paced clicks, hover by a middle-button press since TTR ignores posted
@@ -71,7 +72,9 @@ and sends keyboard keys and real mouse clicks (SendInput) to drive the game.
 `app.py` is the main loop. Each frame (screens every 0.1 s) it snapshots the TTR window
 (BitBlt `Frame`) and runs readers, in order, each skipped when an earlier one matched:
 
-1. `pregame.read_pregame`: start-up screen, toon selection, its Options and delete confirms.
+0. `options.read_options`: TTR's own Options window (and its dropdowns and popups), over
+   anything; nothing else is read while it's open.
+1. `pregame.read_pregame`: start-up screen, toon selection, and the delete confirms.
 2. `book.read_book`: the shticker book. Read before the rest, because its pages fool them:
    a blank page looks like the battle waiting screen, the shop takes book dialogs, and the
    NPC search sees arrows in the SOS cards.
