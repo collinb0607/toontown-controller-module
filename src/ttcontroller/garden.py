@@ -17,13 +17,21 @@ and then A plants too.
 A failed planting (a bean combination that doesn't make a flower) says so in a
 popup with just an OK button, centered under its message: A or B clicks it.
 
+The last combination that planted a flower is remembered (the user, Nov 7, 2026): the
+beans added since the picker opened (or since Reset), once Plant closes the picker and
+no failure popup follows. In the picker, D-pad up puts it in again (Reset, each bean in
+order, then Plant). It's kept in garden.json beside config.json, so it lasts between
+runs.
+
 Measured at 1920x1009, 1379x348 and tall 405x820 (gardening_hud captures). The
 panel is found by scanning down its fill (its top is about 0.175 of the shorter side
 from the window's top at every size), and the buttons are placed from its top.
 """
 
+import json
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from pathlib import Path
 
 from . import ui
 from .bindings import Bindings, ButtonActions
@@ -214,15 +222,55 @@ def default_garden_bindings() -> Bindings:
     return Bindings(press=press)
 
 
+REPLAY_STEP = 0.25  # seconds between the remembered beans' clicks, so TTR takes each (0.12 missed some)
+REPLAY_AFTER_RESET = 0.35  # and before the first, while Reset redraws the row
+_FAILED_WAIT = 1.5  # after Plant closes the picker: no failure popup by then, and it planted
+
+
+def load_last_beans(path: Path | None) -> tuple[int, ...]:
+    """The last flower's beans, from garden.json (none if it's missing or not what's expected)."""
+    if path is None:
+        return ()
+    try:
+        beans = json.loads(path.read_text(encoding="utf-8")).get("last_flower_beans", [])
+    except (OSError, ValueError, AttributeError):
+        return ()
+    if not isinstance(beans, list) or not all(isinstance(b, int) and 0 <= b < BEANS for b in beans):
+        return ()
+    return tuple(beans)
+
+
+def save_last_beans(path: Path | None, beans: tuple[int, ...]) -> None:
+    """Keep the last flower's beans in garden.json (anything else in it is left as it is)."""
+    if path is None:
+        return
+    try:
+        data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        if not isinstance(data, dict):
+            data = {}
+        data["last_flower_beans"] = list(beans)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    except (OSError, ValueError):
+        pass
+
+
 _SELL_ACTIONS = {"select", "back"}
 # The bean picker's: Y and X there plant and reset instead of the panel's buttons.
-_PLANT_ACTIONS = {"select", "back", "top", "bottom", "up", "down", "left", "right"}
+_PLANT_ACTIONS = {"select", "back", "top", "bottom", "up", "down", "left", "right"}  # up: the last flower again
 _PANEL_ACTIONS = {"top", "bottom"}
 
 
 class GardenMapper:
-    def __init__(self, bindings: Bindings | None = None):
+    def __init__(self, bindings: Bindings | None = None, cache_path: Path | None = None):
+        """cache_path: where the last flower's beans are kept (None: only while running)."""
         self.bindings = bindings or default_garden_bindings()
+        self.cache_path = cache_path
+        self.last_beans: tuple[int, ...] = load_last_beans(cache_path)  # the last flower planted
+        self._added: list[int] = []  # beans added in the picker since it opened (or Reset)
+        self._planted: tuple[int, ...] | None = None  # Plant pressed with these: did it work?
+        self._closed_at: float | None = None  # when the picker went after Plant
+        self._was_planting = False
         self._actions = ButtonActions(self.bindings, 0.5, is_oneshot=lambda action: True,
                                       repeats=lambda action: action in ("left", "right"))
         self.bean: int | None = None  # the bean hovered in the picker (None: the picker isn't up)
@@ -248,6 +296,10 @@ class GardenMapper:
     def update(self, buttons: frozenset[str], now: float, screen: GardenScreen) -> list[PointerCommand]:
         _, fired = self._actions.update(buttons, now)
         commands = []
+        self._check_planted(now, screen)
+        if screen.planting and not self._was_planting:
+            self._added = []  # a new planting
+        self._was_planting = screen.planting
         if not screen.planting:
             self.bean = None  # it opens on the red bean next time
             self._beans_shown = False
@@ -273,16 +325,48 @@ class GardenMapper:
                 commands.append(PointerCommand("click", point, name))
         return commands
 
+    def _check_planted(self, now: float, screen: GardenScreen) -> None:
+        """After Plant: a failure popup means it didn't work; the picker gone with none
+        after a moment means a flower was planted, and its beans are remembered."""
+        if self._planted is None:
+            return
+        if screen.ok is not None:
+            self._planted, self._closed_at = None, None  # "That didn't work"
+        elif screen.planting:
+            self._closed_at = None  # still up (Plant not taken yet)
+        elif self._closed_at is None:
+            self._closed_at = now
+        elif now - self._closed_at >= _FAILED_WAIT:
+            self.last_beans = self._planted
+            save_last_beans(self.cache_path, self.last_beans)
+            self._planted, self._closed_at = None, None
+
+    def _plant(self, delay: float = 0.0) -> list[PointerCommand]:
+        if self._added:
+            self._planted, self._closed_at = tuple(self._added), None
+        return [PointerCommand("click", PLANT, "plant", delay=delay)]
+
     def _run_planting(self, action: str, screen: GardenScreen) -> list[PointerCommand]:
         if action in ("left", "right") and screen.beans:
             self.bean = (self.bean + (1 if action == "right" else -1)) % BEANS
             return [self._hover_bean()]
         if action == "select" and screen.beans:
+            self._added.append(self.bean)
             return [PointerCommand("click", bean_point(self.bean), f"add bean {self.bean + 1}")]
         if action == "top" or (action == "select" and not screen.beans):
-            return [PointerCommand("click", PLANT, "plant")]
+            return self._plant()
         if action == "bottom":
+            self._added = []
             return [PointerCommand("click", PLANT_RESET, "reset beans")]
         if action == "back":
+            self._added = []
             return [PointerCommand("click", PLANT_CANCEL, "cancel planting")]
+        if action == "up" and self.last_beans:
+            # The last flower again: Reset, each bean in order, then Plant.
+            commands = [PointerCommand("click", PLANT_RESET, "reset beans")]
+            commands += [PointerCommand("click", bean_point(b), f"add bean {b + 1}",
+                                        delay=REPLAY_AFTER_RESET if i == 0 else REPLAY_STEP)
+                         for i, b in enumerate(self.last_beans)]
+            self._added = list(self.last_beans)
+            return commands + self._plant(delay=REPLAY_STEP)
         return []

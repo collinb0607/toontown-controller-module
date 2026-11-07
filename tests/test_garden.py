@@ -162,3 +162,87 @@ def test_the_new_toon_tutorials_ok_popup_is_read_too():
     screen = replay("new_toon_popup_1920x1009", read_garden)
     assert near(screen.ok, 960, 817) and screen.popup
     assert press(GardenMapper(), screen, "a", 0.0) == [("click", screen.ok)]
+
+
+# The last flower's beans: remembered once a planting works, put in again with D-pad up.
+
+PICKER = GardenScreen(planting=True, beans=True)
+FULL = GardenScreen(planting=True, beans=False)  # no more beans fit
+PANEL = GardenScreen(top=bean_point(0))  # back on the gardening panel
+
+
+def plant_flower(m, beans, start=0.0):
+    """Open the picker, add these beans (by their index), plant; returns the time after."""
+    t = start
+    m.update(frozenset(), t, PICKER)
+    for b in beans:
+        while m.bean != b:
+            press(m, PICKER, "dpad_right", t)
+            t += 0.1
+        press(m, PICKER, "a", t)
+        t += 0.1
+    press(m, PICKER, "y", t)
+    return t + 0.1
+
+
+def test_a_planted_flowers_beans_are_remembered_and_kept(tmp_path):
+    path = tmp_path / "garden.json"
+    m = GardenMapper(cache_path=path)
+    assert m.last_beans == ()
+    t = plant_flower(m, [2, 2, 5])
+    m.update(frozenset(), t, PANEL)  # the picker goes...
+    assert m.last_beans == ()  # ...but a failure popup might still come
+    m.update(frozenset(), t + 2.0, PANEL)  # none came: it planted
+    assert m.last_beans == (2, 2, 5)
+    assert GardenMapper(cache_path=path).last_beans == (2, 2, 5)  # next run too
+
+
+def test_a_failed_combination_isnt_remembered(tmp_path):
+    m = GardenMapper(cache_path=tmp_path / "garden.json")
+    t = plant_flower(m, [1, 3])
+    m.update(frozenset(), t, PANEL)
+    m.update(frozenset(), t + 0.5, GardenScreen(ok=PLANT))  # "That didn't work"
+    m.update(frozenset(), t + 3.0, PANEL)
+    assert m.last_beans == ()
+
+
+def test_reset_and_cancel_forget_the_beans_added(tmp_path):
+    m = GardenMapper(cache_path=tmp_path / "garden.json")
+    m.update(frozenset(), 0.0, PICKER)
+    press(m, PICKER, "a", 0.1)  # red
+    press(m, PICKER, "x", 0.2)  # Reset
+    press(m, PICKER, "dpad_right", 0.3)
+    press(m, PICKER, "a", 0.4)  # green
+    press(m, PICKER, "y", 0.5)
+    m.update(frozenset(), 0.6, PANEL)
+    m.update(frozenset(), 3.0, PANEL)
+    assert m.last_beans == (1,)
+
+
+def test_dpad_up_puts_the_last_flower_in_again():
+    m = GardenMapper()
+    m.last_beans = (2, 2, 5)
+    m.update(frozenset(), 0.0, PICKER)
+    commands = m.update(frozenset({"dpad_up"}), 0.1, PICKER)
+    assert [(c.kind, c.point) for c in commands] == [
+        ("click", PLANT_RESET), ("click", bean_point(2)), ("click", bean_point(2)), ("click", bean_point(5)),
+        ("click", PLANT)]
+    assert all(c.delay > 0 for c in commands[1:])  # spaced, so TTR takes each
+    # And it's remembered again once it works.
+    m.update(frozenset(), 0.2, PANEL)
+    m.update(frozenset(), 3.0, PANEL)
+    assert m.last_beans == (2, 2, 5)
+
+
+def test_dpad_up_does_nothing_with_nothing_remembered(tmp_path):
+    m = GardenMapper(cache_path=tmp_path / "garden.json")
+    m.update(frozenset(), 0.0, PICKER)
+    assert press(m, PICKER, "dpad_up", 0.1) == []
+
+
+def test_a_broken_cache_file_is_ignored(tmp_path):
+    path = tmp_path / "garden.json"
+    path.write_text("not json", encoding="utf-8")
+    assert GardenMapper(cache_path=path).last_beans == ()
+    path.write_text('{"last_flower_beans": [1, 99]}', encoding="utf-8")
+    assert GardenMapper(cache_path=path).last_beans == ()

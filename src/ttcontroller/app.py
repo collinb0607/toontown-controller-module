@@ -129,7 +129,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     friends_screen = FriendsScreen()
     hud_mapper = HudMapper()
     hud_screen = HudScreen()
-    garden_mapper = GardenMapper()
+    garden_mapper = GardenMapper(cache_path=module_config.CONFIG_DIR / "garden.json")  # the last flower's beans kept there
     garden_screen = GardenScreen()
     pie_round = False
     golf_mapper = GolfGreenMapper()  # the Cog Golf golf green puzzle
@@ -597,7 +597,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     buttons = controller_buttons(state, config.timing.stick_button_threshold)
                     blocked = blocked | garden_mapper.buttons(garden_screen)
                     for command in garden_mapper.update(buttons, now, garden_screen):
-                        point(command.kind, command.point, command.name, view, size=command.size)
+                        point(command.kind, command.point, command.name, view, size=command.size,
+                              delay=command.delay)
                 else:
                     garden_mapper.reset_buttons()
                     garden_mapper.update(frozenset(), now, GardenScreen())

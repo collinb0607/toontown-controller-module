@@ -56,7 +56,7 @@ Working now:
 | Cog HQ facility nametags (in the margins) | LB click the first facility's nametag (RB is still the friends list) · with its popup up: LB/RB the previous/next facility, A Teleport Here!, B close |
 | Estate mailbox (open) | D-pad left/right go through the items · A take this item · X discard it · B close mailbox |
 | Planting a gag tree (the gag panel) | Same as picking a gag in battle · B closes it (its red X) |
-| Bean picker (Plant Flower) | D-pad left/right moves along the beans (wraps) · A adds the hovered bean (plants once no more beans fit) · Y plant · X reset · B cancel |
+| Bean picker (Plant Flower) | D-pad left/right moves along the beans (wraps) · A adds the hovered bean (plants once no more beans fit) · Y plant · X reset · B cancel · D-pad up: the last flower you planted again (its beans put in and planted; remembered between runs) |
 | "That didn't work" (a failed bean combination), and other OK-only popups like the new toon tutorial's | A or B clicks OK |
 | Gags, trunk or tasks up (with `toggle_hud`) | D-pad hovers the gags, trunk items or tasks, as in the shticker book · right stick right/left switches from gags to the trunk and back · on the trunk: A clicks what's hovered (a tab, the SOS filter), right stick up/down scrolls the SOS cards, LS cycles the SOS filter (instead of auto-sprint, which LS still is on gags and tasks) · left stick still walks |
 | D-pad up | Map (the same) |
