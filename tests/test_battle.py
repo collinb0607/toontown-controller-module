@@ -638,3 +638,19 @@ def test_right_stick_does_nothing_where_the_list_cant_scroll():
     remotes = replay("battle_trunk_remotes_1920x1009")
     m.update(frozenset(), 2.0, remotes)
     assert press(m, remotes, 3.0, "rs_down") == []
+
+
+def test_the_gag_trees_picker_has_a_close_x_and_a_battle_doesnt():
+    assert replay("gardening_plant_gag_tree_1920x1009").close is not None
+    assert replay("battle_gags_1920x1009").close is None
+
+
+@pytest.mark.parametrize("hold", [False, True])
+def test_b_closes_the_gag_trees_picker_instead_of_running(hold):
+    from ttcontroller.battle import PICKER_CLOSE
+    m = BattleMapper()
+    screen = replay("gardening_plant_gag_tree_1920x1009")
+    m.update(frozenset(), 0.0, screen)
+    m.update(frozenset({"b"}), 1.0, screen)
+    commands = m.update(frozenset({"b"}), 2.0, screen) if hold else m.update(frozenset(), 1.1, screen)
+    assert [c.point for c in commands if c.kind == "click"] == [PICKER_CLOSE]

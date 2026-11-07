@@ -232,6 +232,25 @@ class BattleScreen:
     items: tuple[Item, ...] = ()  # trunk: tabs, then what's usable on the open tab (or the filter options)
     filter_open: bool = False  # trunk: the SOS filter list is open
     can_scroll: tuple[bool, bool] = (False, False)  # trunk: the SOS list can scroll (up, down)
+    close: ui.UIPoint | None = None  # picker: the red X at its top right (planting a gag tree, not a battle)
+
+
+# Planting a gag tree in the garden shows the same gag panel, with a red X at its top
+# right to close it (gardening_plant_gag_tree, 1920x1009). In battle that spot is the
+# panel's dark red frame.
+PICKER_CLOSE = _center(0.5629, -0.2740)
+
+
+def _has_close(width: int, height: int, get_pixel: PixelReader) -> bool:
+    x, y = PICKER_CLOSE.to_client(width, height)
+    margin = round(0.014 * min(width, height))
+    if not (margin <= x < width - margin and margin <= y < height - margin):
+        return False  # off a narrow window's edge
+    r, g, b = get_pixel(x, y)
+    if not (r > 200 and min(g, b) > 150):  # the X's white middle
+        return False
+    ring = (get_pixel(*p.to_client(width, height)) for p in ui.around(PICKER_CLOSE, 0.013))
+    return sum(c[0] > 170 and c[0] - c[1] > 80 for c in ring) >= 3
 
 
 def _scan_arrows(width: int, height: int, get_pixel: PixelReader, row: float) -> list[ui.UIPoint]:
@@ -374,7 +393,8 @@ def read_screen(width: int, height: int, get_pixel: PixelReader) -> BattleScreen
             tuple(is_usable_gag(get_pixel(*cell(r, c).offset(*_CELL_BG).to_client(width, height)))
                   for c in range(LEVELS))
             for r in range(len(TRACKS)))
-        return BattleScreen("picker", usable=usable, **_read_choices(width, height, get_pixel))
+        close = PICKER_CLOSE if _has_close(width, height, get_pixel) else None
+        return BattleScreen("picker", usable=usable, close=close, **_read_choices(width, height, get_pixel))
     if ui.is_visible(TRUNK_RED, width, height, get_pixel) and ui.is_visible(TRUNK_BLUE, width, height, get_pixel):
         return _read_trunk(width, height, get_pixel)
     if ui.is_visible(TARGET, width, height, get_pixel):
@@ -750,6 +770,8 @@ class BattleMapper:
 
     def _run(self, action: str, screen: BattleScreen, now: float) -> list[PointerCommand]:
         if screen.kind == "picker":
+            if screen.close is not None and action in ("back", "run"):
+                return self._click(screen.close, "close", now)  # the gag tree's picker: no running
             if self.teammate is not None:
                 # Hovering teammates' choices: left/right pick one; the teammates
                 # button, A or B go back to your own gags.

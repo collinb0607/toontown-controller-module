@@ -53,6 +53,8 @@ Working now:
 | RT | Clarabelle's mail: closes her popup if one is showing, otherwise clicks her icon (only while walking around with nothing else open) |
 | Y / X | Show gags / show tasks (while held, or press to show and again to hide with `toggle_hud`) |
 | Gardening (its panel on the left) | Y clicks the top button (Pick, Plant Flower, Full) · X the bottom one (Water) · instead of showing gags and tasks · selling the basket: A Sell All, B Cancel |
+| Estate mailbox (open) | D-pad left/right go through the items · A take this item · X discard it · B close mailbox |
+| Planting a gag tree (the gag panel) | Same as picking a gag in battle · B closes it (its red X) |
 | Bean picker (Plant Flower) | D-pad left/right moves along the beans (wraps) · A adds the hovered bean (plants once no more beans fit) · Y plant · X reset · B cancel |
 | "That didn't work" (a failed bean combination) | A or B clicks OK |
 | Gags, trunk or tasks up (with `toggle_hud`) | D-pad hovers the gags, trunk items or tasks, as in the shticker book · right stick right/left switches from gags to the trunk and back · on the trunk: A clicks what's hovered (a tab, the SOS filter), right stick up/down scrolls the SOS cards, LS cycles the SOS filter (instead of auto-sprint, which LS still is on gags and tasks) · left stick still walks |
@@ -87,6 +89,7 @@ Working now:
 | Friends on someone already a friend | A Stop being Toon friends · B Cancel · then "Are you sure?": A Yes · B No · "no longer your friend": A or B OK |
 | Asking a toon to be friends | B Cancel (while waiting for their answer) |
 | A toon asks to be your friend | A OK · B No |
+| Other OK/Cancel popups while walking around (e.g. "teleport to your Estate?") | A OK · B Cancel |
 | Ignore and Report (from a toon's panel) | A Ignore or Stop Ignoring · B Cancel · Report: D-pad up/down move through the reasons, A pick one, B Cancel |
 | Whispering (the "Whisper To:" bar) | B ends the whisper (its X), after closing speedchat if it's open and before closing the toon's panel or the list |
 | A toon's panel | D-pad up/down move between its buttons · A press · X Go To (teleport) · Y Whisper · B close Toon Details, then the panel |

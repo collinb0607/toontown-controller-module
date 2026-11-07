@@ -8,11 +8,13 @@ from . import ttr_settings
 from .battle import BattleMapper, BattleScreen, read_screen
 from .combo import ButtonCombo
 from .controller import NEUTRAL, ControllerReader
+from .dialog import DialogMapper, find_ok_cancel
 from .cursor import MOVE_TOLERANCE, CursorHider
 from .book import BookMapper, BookScreen, read_book
 from .friends import FriendsMapper, FriendsScreen, read_friends
 from .garden import GardenMapper, GardenScreen, read_garden
 from .hud import HudMapper, HudScreen, read_hud
+from .mailbox import MailboxMapper, MailboxScreen, read_mailbox
 from .vp import read_pie_round
 from .mapper import OverworldMapper, controller_buttons
 from .overlay import Highlighter
@@ -125,6 +127,10 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     garden_mapper = GardenMapper()
     garden_screen = GardenScreen()
     pie_round = False
+    mailbox_mapper = MailboxMapper()  # the estate mailbox, open
+    mailbox_screen = MailboxScreen()
+    dialog_mapper = DialogMapper()  # an OK/Cancel dialog nothing else owns
+    stray_dialog = None  # its OK and Cancel, when one is showing
     pregame_mapper = PregameMapper()  # the start-up screen and toon selection
     pregame_screen = PregameScreen()
     book_mapper = BookMapper(config.book)
@@ -270,6 +276,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 hud_screen = HudScreen()
                 garden_screen = GardenScreen()
                 pie_round = False
+                stray_dialog = None
+                mailbox_screen = MailboxScreen()
                 book_screen = BookScreen()
                 output.release_all()
             else:
@@ -300,6 +308,10 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     if screen.kind != battle_screen.kind and (dry_run or debug):
                         log(f"Battle screen: {screen.kind or 'none'}")
                     battle_screen = screen
+                    # The Run? prompt's layout is any OK/Cancel dialog's: outside a battle it's
+                    # another one (the estate's "Do you want to teleport?"), handled below.
+                    stray_dialog = (find_ok_cancel(frame.width, frame.height, frame.get_pixel)
+                                    if screen.kind == "confirm_run" else None)
                     if ((book.is_open, book.page, book.dialog is not None)
                             != (book_screen.is_open, book_screen.page, book_screen.dialog is not None)
                             and (dry_run or debug)):
@@ -330,9 +342,15 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                         log(f"Gardening: {'bean picker' if garden.planting else 'sell popup' if garden.selling else 'OK popup' if garden.ok else 'panel' if garden.is_open else 'none'}"
                             + (" (no beans)" if garden.planting and not garden.beans else ""))
                     garden_screen = garden
+                    mailbox = (read_mailbox(frame.width, frame.height, frame.get_pixel)
+                               if in_game and screen.kind is None and shop.kind is None and not book.is_open
+                               else MailboxScreen())
+                    if mailbox != mailbox_screen and (dry_run or debug):
+                        log(f"Mailbox: {'open' if mailbox.is_open else 'closed'}")
+                    mailbox_screen = mailbox
                     npc = (read_npc(frame.width, frame.height, frame.get_pixel, frame.rgb())
                            if (in_game and screen.kind is None and shop.kind is None and not book.is_open
-                               and hud.kind != "trunk" and not garden.popup)
+                               and hud.kind != "trunk" and not garden.popup and not mailbox.is_open)
                            else NpcScreen())
                     if npc.kind != npc_screen.kind and (dry_run or debug):
                         log(f"NPC screen: {npc.kind or 'none'}")
@@ -500,6 +518,20 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 else:
                     garden_mapper.reset_buttons()
                     garden_mapper.update(frozenset(), now, GardenScreen())
+                if free and mailbox_screen.is_open:
+                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
+                    blocked = blocked | mailbox_mapper.buttons
+                    for command in mailbox_mapper.update(buttons, now, mailbox_screen):
+                        point(command.kind, command.point, command.name, view)
+                else:
+                    mailbox_mapper.reset_buttons()
+                if free and stray_dialog is not None and not garden_screen.is_open:
+                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
+                    blocked = blocked | DialogMapper.BUTTONS
+                    for command in dialog_mapper.update(buttons, now, stray_dialog):
+                        point(command.kind, command.point, command.name, view)
+                else:
+                    dialog_mapper.reset_buttons()
                 in_hud = free and hud_screen.kind is not None
                 if in_hud:
                     buttons = controller_buttons(state, config.timing.stick_button_threshold)

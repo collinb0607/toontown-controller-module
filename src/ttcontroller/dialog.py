@@ -42,3 +42,26 @@ def find_ok_cancel(width: int, height: int, get_pixel: PixelReader) -> tuple[ui.
     if fill < 3:
         return None
     return _center(_OK_X, y), _center(_CANCEL_X, y)
+
+
+class DialogMapper:
+    """A and B on an OK/Cancel dialog that no other screen owns, while walking around
+    with nothing else open: "Do you want to teleport to your Estate?" (estate_popup) is
+    laid out like the battle's Run? prompt but comes up outside battles."""
+
+    BUTTONS = frozenset({"a", "b"})
+
+    def __init__(self):
+        from .bindings import Bindings, ButtonActions
+        self._actions = ButtonActions(Bindings(press={"a": "ok", "b": "cancel"}), 0.5,
+                                      is_oneshot=lambda action: True)
+
+    def reset_buttons(self) -> None:
+        self._actions.reset(ignore_held=True)
+
+    def update(self, buttons: frozenset[str], now: float, dialog: tuple[ui.UIPoint, ui.UIPoint]):
+        """dialog: its OK and Cancel (find_ok_cancel). Returns PointerCommands."""
+        from .battle import PointerCommand
+        _, fired = self._actions.update(buttons, now)
+        ok, cancel = dialog
+        return [PointerCommand("click", ok if action == "ok" else cancel, f"dialog {action}") for action in fired]
