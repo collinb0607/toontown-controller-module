@@ -49,6 +49,11 @@ HELP = {
                "Actions: " + "; ".join(f"{name} = {desc}" for name, desc in FRIENDS_ACTIONS.items()),
     "toggle_hud": "true: the map, tasks and gags buttons (showMap, showTasks, showGags) "
                              "show them on one press and hide them on the next. false: shown while held.",
+    "hints": "true: show which controller button does what, as small button pictures on TTR's buttons "
+             "(and covering popup buttons), while the controller is in use. false: no hints.",
+    "hints_walking_bar": "true: while walking around, a small bar beside the laff meter lists the main buttons "
+                         "(walk, jump, gags, tasks, map, unite). false: just the badges on TTR's buttons.",
+    "hints_scale": "How big the hints are drawn: 1 is the normal size, 1.25 a quarter bigger.",
     "book": "Bindings used while the shticker book is open. "
             "Actions: " + "; ".join(f"{name} = {desc}" for name, desc in BOOK_ACTIONS.items()),
 }
@@ -72,6 +77,10 @@ class Config:
     # The map, tasks and gags buttons (showMap, showTasks, showGags) toggle: a press
     # shows them and the next press hides them, instead of showing them while held.
     toggle_hud: bool = False
+    # The hints overlay (M11): controller buttons drawn on TTR's buttons.
+    hints: bool = True
+    hints_walking_bar: bool = True
+    hints_scale: float = 1.0
     timing: Timing = field(default_factory=Timing)
 
 
@@ -91,6 +100,9 @@ def to_json(config: Config) -> dict:
         "auto_sprint": config.auto_sprint,
         "hide_cursor": config.hide_cursor,
         "toggle_hud": config.toggle_hud,
+        "hints": config.hints,
+        "hints_walking_bar": config.hints_walking_bar,
+        "hints_scale": config.hints_scale,
         "movement": asdict(config.movement),
         "timing": asdict(config.timing),
     }
@@ -167,7 +179,12 @@ def parse(data: dict) -> tuple[Config, list[str]]:
         movement=_merge_numbers(defaults.movement, data.get("movement", {}), warnings, "movement"),
         timing=_merge_numbers(defaults.timing, data.get("timing", {}), warnings, "timing"),
     )
-    for name in ("auto_sprint", "hide_cursor", "toggle_hud"):
+    scale = data.get("hints_scale", defaults.hints_scale)
+    if isinstance(scale, (int, float)) and not isinstance(scale, bool) and 0.25 <= scale <= 4:
+        config = replace(config, hints_scale=float(scale))
+    else:
+        warnings.append(f"hints_scale: must be a number from 0.25 to 4 (using {defaults.hints_scale})")
+    for name in ("auto_sprint", "hide_cursor", "toggle_hud", "hints", "hints_walking_bar"):
         value = data.get(name, getattr(defaults, name))
         if isinstance(value, bool):
             config = replace(config, **{name: value})

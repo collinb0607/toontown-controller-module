@@ -66,7 +66,11 @@ def is_x_red(c: RGB) -> bool:
 def is_icon_lavender(c: RGB) -> bool:
     r, g, b = c
     # Sky blue is bluer and greener: (128,177,238) against the icon's (144,158,196).
-    return b > 180 and r > 120 and 30 < b - r < 80 and b - g > 20 and g - r < 30
+    # The icon pulses: its pale background goes from about (138,151,187), lavender, to
+    # neutral gray (204,204,204) and back (measured live, Nov 8). So this only asks for
+    # pale, gray to bluish; the search's ring just outside the icon (at most 2 matches
+    # there) keeps clouds and walls, which spill past it, from counting.
+    return min(r, g) > 120 and b > 150 and -3 <= b - r < 80 and b >= g - 3 and g - r < 30
 
 
 @dataclass(frozen=True)

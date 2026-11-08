@@ -64,3 +64,9 @@ def test_rt_closes_the_popup_then_clicks_the_icon():
 def test_rt_does_nothing_while_something_else_is_open():
     m = OverworldMapper()
     assert rt(m, FakeView(MailScreen(close=CLOSE, icon=ICON)), 0.0, free=False) == []
+
+
+def test_the_icon_pale_gray_mid_pulse():
+    # Her icon pulses from lavender to neutral gray; this capture caught it gray.
+    screen = replay("gardening_hud_1_1920x1009", read_mail)
+    assert abs(at(screen.icon)[0] - 1712) <= 3 and abs(at(screen.icon)[1] - 60) <= 3

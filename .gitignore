@@ -10,7 +10,6 @@ dist/
 .idea/
 *.egg-info/
 captures/
-# Controller button sprites and the on-screen keyboard experiments (not published for now)
-input_sprites/
+# The on-screen keyboard experiments (not published for now)
 tools/osk_sample.py
 tools/extract_unitypackage.py

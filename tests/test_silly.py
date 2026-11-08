@@ -14,6 +14,7 @@ from ttcontroller.silly import SillyMapper, SillyScreen, read_silly
     ("silly_meter_details_1920x1009", None, True, True),
     ("clarabelle_popup_1920x1009", None, False, False),  # Clarabelle's icon in the same slot isn't it
     ("boarding_groups_1920x1009", None, False, False),
+    ("task_turn_in_1920x1009", None, False, False),  # pale yellow wallpaper behind the slot
 ])
 def test_reads_the_silly_meter(name, icon, card, details):
     screen = replay(name, read_silly)

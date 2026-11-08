@@ -4,7 +4,7 @@ Play **Toontown Rewritten** with a controller.
 
 Toontown Rewritten's own controller support is experimental: it covers movement and a virtual mouse, but has no menu navigation and no remapping. This module runs alongside the game, reads your controller, and turns its input into the keyboard and mouse actions the game expects. Controller buttons press on-screen buttons for you directly, so you never have to steer a mouse cursor around. Every button can be remapped.
 
-> **Status:** early development. Overworld controls, battles, the gag shop, NPCs, speedchat menus, the friends list, every page of the shticker book, the start-up screen, toon selection, TTR's own Options window, Make-a-Toon, boarding groups, gardening, the estate mailbox and the CFO and CEO fights work. Next: the hints overlay (M11). See [plan.md](plan.md) for the full design.
+> **Status:** early development. Overworld controls, battles, the gag shop, NPCs, speedchat menus, the friends list, every page of the shticker book, the start-up screen, toon selection, TTR's own Options window, Make-a-Toon, boarding groups, gardening, the estate mailbox, the CFO and CEO fights and on-screen button hints work. Next: a settings window (M12). See [plan.md](plan.md) for the full design.
 
 ## Features
 
@@ -21,6 +21,7 @@ Working now:
 - **Shticker book:** LB/RB flip through the pages and LT/RT switch a page's tabs (like Gags and Trunk). Each page's own controls are next.
 - **Trunk:** SOS cards (scrolling the list as you go, and filtering them from the dropdown or with LS), pink slips, remotes and doodle tricks, all with the D-pad or stick.
 - **Remapping:** a config file lets you rebind any button.
+- **Hints:** while you use the controller, small Xbox button pictures sit on TTR's buttons to show which controller button presses them, and popup buttons (OK, Cancel, Yes, No...) are covered by theirs. A few screens get a small bar for things that have no button of their own, and pressing a button gives its picture a little bounce. If you remap a button in the config, its hint shows your button. Turn them off with `"hints": false`. The button pictures come from `input_sprites/xbox-spritesheet.png`, published with the code.
 - **Highlight frame:** where it's hard to tell what's hovered with the cursor hidden (battle gags, the trunk and the which cog/toon arrows, the gag shop, and the shticker book's Gags and Trunk tabs), a glowing frame is drawn around it, like a console game.
 - **Hidden cursor:** the cursor disappears while you use the controller and comes back as soon as you move the mouse. When nothing needs hovering it waits on the window's title bar, out of the way. TTR's custom cursor can't be hidden and has no switch in TTR's Options, so set `"hide_cursor": true` in the config and the module turns it off in TTR's settings.json for you (it takes effect the next time TTR starts).
 - **Mouse pauses the controller:** move or click the mouse in TTR and the controller pauses, like switching away from TTR. Press any controller button to resume (that press only resumes; it isn't sent).
@@ -151,6 +152,7 @@ On first run the module creates `%APPDATA%\ToontownControllerModule\config.json`
 - **`press`:** button → action. An action is any TTR control name from TTR's Options > Controls (e.g. `jump`, `showGags`), or one of `sprint`, `friendsList`, `speedchat`, `unite` or `back`. The triggers are `lt` and `rt`. Set a button to `null` to unbind it.
 - **`hold`:** button → action after holding it for `timing.hold_seconds`. That button's `press` action then fires as a tap when it's released early.
 - **`movement`** and **`timing`** hold the stick deadzone, walk threshold, hold time and sprint timing. **`auto_sprint`** (true or false) is the auto-sprint setting; LS flips it and saves it here. **`toggle_hud`** (true or false, default false): when true, the map, tasks and gags buttons show them on one press and hide them on the next, instead of only while held.
+- **`hints`** (true or false, default true) shows the controller button hints. **`hints_walking_bar`** (default true) adds the small bar beside the laff meter while walking around (walk, jump, gags, tasks, map, unite). **`hints_scale`** (default 1) makes them bigger or smaller (0.25 to 4).
 
 If something in the file is wrong, the console prints `Config problem: ...` and the module uses the default for that setting.
 

@@ -1083,6 +1083,11 @@ class BookMapper:
             return replace(screen, page=self._tab[0], top_current=top)
         return screen
 
+    @property
+    def hovered_task(self) -> int | None:
+        """The ToonTask hovered on the ToonTasks page, if one is (for its hint)."""
+        return self._task
+
     def hovering(self, screen: BookScreen) -> bool:
         """Whether something on the book is hovered (so the cursor isn't parked)."""
         screen = self._known(screen)

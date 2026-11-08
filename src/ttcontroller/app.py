@@ -20,6 +20,11 @@ from .mailbox import MailboxMapper, MailboxScreen, read_mailbox
 from .boarding import BoardingMapper, BoardingScreen, read_boarding
 from .silly import SillyMapper, SillyScreen, read_silly
 from .vp import read_pie_round
+from . import hints as hint_layout
+from .ceo import read_leave
+from .elevator import read_hop_off
+from .hint_draw import Drawer, find_sheet
+from .mail import read_mail
 from .mapper import OverworldMapper, controller_buttons
 from .overlay import Highlighter
 from .output import KeyboardOutput, MouseClicker, cursor_pos, mouse_button_down, send_key
@@ -167,6 +172,23 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     aimer = Highlighter() if highlighter is not None else None
     # What the frame goes around: the hovered point and the item's size, if it has one.
     highlight = None
+    # The hints overlay (M11): controller buttons drawn on TTR's buttons, in a window of
+    # their own like the frame. If the button art (input_sprites) is missing, there are no
+    # hints.
+    hint_drawer = None
+    hint_windows: list[Highlighter] = []  # one small window per hint, made as needed
+    if highlighter is not None:
+        sheet = find_sheet(module_config.CONFIG_DIR)
+        if sheet is None:
+            log(f"Note: no hints (the controller button pictures, {module_config.CONFIG_DIR / 'xbox-spritesheet.png'}, "
+                "weren't found).")
+        else:
+            try:
+                hint_drawer = Drawer(sheet)
+            except Exception as e:  # a broken sheet shouldn't stop the controller
+                log(f"Note: no hints ({e}).")
+    hints = ()  # what the hints overlay shows now
+    hint_mail = hint_hop = hint_leave = None  # read for the hints only: Clarabelle's X, Hop off, a CEO leave button
     last_buttons = frozenset()
     foreground = ForegroundWatcher()
 
@@ -435,6 +457,13 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     if pies != pie_round and (dry_run or debug):
                         log(f"VP pie round: {'on' if pies else 'off'}")
                     pie_round = pies
+                    # Buttons the overworld reads only when pressed, read here for their hints.
+                    calm = (hint_drawer is not None and config.hints and in_game and screen.kind is None
+                            and shop.kind is None and not book.is_open and npc.kind is None and not speedchat.is_open
+                            and friends.kind is None)
+                    hint_mail = read_mail(frame.width, frame.height, frame.get_pixel) if calm else None
+                    hint_hop = read_hop_off(frame.width, frame.height, frame.get_pixel) if calm else None
+                    hint_leave = read_leave(frame.width, frame.height, frame.get_pixel) if calm else None
 
                 state = state or NEUTRAL
                 state, screenshot = bumper_combo.update(state, now)
@@ -680,6 +709,29 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     config = config_watcher.config
                 if mapper.take_unite():
                     speedchat_mapper.go_to_unite(now)
+                if hint_drawer is not None:
+                    mode = ("options" if in_options else "mat" if in_mat else "pregame" if in_pregame
+                            else "speedchat" if in_speedchat else "friends" if in_friends else "battle" if in_battle
+                            else "shop" if in_shop else "npc" if in_npc else "book" if in_book
+                            else "golf" if in_golf else "free")
+                    hints = hint_layout.hints_for(hint_layout.Context(
+                        mode=mode, options=options_screen, options_row_y=options_mapper.row_y, mat=mat_screen,
+                        pregame=pregame_screen, toon_slot=pregame_mapper.slot, battle=battle_screen,
+                        shop=shop_screen, friends=friends_screen, npc=npc_screen, book=book_screen,
+                        book_task=book_mapper.hovered_task, garden=garden_screen if free else GardenScreen(),
+                        mailbox=mailbox_screen if free else MailboxScreen(),
+                        facility=facility_screen if free else FacilityScreen(),
+                        silly=silly_screen if free else SillyScreen(),
+                        boarding=boarding_screen if in_boarding else BoardingScreen(),
+                        dialog=stray_dialog if free and not garden_screen.is_open else None,
+                        mail_close=hint_mail.close if hint_mail else None,
+                        mail_icon=hint_mail.icon if hint_mail else None, hop_off=hint_hop, leave=hint_leave, hud=in_hud,
+                        walking_bar=config.hints_walking_bar,
+                        tables={"overworld": config.bindings, "battle": config.battle, "shop": config.shop,
+                                "npc": config.npc, "speedchat": config.speedchat, "friends": config.friends,
+                                "book": config.book}))
+                    hint_drawer.hold_seconds = config.timing.hold_seconds
+                    hint_drawer.press(controller_buttons(state, config.timing.stick_button_threshold), now)
             # Runs even when unfocused, so a click in progress always puts the cursor back.
             clicker.update(now)
             if not dry_run:
@@ -709,6 +761,22 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                 else:
                     highlighter.hide()
                 highlighter.pump()
+            if hint_drawer is not None:
+                view = TTRView(foreground.ttr_hwnd) if active and foreground.ttr_hwnd else None
+                pieces = []
+                if config.hints and hints and view is not None and hider.hidden:
+                    left, top, width, height = client_rect(view.hwnd)
+                    pieces = hint_drawer.pieces(hints, width, height, now, config.hints_scale)
+                while len(hint_windows) < len(pieces):
+                    hint_windows.append(Highlighter())
+                for i, window in enumerate(hint_windows):
+                    if i < len(pieces):
+                        # Every frame, so it stays above TTR (redrawn only when its key changes).
+                        key, image, x, y = pieces[i]
+                        window.show_image(left + x, top + y, image, (key, left, top))
+                    else:
+                        window.hide()
+                    window.pump()
             if aimer is not None:
                 view = TTRView(foreground.ttr_hwnd) if active and foreground.ttr_hwnd else None
                 if golf_aim is not None and view is not None and hider.hidden:
@@ -731,5 +799,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
             highlighter.close()
         if aimer is not None:
             aimer.close()
+        for window in hint_windows:
+            window.close()
         output.release_all()
         reader.close()

@@ -7,11 +7,10 @@ and sends keyboard keys and real mouse clicks (SendInput) to drive the game.
 - Repo: `collinb0607/toontown-controller-module` (public). Plan and progress: [plan.md](plan.md).
   Player-facing controls: [README.md](README.md).
 - Milestones done: M0 to M8 (overworld, hotkeys, battles, menus, the whole shticker book,
-  start-up, toon selection, TTR's Options window, auto-detection) and M10 (Make-a-Toon and
-  boarding groups). Boss fights (M9) started early: CFO, CEO
+  start-up, toon selection, TTR's Options window, auto-detection), M10 (Make-a-Toon and
+  boarding groups) and M11 (hints overlay). Boss fights (M9) started early: CFO, CEO
   and the CJ's cannon round work; the VP's pie round and the CJ's evidence round (one
-  reader) are built, waiting on testing in game. Then M11 hints
-  overlay, M12 settings window, M13 release (1.0). Minigames are in Future, not 1.0. After 1.0:
+  reader) are built, waiting on testing in game. Next: M12 settings window, then M13 release (1.0). Minigames are in Future, not 1.0. After 1.0:
   two toons on one machine (keyboard-and-mouse toon plus a controller toon driven by posted
   window messages: paced clicks, hover by a middle-button press since TTR ignores posted
   mouse moves; findings and experiments are in plan.md and tools/background_*). M3 no longer
@@ -96,6 +95,14 @@ settings.json via `ttr_settings`).
 - `size` draws the gold highlight frame (`overlay.Highlighter`); `frame_at` puts the
   frame somewhere other than the hover point; `color` changes its color (Options' blue);
   `pointer` draws a pulsing gold pointer left of the item instead (Make-a-Toon).
+
+Hints (M11): `hints.hints_for(Context)` says which button sprites go where for the screen
+that owns the controller (badges on TTR's buttons, covers on popup buttons, small bars);
+`hint_draw.Drawer.pieces` draws each as its own small overlay window (a press bounces its
+badge). Style rules are in plan.md's M11 entry. Positions are mockup pixels at 1920x1009
+kept relative to the button's own UIPoint (`_by(point, dx, dy)`). Hints on the seven
+remappable screens carry `act=(table, actions, hold)` (`_walk`, `_bt`, `_sh`, `_fr`, `_np`,
+`_bk`) and `hints_for` swaps in the config's button; give every new hint there an act.
 
 `output.MouseClicker` is a queue: click, hover, scroll, hold/release. `busy` includes holding.
 

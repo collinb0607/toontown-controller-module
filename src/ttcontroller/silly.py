@@ -13,6 +13,7 @@ the top right like the friends list. With Clarabelle's icon up too, the gauge ma
 in the next slot left (not seen yet), so that one is looked at as well.
 """
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -31,8 +32,20 @@ def _pt(px: float, py: float) -> ui.UIPoint:
 
 
 _ICON = (1717, 62)
-_FACE = ((-20, 0), (20, 0), (0, 18))  # its cream face, round the needle
-_RING = ((0, -52), (0, 44))  # its gold ring, above and below
+
+def _circle(radius: float) -> tuple[tuple[int, int], ...]:
+    return tuple((round(radius * math.cos(k * math.pi / 8)), round(-radius * math.sin(k * math.pi / 8)))
+                 for k in range(16))
+
+
+# Its cream face, 16 spots round the middle: the needle swings across the face and covers
+# a few at a time, and the dial's marks a few more, so most (not all) must be cream; 12 or
+# 13 are in the captures. Then its gold ring: 8 of these 16 spots in the captures (the
+# ring isn't centered on the face). Nothing else there has either (Clarabelle's icon: 0).
+_FACE = _circle(22)
+_FACE_HITS = 9
+_RING = _circle(50)
+_RING_HITS = 5
 CARD_X = _pt(1878, 489)
 DETAILS_BUTTON = _pt(1738, 495)
 DETAILS_X = _pt(1273, 489)
@@ -51,13 +64,18 @@ class SillyScreen:
 
 
 def _is_cream(c: ui.RGB) -> bool:
+    # The icon pulses: only its blue changes, the face from about (245,250,160), dark
+    # yellow, to (245,250,235), light cream (measured live over a few pulses, Nov 8).
     r, g, b = c
-    return r > 225 and g > 225 and 185 < b < 242
+    return r > 225 and g > 225 and 145 < b < 242
 
 
 def _is_gold(c: ui.RGB) -> bool:
+    # The ring pulses too, from about (235,238,99) to (235,238,141). Deeper than the
+    # pale yellow wallpaper inside some buildings (234,234,163), which is cream enough
+    # to pass for the face (task_turn_in).
     r, g, b = c
-    return r > 180 and g > 180 and b < 165 and r - b > 60
+    return r > 180 and g > 180 and b < 156 and r - b > 78
 
 
 def _is_card_yellow(c: ui.RGB) -> bool:
@@ -85,8 +103,8 @@ def read_silly(width: int, height: int, get_pixel: PixelReader) -> SillyScreen:
         return SillyScreen(card=True, details=_round_x(at, DETAILS_X))
     for slot in range(2):
         x, y = _ICON[0] - slot * _SLOT_STEP, _ICON[1]
-        if (all(_is_cream(at(_pt(x + dx, y + dy))) for dx, dy in _FACE)
-                and all(_is_gold(at(_pt(x + dx, y + dy))) for dx, dy in _RING)):
+        if (sum(_is_cream(at(_pt(x + dx, y + dy))) for dx, dy in _FACE) >= _FACE_HITS
+                and sum(_is_gold(at(_pt(x + dx, y + dy))) for dx, dy in _RING) >= _RING_HITS):
             return SillyScreen(icon=_pt(x, y))
     return SillyScreen()
 
