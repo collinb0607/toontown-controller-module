@@ -24,6 +24,7 @@ Working now:
 - **Hints:** while you use the controller, small Xbox button pictures sit on TTR's buttons to show which controller button presses them, and popup buttons (OK, Cancel, Yes, No...) are covered by theirs. A few screens get a small bar for things that have no button of their own, and pressing a button gives its picture a little bounce. If you remap a button in the config, its hint shows your button. Turn them off with `"hints": false`. The button pictures come from `input_sprites/xbox-spritesheet.png`, published with the code.
 - **Highlight frame:** where it's hard to tell what's hovered with the cursor hidden (battle gags, the trunk and the which cog/toon arrows, the gag shop, and the shticker book's Gags and Trunk tabs), a glowing frame is drawn around it, like a console game.
 - **Hidden cursor:** the cursor disappears while you use the controller and comes back as soon as you move the mouse. When nothing needs hovering it waits on the window's title bar, out of the way. TTR's custom cursor can't be hidden and has no switch in TTR's Options, so set `"hide_cursor": true` in the config and the module turns it off in TTR's settings.json for you (it takes effect the next time TTR starts).
+- **Two toons:** play one toon with keyboard and mouse and a second, in its own TTR window, with the controller at the same time. Turn on **Two toons** in the module's window and pick which window is the controller's (see [Two toons](#two-toons)).
 - **Mouse pauses the controller:** move or click the mouse in TTR and the controller pauses, like switching away from TTR. Press any controller button to resume (that press only resumes; it isn't sent).
 - Uses your TTR keybinds automatically, works at any window size, and never blocks your keyboard or mouse.
 
@@ -123,6 +124,22 @@ Working now:
 | Boarding groups (by a Cog HQ elevator) | Right stick right opens the panel (the tab at the left edge), left closes it · while open: D-pad up/down hover a member (Start a Group is hovered as soon as it opens), A click it (a member opens their toon panel) · hold B leave the group (or disband it, as leader): A Yes / B No · "You cannot leave this area": A or B Cancel · walking still works |
 | Cog Golf golf green (colored balls) | Left stick aims (an aim line and crosshair show where) · D-pad left/right fine-tune the aim · A shoot · Y How to Play · hold B Exit for Now |
 
+## Two toons
+
+Two TTR windows open at once: you play one with the keyboard and mouse as usual, and the controller plays the other, even while it's in the background. The controller's window never takes focus and the real cursor stays yours.
+
+1. Open both TTR windows and log in. Put the controller's window on its own monitor or beside the other one (split screen): it must not be covered, because the module reads it from the screen.
+2. In the module's window, turn on **Two toons**. It asks which TTR window the controller plays: click its picture. **Identify** flashes a frame around the chosen window; **Pick…** chooses again. It asks every time the module starts, since TTR's windows are new each time.
+3. Play. The hints and the highlight frame stay on the controller's window (always shown there) and never cover your other window.
+
+Good to know:
+
+- If something covers the controller's window, or it's minimized, that toon pauses and the module's window says why. Move the windows apart (or restore it) and it carries on. If its window closes, press **Pick…** for another.
+- Keep the real mouse off the controller's window: TTR moves that toon's hover to follow the mouse when it passes over.
+- TTR's own pointer doesn't show in the controller's window; the hover itself (highlighted buttons, the gold frame) shows where you are.
+- `hide_cursor` changes TTR's settings, which both toons share.
+- The console version (`ttcontroller`) always plays the TTR window in front; two toons is in the module's window. It's also a switch in the settings window (General).
+
 ## Requirements
 
 - Windows 10 or 11
@@ -134,7 +151,7 @@ Working now:
 
 The easiest way is the settings window: press **Settings** in the module's window, or run `ToontownControllerSettings` (or `ttcontroller --settings`). It follows Windows' dark or light theme and saves every change at once, and the running module picks changes up right away.
 
-- **General:** which controller to use (with a live button test), hints on or off, the walking bar, hint size, the stick deadzone, walk speed, auto-sprint and the hold time.
+- **General:** which controller to use (with a live button test), two toons, hints on or off, the walking bar, hint size, the stick deadzone, walk speed, auto-sprint and the hold time.
 - **Controls:** a tab for each mode (Walking, Battle, Gag Shop, NPC chat, SpeedChat, Friends, Book) with each button's press and hold action. **Move…** listens for another button and moves what this one does there; if that button already does something, it offers to swap them.
 - **Hints:** a preview at the size you pick, and the hint settings.
 - **Game options:** hide TTR's cursor, map/tasks/gags stay open, and an Advanced section (diagonals, stick press point, sprint tap speed).
@@ -158,6 +175,7 @@ The settings live in `%APPDATA%\ToontownControllerModule\config.json`, created o
 - **`hold`:** button → action after holding it for `timing.hold_seconds`. That button's `press` action then fires as a tap when it's released early.
 - **`movement`** and **`timing`** hold the stick deadzone, walk threshold, hold time and sprint timing. **`auto_sprint`** (true or false) is the auto-sprint setting; LS flips it and saves it here. **`toggle_hud`** (true or false, default false): when true, the map, tasks and gags buttons show them on one press and hide them on the next, instead of only while held.
 - **`controller`** (default `""`): the controller to use, by name; empty uses the first one plugged in.
+- **`two_toons`** (true or false, default false): [two toons](#two-toons). Only the mode is saved; the module's window asks which TTR window is the controller's each time.
 - **`hints`** (true or false, default true) shows the controller button hints. **`hints_walking_bar`** (default true) adds the small bar beside the laff meter while walking around (walk, jump, gags, tasks, map, unite). **`hints_scale`** (default 1) makes them bigger or smaller (0.25 to 4).
 
 If something in the file is wrong, the console prints `Config problem: ...` and the module uses the default for that setting.

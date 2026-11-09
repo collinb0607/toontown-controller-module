@@ -104,8 +104,10 @@ ULW_ALPHA = 0x2
 AC_SRC_OVER, AC_SRC_ALPHA = 0x00, 0x01
 WDA_EXCLUDEFROMCAPTURE = 0x11
 PM_REMOVE = 0x1
-HWND_TOPMOST = -1
+HWND_TOP, HWND_TOPMOST, HWND_NOTOPMOST = 0, -1, -2
 SWP_NOMOVE, SWP_NOSIZE, SWP_NOACTIVATE = 0x2, 0x1, 0x10
+GWLP_HWNDPARENT = -8
+GW_HWNDPREV = 3
 
 WNDPROC = ctypes.WINFUNCTYPE(ctypes.c_ssize_t, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
 
@@ -142,6 +144,10 @@ _user32.SetWindowDisplayAffinity.argtypes = (wintypes.HWND, wintypes.DWORD)
 _user32.SetWindowPos.argtypes = (wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int,
                                  ctypes.c_int, wintypes.UINT)
 _user32.ShowWindow.argtypes = (wintypes.HWND, ctypes.c_int)
+_user32.SetWindowLongPtrW.argtypes = (wintypes.HWND, ctypes.c_int, ctypes.c_ssize_t)
+_user32.SetWindowLongPtrW.restype = ctypes.c_ssize_t
+_user32.GetWindow.argtypes = (wintypes.HWND, wintypes.UINT)
+_user32.GetWindow.restype = wintypes.HWND
 _user32.BeginDeferWindowPos.argtypes = (ctypes.c_int,)
 _user32.BeginDeferWindowPos.restype = wintypes.HANDLE
 _user32.DeferWindowPos.argtypes = (wintypes.HANDLE, wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int,
@@ -185,15 +191,25 @@ def _register() -> None:
         _registered = True
 
 
-def stack(windows: list) -> None:
-    """Raise these overlay windows above everything in one atomic move, the first on top
-    and each one just under the one before. Raising them one at a time every frame let
-    overlapping hints trade places mid-frame and flicker."""
+def stack(windows: list, above=None) -> None:
+    """Raise these overlay windows in one atomic move, the first on top and each one just
+    under the one before: above everything (above=None, one toon), or directly above the
+    window `above` (two toons: the controller toon's TTR, so they never cover the other
+    toon's window). Raising them one at a time every frame let overlapping hints trade
+    places mid-frame and flicker."""
     windows = [w for w in windows if w.visible and w.hwnd]
     if not windows:
         return
+    if above is None:
+        after = HWND_TOPMOST
+    else:
+        # Under whatever sits just above that window (skipping our own windows).
+        ours = {w.hwnd for w in windows}
+        after = _user32.GetWindow(above, GW_HWNDPREV)
+        while after and after in ours:
+            after = _user32.GetWindow(after, GW_HWNDPREV)
+        after = after or HWND_TOP
     batch = _user32.BeginDeferWindowPos(len(windows))
-    after = HWND_TOPMOST
     for w in windows:
         if batch:
             batch = _user32.DeferWindowPos(batch, w.hwnd, after, 0, 0, 0, 0,
@@ -217,6 +233,25 @@ class Highlighter:
         self._shown: tuple | None = None  # (rect, unit, color) last drawn
         self._pointers: dict[int, np.ndarray] = {}  # pointer images by length
         self.visible = False
+        self.owner = None  # the TTR window it's kept above in two-toon mode; None: topmost
+
+    def attach(self, owner) -> None:
+        """Belong to a TTR window (two toons): Windows keeps it just above that window, and
+        it hides and moves in the z-order with it, so it never covers the other toon's
+        window. None: topmost, above everything (one toon)."""
+        if owner == self.owner or not self.hwnd:
+            return
+        self.owner = owner
+        _user32.SetWindowLongPtrW(self.hwnd, GWLP_HWNDPARENT, owner or 0)
+        _user32.SetWindowPos(self.hwnd, HWND_TOPMOST if owner is None else HWND_NOTOPMOST,
+                             0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
+
+    def _raise(self) -> None:
+        if self.owner is None:
+            # Stay above TTR, which can be topmost-ish in fullscreen-like modes.
+            _user32.SetWindowPos(self.hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
+        else:
+            stack([self], above=self.owner)
 
     def show(self, rect: tuple[int, int, int, int], unit: int, color: tuple[int, int, int] = COLOR) -> None:
         """rect: the item's left, top, width and height on screen. unit: the game window's
@@ -227,8 +262,7 @@ class Highlighter:
         if not self.visible:
             _user32.ShowWindow(self.hwnd, SW_SHOWNOACTIVATE)
             self.visible = True
-        # Stay above TTR, which can be topmost-ish in fullscreen-like modes.
-        _user32.SetWindowPos(self.hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
+        self._raise()
 
     def show_image(self, left: int, top: int, image: np.ndarray, key, raise_it: bool = True) -> None:
         """Show a premultiplied BGRA image with its top left at (left, top) on screen
@@ -241,7 +275,7 @@ class Highlighter:
             _user32.ShowWindow(self.hwnd, SW_SHOWNOACTIVATE)
             self.visible = True
         if raise_it:
-            _user32.SetWindowPos(self.hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
+            self._raise()
 
     def show_pointer(self, left: int, middle: int, unit: int, now: float | None = None) -> None:
         """The pulsing pointer, pointing at an item whose left edge is at `left` and middle

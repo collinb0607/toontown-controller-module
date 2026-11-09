@@ -73,3 +73,28 @@ def grab(left: int, top: int, width: int, height: int) -> Frame:
         _gdi32.DeleteDC(mem_dc)
         _user32.ReleaseDC(None, screen_dc)
     return Frame(width, height, buffer.raw)
+
+
+PW_CLIENTONLY, PW_RENDERFULLCONTENT = 0x1, 0x2
+_user32.PrintWindow.argtypes = (wintypes.HWND, wintypes.HDC, wintypes.UINT)
+
+
+def grab_window(hwnd, width: int, height: int) -> Frame | None:
+    """Copy one window's client area even while other windows cover it (Windows keeps
+    its picture). None if Windows couldn't. For the tools only: it makes TTR's window
+    flash visibly, even at 10 copies a second (Nov 8), so the module never uses it."""
+    window_dc = _user32.GetDC(hwnd)
+    mem_dc = _gdi32.CreateCompatibleDC(window_dc)
+    bitmap = _gdi32.CreateCompatibleBitmap(window_dc, width, height)
+    try:
+        _gdi32.SelectObject(mem_dc, bitmap)
+        if not _user32.PrintWindow(hwnd, mem_dc, PW_CLIENTONLY | PW_RENDERFULLCONTENT):
+            return None
+        header = BITMAPINFOHEADER(ctypes.sizeof(BITMAPINFOHEADER), width, -height, 1, 32, 0, 0, 0, 0, 0, 0)
+        buffer = ctypes.create_string_buffer(width * height * 4)
+        _gdi32.GetDIBits(mem_dc, bitmap, 0, height, buffer, ctypes.byref(header), 0)
+    finally:
+        _gdi32.DeleteObject(bitmap)
+        _gdi32.DeleteDC(mem_dc)
+        _user32.ReleaseDC(hwnd, window_dc)
+    return Frame(width, height, buffer.raw)

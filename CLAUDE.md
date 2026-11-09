@@ -11,10 +11,13 @@ and sends keyboard keys and real mouse clicks (SendInput) to drive the game.
   boarding groups) and M11 (hints overlay). Boss fights (M9) started early: CFO, CEO
   and the CJ's cannon round work; the VP's pie round and the CJ's evidence round (one
   reader) are built, waiting on testing in game. M12 settings window is built (Nov 8),
-  waiting on testing. Then M13 two toons on one machine (moved into 1.0 Nov 8), then M14 release (1.0).
+  waiting on testing. M13 two toons on one machine (moved into 1.0 Nov 8) is done and tested in game
+  (Nov 8); then M14 release (1.0).
   Minigames are in Future, not 1.0. M13: a keyboard-and-mouse toon plus a controller toon driven by posted
   window messages: paced clicks, hover by a middle-button press since TTR ignores posted
-  mouse moves; findings and experiments are in plan.md and tools/background_*. M3 no longer
+  mouse moves; findings and experiments are in plan.md and tools/background_*, two_toon_check.py and
+  flash_check.py. Never PrintWindow a TTR window: it flashes. The controller toon's window is read
+  from the screen and must be uncovered (`BoundTarget` pauses it when covered). M3 no longer
   exists (the hints overlay was M3); done milestones keep their numbers because commit
   messages use them.
 

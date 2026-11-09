@@ -30,14 +30,15 @@ from .hint_draw import Drawer, find_sheet
 from .mail import read_mail
 from .mapper import OverworldMapper, controller_buttons
 from .overlay import Highlighter, stack
-from .output import KeyboardOutput, MouseClicker, cursor_pos, mouse_button_down, send_key
+from .output import KeyboardOutput, MouseClicker, cursor_pos, mouse_button_down, posted_output, send_key
 from .npc import NpcMapper, NpcScreen, read_npc
 from .options import OptionsMapper, OptionsScreen, read_options
 from .pregame import PregameMapper, PregameScreen, read_pregame
 from .makeatoon import MakeAToonMapper, MakeAToonScreen, read_make_a_toon
 from .shop import ShopMapper, ShopScreen, read_shop
 from .speedchat import SpeedchatMapper, SpeedchatScreen, read_speedchat
-from .window import ForegroundWatcher, TTRView, client_rect, make_dpi_aware
+from .window import (BoundTarget, ForegroundTarget, ForegroundWatcher, TargetChoice, TTRView,  # noqa: F401
+                     client_rect, make_dpi_aware)
 
 FRAME_SECONDS = 1 / 120
 SETTINGS_CHECK_SECONDS = 1.0
@@ -52,6 +53,17 @@ CONTROLLER_USE_THRESHOLD = 0.3
 
 # Where log lines go besides the console: the module's window adds one (launcher.py).
 log_sinks: list[Callable[[str], None]] = []
+
+
+# What the status shows about the controller toon's window in two-toon mode.
+TARGET_LOG = {
+    "ok": "Controller toon's window ready: controller active.",
+    "unpicked": "Two toons: no TTR window picked for the controller yet: controller paused.",
+    "minimized": "Controller toon's window is minimized: controller paused.",
+    "covered": "Controller toon's window is covered (the module reads it from the screen): controller paused. "
+               "Move the windows apart.",
+    "gone": "Controller toon's window closed: controller paused. Pick another in the module's window.",
+}
 
 
 def log(message: str) -> None:
@@ -102,6 +114,11 @@ def controller_used(state) -> bool:
     return bool(state.buttons) or any(abs(a) > CONTROLLER_USE_THRESHOLD for a in axes)
 
 
+def target_state(target) -> str | None:
+    """The controller toon's window's state for the status (two toons), else None."""
+    return target.state if target.background else None
+
+
 def make_mapper(config: module_config.Config) -> OverworldMapper:
     return OverworldMapper(config.bindings, config.movement, config.timing, config.auto_sprint,
                            config.toggle_hud)
@@ -117,9 +134,12 @@ def controls_to_keys(controls: set[str], settings: ttr_settings.TTRSettings) -> 
 
 def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
         stop: threading.Event | None = None,
-        on_status: Callable[[str | None, bool, bool], None] | None = None) -> None:
+        on_status: Callable[[str | None, bool, bool, str | None], None] | None = None,
+        choice: TargetChoice | None = None) -> None:
     """The module's loop, until Ctrl+C or `stop` is set. on_status(controller name, TTR in
-    front, paused for the mouse) is called whenever one of those changes."""
+    front, paused for the mouse, the controller toon's window's state in two-toon mode or
+    None) is called whenever one of those changes. choice: which window to drive (two
+    toons); None or choice.hwnd None drives the TTR window in front."""
     make_dpi_aware()
     watcher = ttr_settings.SettingsWatcher(ttr_dir or ttr_settings.DEFAULT_TTR_DIR)
     log(f"Reading TTR settings from {watcher.path}")
@@ -129,10 +149,12 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
     describe_config(config_watcher, watcher.settings)
     apply_hide_cursor(watcher, config_watcher.config.hide_cursor, False)
 
-    def logged_send(name: str, down: bool) -> None:
-        log(f"{'DOWN' if down else 'up  '} {name}" + ("" if dry_run else " (sent)"))
-        if not dry_run:
-            send_key(name, down)
+    def logged(send):
+        def logged_send(name: str, down: bool) -> None:
+            log(f"{'DOWN' if down else 'up  '} {name}" + ("" if dry_run else " (sent)"))
+            if not dry_run:
+                send(name, down)
+        return logged_send
 
     reader = ControllerReader(config_watcher.config.controller)
     config = config_watcher.config
@@ -173,7 +195,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
     options_screen = OptionsScreen()
     mat_mapper = MakeAToonMapper()  # Make-a-Toon, from an empty slot on toon selection
     mat_screen = MakeAToonScreen()
-    output = KeyboardOutput(logged_send if dry_run or debug else send_key)
+    send = logged(send_key) if dry_run or debug else send_key
+    output = KeyboardOutput(send)
     clicker = MouseClicker()
     hider = CursorHider()
     highlighter = None if dry_run else Highlighter()
@@ -206,6 +229,15 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
     hint_mail = hint_hop = hint_leave = None  # read for the hints only: Clarabelle's X, Hop off, a CEO leave button
     last_buttons = frozenset()
     foreground = ForegroundWatcher()
+    # The window the controller drives (two toons, M13): the TTR window in front, or the
+    # one chosen in the module's window. Two-toon mode swaps the output for posted input,
+    # leaves the real cursor and the mouse pause to the other toon, and keeps the overlay
+    # windows with that TTR window. Everything else doesn't know which mode it's in.
+    target = ForegroundTarget(foreground)
+    bound_to = (False, None)
+    if config.two_toons and choice is None:
+        log("Note: two toons is picked in the module's window (ToontownControllerModule). Here the controller "
+            "drives the TTR window in front.")
 
     def point(kind: str, target, name: str, view, restore: bool = True, notches: int = 0,
               delay: float = 0.0, size=None, frame_at=None, color=None, to=None, pointer=False) -> None:
@@ -236,8 +268,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
         elif kind == "type":
             # Typed straight away, letter by letter (a click after it waits its delay).
             for letter in name:
-                send_key(letter, True)
-                send_key(letter, False)
+                send(letter, True)
+                send(letter, False)
         else:
             clicker.click(x, y, restore=restore, delay=delay)
 
@@ -272,12 +304,44 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                 last_buttons = state.buttons
                 log(f"Buttons held: {', '.join(sorted(state.buttons)) or 'none'}")
 
-            ttr_path = foreground.ttr_foreground()
-            focused = dry_run or ttr_path is not None
-            if focused != ttr_focused:
-                ttr_focused = focused
+            wanted = choice.wanted if choice is not None else (False, None)
+            swapped = wanted != bound_to
+            if swapped:
+                # Let go of everything on the old window before driving the new one.
+                output.release_all()
+                clicker.release()
+                hider.show()
+                mouse_paused = False
+                bound_to = wanted
+                two_toons, hwnd = wanted
+                if not two_toons:
+                    target = ForegroundTarget(foreground)
+                    send = logged(send_key) if dry_run or debug else send_key
+                    output, clicker = KeyboardOutput(send), MouseClicker()
+                    log("One toon: the controller drives the TTR window in front.")
+                else:
+                    target = BoundTarget(hwnd)
+                    if hwnd is None:  # nothing picked: nothing to send to
+                        send = lambda name, down: None  # noqa: E731
+                        output = KeyboardOutput(send)
+                        clicker = MouseClicker(lambda x, y: None, lambda down: None, lambda: (0, 0), lambda n: None)
+                    else:
+                        output, clicker, send = posted_output(hwnd, logged if dry_run or debug else None)
+                    log("Two toons: the controller drives the chosen TTR window, in front or not.")
+                for window in (highlighter, aimer, *hint_windows):
+                    if window is not None:
+                        window.attach(hwnd)
+                ttr_focused = None
+            target.update()
+            ttr_path = target.path
+            focused = dry_run or target.active
+            if (focused, target.state) != ttr_focused:
+                ttr_focused = (focused, target.state)
                 if not dry_run:
-                    log("TTR focused: controller active." if focused else "TTR not focused: controller paused.")
+                    if target.background:
+                        log(TARGET_LOG[target.state])
+                    else:
+                        log("TTR focused: controller active." if focused else "TTR not focused: controller paused.")
             if ttr_path is not None and ttr_dir is None:
                 # Follow the running game's install folder in case it isn't the default.
                 watcher.set_dir(ttr_path.parent)
@@ -310,9 +374,13 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                     log("Controller resumed.")
                     # Whatever the mouse opened is read right away.
                     next_battle_check = now
-            active = focused and not mouse_paused
-            if on_status is not None and (controller_name, focused, mouse_paused) != status:
-                status = (controller_name, focused, mouse_paused)
+            # A swap starts like TTR losing focus: every screen and mapper starts over.
+            active = focused and not mouse_paused and not swapped
+            # The hints and frame show while the controller is in use; in two-toon mode the
+            # controller toon's window is the controller's alone, so always.
+            presenting = hider.hidden or target.background
+            if on_status is not None and (controller_name, focused, mouse_paused, target_state(target)) != status:
+                status = (controller_name, focused, mouse_paused, target_state(target))
                 on_status(*status)
             if not active:
                 clicker.release()
@@ -350,7 +418,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                 book_screen = BookScreen()
                 output.release_all()
             else:
-                view = TTRView(foreground.ttr_hwnd) if foreground.ttr_hwnd else None
+                view = TTRView(target.hwnd, target.background) if target.hwnd else None
                 if view is not None and now >= next_battle_check:
                     next_battle_check = now + BATTLE_CHECK_SECONDS
                     frame = view.snapshot()
@@ -755,7 +823,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                     hint_drawer.press(controller_buttons(state, config.timing.stick_button_threshold), now)
             # Runs even when unfocused, so a click in progress always puts the cursor back.
             clicker.update(now)
-            if not dry_run:
+            if not dry_run and not target.background:
+                # The real cursor and mouse are the other toon's in two-toon mode.
                 was_hidden = hider.hidden
                 pos = cursor_pos()
                 mouse_moved = hider.update(active, controller_used(state), pos, clicker.busy, clicker.moved_to)
@@ -767,13 +836,16 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                     mouse_paused = True
                     log("Mouse in use: controller paused. Press any controller button to resume."
                         + (f" ({'moved' if mouse_moved else 'button'})" if debug else ""))
+            overlay_view = TTRView(target.hwnd, target.background) if active and target.hwnd else None
+            above = target.hwnd if target.background else None
             if highlighter is not None:
-                view = TTRView(foreground.ttr_hwnd) if active and foreground.ttr_hwnd else None
-                if highlight is not None and view is not None and hider.hidden:
-                    target, (w, h), color, pointer = highlight
+                view = overlay_view
+                if highlight is not None and view is not None and presenting:
+                    # (Not `target`: that's the window the controller drives.)
+                    framed, (w, h), color, pointer = highlight
                     left, top, width, height = client_rect(view.hwnd)
                     unit = min(width, height)
-                    x, y = view.to_screen(target)
+                    x, y = view.to_screen(framed)
                     w, h = round(w * unit), round(h * unit)
                     if pointer:
                         highlighter.show_pointer(x - w // 2, y, unit)
@@ -783,13 +855,14 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                     highlighter.hide()
                 highlighter.pump()
             if hint_drawer is not None:
-                view = TTRView(foreground.ttr_hwnd) if active and foreground.ttr_hwnd else None
+                view = overlay_view
                 pieces = []
-                if config.hints and hints and view is not None and hider.hidden:
+                if config.hints and hints and view is not None and presenting:
                     left, top, width, height = client_rect(view.hwnd)
                     pieces = hint_drawer.pieces(hints, width, height, now, config.hints_scale)
                 while len(hint_windows) < len(pieces):
                     hint_windows.append(Highlighter())
+                    hint_windows[-1].attach(bound_to[1])
                 for i, window in enumerate(hint_windows):
                     if i < len(pieces):
                         # Redrawn only when its key changes.
@@ -800,10 +873,10 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                     window.pump()
                 # Every frame, so they stay above TTR: all at once in a fixed order (later
                 # hints on top), so overlapping ones don't flicker.
-                stack(hint_windows[:len(pieces)][::-1])
+                stack(hint_windows[:len(pieces)][::-1], above=above)
             if aimer is not None:
-                view = TTRView(foreground.ttr_hwnd) if active and foreground.ttr_hwnd else None
-                if golf_aim is not None and view is not None and hider.hidden:
+                view = overlay_view
+                if golf_aim is not None and view is not None and presenting:
                     unit = min(client_rect(view.hwnd)[2:])
                     px, py = view.to_screen(PIVOT)
                     key = (px, py, round(golf_aim, 2), unit)

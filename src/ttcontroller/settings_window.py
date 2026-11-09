@@ -599,6 +599,11 @@ class SettingsWindow(QMainWindow):
             self.test_icons[sprite] = icon
         tl.addStretch(1)
         lay.addWidget(test)
+        two = Switch(lambda: self.theme, "Two toons",
+                     "Play one toon with keyboard and mouse, and another with the controller in its own window. "
+                     "The module’s window asks which TTR window is the controller’s.",
+                     lambda v: self.save("two_toons", v))
+        lay.addWidget(two.card)
 
         lay.addWidget(label("Hints", h2=True))
         show = Switch(lambda: self.theme, "Show hints",
@@ -645,6 +650,7 @@ class SettingsWindow(QMainWindow):
             dz.set(c().movement.deadzone)
             walk.set(c().movement.walk_threshold)
             sprint.set(c().auto_sprint)
+            two.set(c().two_toons)
             hold.set(c().timing.hold_seconds)
             self._refresh_pads()
             self._light_test(self.pad.buttons)
@@ -900,7 +906,8 @@ class SettingsWindow(QMainWindow):
         c = lambda: self.store.config  # noqa: E731
         cursor = Switch(lambda: self.theme, "Hide TTR’s cursor",
                         "Turns off TTR’s custom cursor in its settings, so the cursor can vanish while you play on "
-                        "the controller. Applies the next time TTR starts.", lambda v: self.save("hide_cursor", v))
+                        "the controller. Applies the next time TTR starts, to every TTR window (with two toons, "
+                        "both).", lambda v: self.save("hide_cursor", v))
         hud = Switch(lambda: self.theme, "Map, tasks and gags stay open",
                      "One press shows them, the next hides them. Off: they show while the button is held.",
                      lambda v: self.save("toggle_hud", v))

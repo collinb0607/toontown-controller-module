@@ -1,7 +1,9 @@
-"""Find out whether the Toontown Rewritten window is the active (foreground) window."""
+"""Find TTR's windows: the one in front (one toon), or one chosen window that may be in
+the background (two toons, M13)."""
 
 import ctypes
 from ctypes import wintypes
+from dataclasses import dataclass
 from pathlib import Path
 
 from . import ui
@@ -19,6 +21,13 @@ _user32.GetWindowThreadProcessId.argtypes = (wintypes.HWND, ctypes.POINTER(winty
 _user32.GetClientRect.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.RECT))
 _user32.ClientToScreen.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.POINT))
 _user32.IsWindowVisible.argtypes = (wintypes.HWND,)
+_user32.IsWindow.argtypes = (wintypes.HWND,)
+_user32.IsIconic.argtypes = (wintypes.HWND,)
+_user32.WindowFromPoint.argtypes = (wintypes.POINT,)
+_user32.WindowFromPoint.restype = wintypes.HWND
+_user32.GetAncestor.argtypes = (wintypes.HWND, wintypes.UINT)
+_user32.GetAncestor.restype = wintypes.HWND
+GA_ROOT = 2
 _kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
 _kernel32.OpenProcess.restype = wintypes.HANDLE
 _kernel32.QueryFullProcessImageNameW.argtypes = (
@@ -101,11 +110,124 @@ class ForegroundWatcher:
 PARK_ABOVE = 12  # pixels above the game area: the middle of the title bar
 
 
-class TTRView:
-    """Reads and locates TTR's on-screen buttons in one game window."""
+@dataclass
+class TargetChoice:
+    """Which TTR window the controller drives, set by the module's window and read by the
+    loop each frame. One toon (two_toons False): the TTR window in front, real input. Two
+    toons: the window `hwnd`, in front or not, posted input; with none picked yet the
+    controller does nothing (it mustn't play the keyboard-and-mouse toon). Window handles
+    change every time TTR starts, so the window is never saved."""
+    two_toons: bool = False
+    hwnd: int | None = None
 
-    def __init__(self, hwnd):
+    @property
+    def wanted(self) -> tuple[bool, int | None]:
+        return (True, self.hwnd) if self.two_toons else (False, None)
+
+
+class ForegroundTarget:
+    """One toon (as always): the controller drives the TTR window in front, with real input."""
+    background = False
+
+    def __init__(self, watcher: ForegroundWatcher | None = None):
+        self._watch = watcher or ForegroundWatcher()
+        self.hwnd = None
+        self.path: Path | None = None
+
+    def update(self) -> None:
+        self.path = self._watch.ttr_foreground()
+        self.hwnd = self._watch.ttr_hwnd
+
+    @property
+    def active(self) -> bool:
+        return self.hwnd is not None
+
+    @property
+    def state(self) -> str:
+        return "ok" if self.active else "not_front"
+
+
+COVER_GRID = 5  # points per side checked for another window over the controller toon's
+
+
+def covered(hwnd) -> bool:
+    """Whether another window (or the edge of the screens) hides part of this one's game
+    area. The module reads the game from the screen, so a covered window reads wrong.
+    The module's own overlay windows let clicks through, so they never count."""
+    left, top, width, height = client_rect(hwnd)
+    if width <= 0 or height <= 0:
+        return True
+    for i in range(COVER_GRID):
+        for j in range(COVER_GRID):
+            x = left + round((i + 0.5) * width / COVER_GRID)
+            y = top + round((j + 0.5) * height / COVER_GRID)
+            under = _user32.WindowFromPoint(wintypes.POINT(x, y))
+            if not under or _user32.GetAncestor(under, GA_ROOT) != hwnd:
+                return True
+    return False
+
+
+class BoundTarget:
+    """Two toons: the controller drives one chosen TTR window, in front or not, with posted
+    input. state: "ok", "minimized" (TTR doesn't draw then), "covered", "gone" or
+    "unpicked" (hwnd None: two toons on, no window picked yet)."""
+    background = True
+
+    def __init__(self, hwnd, is_window=None, is_minimized=None, is_covered=None):
         self.hwnd = hwnd
+        self._is_window = is_window or (lambda h: bool(_user32.IsWindow(h)))
+        self._is_minimized = is_minimized or (lambda h: bool(_user32.IsIconic(h)))
+        self._is_covered = is_covered or covered
+        self.path = _process_path(hwnd) if hwnd and self._is_window(hwnd) else None
+        self.state = "ok"
+
+    def update(self) -> None:
+        if self.hwnd is None:
+            self.state = "unpicked"
+        elif not self._is_window(self.hwnd):
+            self.state = "gone"
+        elif self._is_minimized(self.hwnd):
+            self.state = "minimized"
+        elif self._is_covered(self.hwnd):
+            self.state = "covered"
+        else:
+            self.state = "ok"
+
+    @property
+    def active(self) -> bool:
+        return self.state == "ok"
+
+
+def describe_windows(rects: dict[int, tuple[int, int, int, int]], front=None) -> dict[int, str]:
+    """A name for each TTR window by where it is, for picking one: "Left", "Right", or
+    "1st from the left"... for more than two; "(in front)" on the one in front."""
+    order = sorted(rects, key=lambda h: (rects[h][0] + rects[h][2] / 2, rects[h][1]))
+    names = {}
+    for n, hwnd in enumerate(order):
+        if len(order) == 1:
+            name = "TTR"
+        elif len(order) == 2:
+            name = ("Left", "Right")[n]
+        else:
+            name = f"{n + 1}{'st' if n == 0 else 'nd' if n == 1 else 'rd' if n == 2 else 'th'} from the left"
+        names[hwnd] = name + (" (in front)" if hwnd == front else "")
+    return names
+
+
+def ttr_windows() -> list[tuple[int, str]]:
+    """(handle, name) for every TTR window, left to right."""
+    rects = {hwnd: client_rect(hwnd) for hwnd in find_ttr_windows()}
+    names = describe_windows(rects, _user32.GetForegroundWindow())
+    return [(hwnd, names[hwnd]) for hwnd in sorted(rects, key=lambda h: (rects[h][0], rects[h][1]))]
+
+
+class TTRView:
+    """Reads and locates TTR's on-screen buttons in one game window. background: the
+    controller drives it with posted input (two toons), so there's no real cursor to park."""
+
+    def __init__(self, hwnd, background: bool = False):
+        self.hwnd = hwnd
+        self.background = background
 
     def snapshot(self) -> Frame:
         """Copy the game area, so its pixels can be read in client coordinates."""
@@ -123,7 +245,11 @@ class TTRView:
     def park_spot(self) -> tuple[int, int] | None:
         """Where to leave the cursor when nothing needs hovering: on the title bar, just
         above the game area, where Windows draws the cursor instead of TTR (so it can be
-        hidden even with TTR's custom cursor). None if there's no title bar showing."""
+        hidden even with TTR's custom cursor). None if there's no title bar showing, or in
+        two-toon mode (the real cursor is the other toon's, and TTR doesn't draw its pointer
+        in a window that isn't in front)."""
+        if self.background:
+            return None
         left, top, width, _ = client_rect(self.hwnd)
         y = top - PARK_ABOVE
         return (left + width // 2, y) if y >= 0 else None

@@ -14,6 +14,15 @@ def test_status_text():
     assert launcher.status_text("Pad", True, False) == ("Playing", "The controller is driving TTR.", "ok")
 
 
+def test_status_text_for_two_toons():
+    assert launcher.status_text("Pad", True, False, "ok")[0] == "Playing"
+    assert launcher.status_text("Pad", False, False, "covered")[0] == "Controller toon covered"
+    assert launcher.status_text("Pad", False, False, "minimized")[0] == "Controller toon minimized"
+    assert launcher.status_text("Pad", False, False, "gone")[2] == "off"
+    assert launcher.status_text("Pad", False, False, "unpicked")[0] == "Pick the controller's toon"
+    assert launcher.status_text(None, False, False, "covered")[0] == "No controller"
+
+
 def test_window_runs_the_module_and_stops_it_on_close(tmp_path, monkeypatch):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     widgets = pytest.importorskip("PySide6.QtWidgets")
@@ -21,9 +30,9 @@ def test_window_runs_the_module_and_stops_it_on_close(tmp_path, monkeypatch):
 
     stopped = threading.Event()
 
-    def fake_run(ttr_dir=None, dry_run=False, debug=False, stop=None, on_status=None):
+    def fake_run(ttr_dir=None, dry_run=False, debug=False, stop=None, on_status=None, choice=None):
         module_app.log("Running.")
-        on_status("Xbox One Controller", True, False)
+        on_status("Xbox One Controller", True, False, None)
         while not stop.is_set():
             time.sleep(0.01)
         stopped.set()
@@ -32,7 +41,7 @@ def test_window_runs_the_module_and_stops_it_on_close(tmp_path, monkeypatch):
     monkeypatch.setattr(module_app, "log_sinks", [])
     monkeypatch.setattr(launcher, "LOG_FILE", tmp_path / "ttcontroller.log")
     qt = widgets.QApplication.instance() or widgets.QApplication([])
-    window = launcher.ModuleWindow()
+    window = launcher.ModuleWindow(config_path=tmp_path / "config.json")
     deadline = time.monotonic() + 2
     while window.headline.text() != "Playing" and time.monotonic() < deadline:
         qt.processEvents()

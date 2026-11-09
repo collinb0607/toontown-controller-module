@@ -53,6 +53,9 @@ HELP = {
              "(and covering popup buttons), while the controller is in use. false: no hints.",
     "hints_walking_bar": "true: while walking around, a small bar beside the laff meter lists the main buttons "
                          "(walk, jump, gags, tasks, map, unite). false: just the badges on TTR's buttons.",
+    "two_toons": "true: two TTR windows, one played with keyboard and mouse and one with the controller "
+                 "in the background. The module's window asks which TTR window is the controller's each time. "
+                 "false: the controller plays the TTR window in front.",
     "hints_scale": "How big the hints are drawn: 1 is the normal size, 1.25 a quarter bigger.",
     "controller": "Which controller to use, by name (the settings window lists them). Empty: the first one "
                   "plugged in. If the named one isn't plugged in, the first one is used.",
@@ -85,6 +88,9 @@ class Config:
     hints_scale: float = 1.0
     # The controller to use, by name ("": the first one plugged in).
     controller: str = ""
+    # Two toons (M13): the controller plays a chosen TTR window in the background. Only the
+    # mode is kept; the window is picked in the module's window each session.
+    two_toons: bool = False
     timing: Timing = field(default_factory=Timing)
 
 
@@ -108,6 +114,7 @@ def to_json(config: Config) -> dict:
         "hints_walking_bar": config.hints_walking_bar,
         "hints_scale": config.hints_scale,
         "controller": config.controller,
+        "two_toons": config.two_toons,
         "movement": asdict(config.movement),
         "timing": asdict(config.timing),
     }
@@ -194,7 +201,7 @@ def parse(data: dict) -> tuple[Config, list[str]]:
         config = replace(config, controller=controller)
     else:
         warnings.append('controller: must be a controller name, or "" for the first one')
-    for name in ("auto_sprint", "hide_cursor", "toggle_hud", "hints", "hints_walking_bar"):
+    for name in ("auto_sprint", "hide_cursor", "toggle_hud", "hints", "hints_walking_bar", "two_toons"):
         value = data.get(name, getattr(defaults, name))
         if isinstance(value, bool):
             config = replace(config, **{name: value})
