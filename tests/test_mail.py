@@ -70,3 +70,10 @@ def test_the_icon_pale_gray_mid_pulse():
     # Her icon pulses from lavender to neutral gray; this capture caught it gray.
     screen = replay("gardening_hud_1_1920x1009", read_mail)
     assert abs(at(screen.icon)[0] - 1712) <= 3 and abs(at(screen.icon)[1] - 60) <= 3
+
+
+def test_the_icon_over_purple_hills():
+    # The hills behind it are as lavender as the icon, so its dark rim is what tells it apart.
+    screen = replay("clarabelle_hills_1921x1080", read_mail)
+    x, y = at(screen.icon, (1921, 1080))
+    assert abs(x - 1550) <= 4 and abs(y - 64) <= 4

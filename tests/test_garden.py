@@ -144,6 +144,9 @@ def test_the_failed_combination_popup():
     assert near(screen.ok, 960, 641) and screen.popup
     assert not screen.planting and not screen.selling and screen.top is None
     assert replay("gardening_hud_1_1920x1009", read_garden).ok is None
+    # 1080 tall, where the button's shaded blue is darker.
+    screen = replay("gardening_failed_combo_popup_1921x1080", read_garden)
+    assert screen.ok is not None and abs(screen.ok.to_client(1921, 1080)[1] - 690) < 10
 
 
 def test_a_or_b_clicks_ok():

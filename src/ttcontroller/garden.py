@@ -93,7 +93,7 @@ def _is_cancel_red(c: RGB) -> bool:
 
 def _is_ok_blue(c: RGB) -> bool:
     r, g, b = c
-    return b > 180 and b - r > 80
+    return b > 165 and b - r > 65  # its shaded lower half reads about (103,110,177) at 1080 tall
 
 
 def _is_popup_yellow(c: RGB) -> bool:
@@ -164,15 +164,18 @@ def _read_ok(width: int, height: int, get_pixel: PixelReader) -> ui.UIPoint | No
     unit = min(width, height)
     x = width // 2
     top, bottom = (round(height / 2 + y * unit) for y in _OK_SCAN)
-    first = next((y for y in range(max(0, top), min(height, bottom)) if _is_ok_blue(get_pixel(x, y))), None)
-    if first is None:
-        return None
-    point = _center(0.0, (first - height / 2) / unit + _OK_DROP)
-    if sum(_is_ok_blue(get_pixel(*p.to_client(width, height))) for p in _blue_button(point)) < 3:
-        return None
-    if not all(_is_popup_yellow(get_pixel(*point.offset(dx, dy).to_client(width, height))) for dx, dy in _OK_FILL):
-        return None
-    return point
+    was_blue = False
+    for y in range(max(0, top), min(height, bottom)):
+        # Each blue run's top edge, until one is the OK button (a picture above it can be blue too).
+        blue = _is_ok_blue(get_pixel(x, y))
+        if blue and not was_blue:
+            point = _center(0.0, (y - height / 2) / unit + _OK_DROP)
+            if (sum(_is_ok_blue(get_pixel(*p.to_client(width, height))) for p in _blue_button(point)) >= 3
+                    and all(_is_popup_yellow(get_pixel(*point.offset(dx, dy).to_client(width, height)))
+                            for dx, dy in _OK_FILL)):
+                return point
+        was_blue = blue
+    return None
 
 
 def read_garden(width: int, height: int, get_pixel: PixelReader) -> GardenScreen:

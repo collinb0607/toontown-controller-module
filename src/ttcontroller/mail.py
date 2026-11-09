@@ -46,6 +46,10 @@ _ICON_INNER = _ring(0.042, (1, 2, 3, 7, 8, 10, 12))
 _ICON_INNER_HITS = 6
 _ICON_OUTER = _ring(0.066, tuple(range(16)))
 _ICON_OUTER_HITS = 2  # at most
+# Or its dark slate rim, when what's behind the icon is lavender too (TTR's purple hills,
+# clarabelle_hills, 1921x1080): (95..117, 104..124, 128..138) in every capture, pulse or not.
+_ICON_RIM = tuple(_ring(r, tuple(range(16))) for r in (0.0505, 0.0525, 0.0545))
+_ICON_RIM_HITS = 12  # of 16 directions
 
 
 def is_popup_yellow(c: RGB) -> bool:
@@ -61,6 +65,11 @@ def is_border_green(c: RGB) -> bool:
 def is_x_red(c: RGB) -> bool:
     r, g, b = c
     return r > 170 and r - g > 80 and r - b > 80
+
+
+def is_icon_rim(c: RGB) -> bool:
+    r, g, b = c
+    return 85 <= r <= 130 and 0 <= g - r <= 20 and 12 <= b - r <= 45
 
 
 def is_icon_lavender(c: RGB) -> bool:
@@ -135,6 +144,11 @@ def _find_icon_near(width: int, height: int, get_pixel: PixelReader, where: ui.U
     def count(x: int, y: int, ring) -> int:
         return sum(is_icon_lavender(get_pixel(round(x + dx * unit), round(y + dy * unit))) for dx, dy in ring)
 
+    def rim(x: int, y: int) -> int:
+        # Directions where any of the three radii is rim (the center is found to 2 px).
+        return sum(any(is_icon_rim(get_pixel(round(x + ring[k][0] * unit), round(y + ring[k][1] * unit)))
+                       for ring in _ICON_RIM) for k in range(16))
+
     best = None  # (inner hits, -distance, x, y)
     for y in range(cy - reach, cy + reach + 1, _ICON_STEP):
         for x in range(cx - reach, cx + reach + 1, _ICON_STEP):
@@ -142,7 +156,8 @@ def _find_icon_near(width: int, height: int, get_pixel: PixelReader, where: ui.U
             if inner < _ICON_INNER_HITS:
                 continue
             key = (inner, -math.hypot(x - cx, y - cy), x, y)
-            if (best is None or key > best) and count(x, y, _ICON_OUTER) <= _ICON_OUTER_HITS:
+            if (best is None or key > best) and (count(x, y, _ICON_OUTER) <= _ICON_OUTER_HITS
+                                                 or rim(x, y) >= _ICON_RIM_HITS):
                 best = key
     return None if best is None else _to_ui(width, height, best[2], best[3])
 
