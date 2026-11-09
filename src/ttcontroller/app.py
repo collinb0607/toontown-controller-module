@@ -1,7 +1,10 @@
 """Main loop: read the controller, map it, and send keys while TTR is focused."""
 
+import sys
+import threading
 import time
 from pathlib import Path
+from typing import Callable
 
 from . import config as module_config
 from . import ttr_settings
@@ -26,7 +29,7 @@ from .elevator import read_hop_off
 from .hint_draw import Drawer, find_sheet
 from .mail import read_mail
 from .mapper import OverworldMapper, controller_buttons
-from .overlay import Highlighter
+from .overlay import Highlighter, stack
 from .output import KeyboardOutput, MouseClicker, cursor_pos, mouse_button_down, send_key
 from .npc import NpcMapper, NpcScreen, read_npc
 from .options import OptionsMapper, OptionsScreen, read_options
@@ -47,8 +50,16 @@ BATTLE_GRACE_SECONDS = 0.5
 CONTROLLER_USE_THRESHOLD = 0.3
 
 
+# Where log lines go besides the console: the module's window adds one (launcher.py).
+log_sinks: list[Callable[[str], None]] = []
+
+
 def log(message: str) -> None:
-    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+    line = f"[{time.strftime('%H:%M:%S')}] {message}"
+    if sys.stdout is not None:  # None without a console (the windowed exe)
+        print(line, flush=True)
+    for sink in log_sinks:
+        sink(line)
 
 
 def describe_settings(settings: ttr_settings.TTRSettings) -> None:
@@ -104,7 +115,11 @@ def controls_to_keys(controls: set[str], settings: ttr_settings.TTRSettings) -> 
     return keys
 
 
-def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False) -> None:
+def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
+        stop: threading.Event | None = None,
+        on_status: Callable[[str | None, bool, bool], None] | None = None) -> None:
+    """The module's loop, until Ctrl+C or `stop` is set. on_status(controller name, TTR in
+    front, paused for the mouse) is called whenever one of those changes."""
     make_dpi_aware()
     watcher = ttr_settings.SettingsWatcher(ttr_dir or ttr_settings.DEFAULT_TTR_DIR)
     log(f"Reading TTR settings from {watcher.path}")
@@ -119,7 +134,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
         if not dry_run:
             send_key(name, down)
 
-    reader = ControllerReader()
+    reader = ControllerReader(config_watcher.config.controller)
     config = config_watcher.config
     mapper = make_mapper(config)
     battle_mapper = BattleMapper(config.battle)
@@ -239,10 +254,12 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
     npc_was_paused = False  # the task panel was showing when speedchat or the friends list opened
     bumper_combo = ButtonCombo()  # LB + RB: a screenshot
     last_holder: str | None = None  # the menu that may hold the mouse button down ("book"/"friends")
-    log("Running. Press Ctrl+C to quit." + (" (dry run: keys are printed, not sent)" if dry_run else ""))
+    log(("Running." if stop is not None else "Running. Press Ctrl+C to quit.")
+        + (" (dry run: keys are printed, not sent)" if dry_run else ""))
+    status = None
 
     try:
-        while True:
+        while stop is None or not stop.is_set():
             now = time.monotonic()
 
             state = reader.poll()
@@ -278,6 +295,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     output.release_all()
                     apply_hide_cursor(watcher, config_watcher.config.hide_cursor, config.hide_cursor)
                     config = config_watcher.config
+                    reader.set_preferred(config.controller)
                     mapper = make_mapper(config)
                     battle_mapper.set_bindings(config.battle)
                     shop_mapper.set_bindings(config.shop)
@@ -293,6 +311,9 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     # Whatever the mouse opened is read right away.
                     next_battle_check = now
             active = focused and not mouse_paused
+            if on_status is not None and (controller_name, focused, mouse_paused) != status:
+                status = (controller_name, focused, mouse_paused)
+                on_status(*status)
             if not active:
                 clicker.release()
                 # The button that resumes the controller only resumes it: anything held
@@ -771,12 +792,15 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False)
                     hint_windows.append(Highlighter())
                 for i, window in enumerate(hint_windows):
                     if i < len(pieces):
-                        # Every frame, so it stays above TTR (redrawn only when its key changes).
+                        # Redrawn only when its key changes.
                         key, image, x, y = pieces[i]
-                        window.show_image(left + x, top + y, image, (key, left, top))
+                        window.show_image(left + x, top + y, image, (key, left, top), raise_it=False)
                     else:
                         window.hide()
                     window.pump()
+                # Every frame, so they stay above TTR: all at once in a fixed order (later
+                # hints on top), so overlapping ones don't flicker.
+                stack(hint_windows[:len(pieces)][::-1])
             if aimer is not None:
                 view = TTRView(foreground.ttr_hwnd) if active and foreground.ttr_hwnd else None
                 if golf_aim is not None and view is not None and hider.hidden:

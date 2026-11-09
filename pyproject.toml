@@ -11,15 +11,22 @@ requires-python = ">=3.12"
 dependencies = [
     "pygame-ce>=2.5",
     "numpy>=1.26",
+    "PySide6-Essentials>=6.6",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 
 [project.scripts]
+# In a console, logging there (--debug, --dry-run; --settings opens the settings window).
 ttcontroller = "ttcontroller.__main__:main"
-# The same, under a name that's easy to find in Task Manager.
-ToontownControllerModule = "ttcontroller.__main__:main"
+ttcontroller-settings = "ttcontroller.settings_window:main"
+
+[project.gui-scripts]
+# The module in its own small window (status, the log, a Settings button), no console.
+ToontownControllerModule = "ttcontroller.launcher:main"
+# The settings window (M12) on its own.
+ToontownControllerSettings = "ttcontroller.settings_window:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

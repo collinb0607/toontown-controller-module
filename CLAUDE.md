@@ -10,10 +10,11 @@ and sends keyboard keys and real mouse clicks (SendInput) to drive the game.
   start-up, toon selection, TTR's Options window, auto-detection), M10 (Make-a-Toon and
   boarding groups) and M11 (hints overlay). Boss fights (M9) started early: CFO, CEO
   and the CJ's cannon round work; the VP's pie round and the CJ's evidence round (one
-  reader) are built, waiting on testing in game. Next: M12 settings window, then M13 release (1.0). Minigames are in Future, not 1.0. After 1.0:
-  two toons on one machine (keyboard-and-mouse toon plus a controller toon driven by posted
+  reader) are built, waiting on testing in game. M12 settings window is built (Nov 8),
+  waiting on testing. Then M13 two toons on one machine (moved into 1.0 Nov 8), then M14 release (1.0).
+  Minigames are in Future, not 1.0. M13: a keyboard-and-mouse toon plus a controller toon driven by posted
   window messages: paced clicks, hover by a middle-button press since TTR ignores posted
-  mouse moves; findings and experiments are in plan.md and tools/background_*). M3 no longer
+  mouse moves; findings and experiments are in plan.md and tools/background_*. M3 no longer
   exists (the hints overlay was M3); done milestones keep their numbers because commit
   messages use them.
 
@@ -57,8 +58,12 @@ and sends keyboard keys and real mouse clicks (SendInput) to drive the game.
 
 - Python: `.venv/Scripts/python.exe`. Tests: `PYTHONPATH="src;tests" .venv/Scripts/python.exe -m pytest -q`
   (semicolons on Windows). All tests must pass before handing work back.
-- Run the module: `ttcontroller` or `ToontownControllerModule` (pyproject scripts); `--debug`
-  logs screens and clicks, `--dry-run` moves nothing.
+- Run the module: `ToontownControllerModule` (a gui-script: `launcher.py`'s small window runs
+  `app.run` on a thread with a stop event, shows status and the log, opens Settings as its own
+  process, one copy at a time) or `ttcontroller` (the same in a console); `--debug`
+  logs screens and clicks, `--dry-run` moves nothing. The settings window:
+  `ToontownControllerSettings` (or `ttcontroller --settings`). Check its pages offscreen with
+  `QT_QPA_PLATFORM=offscreen QT_QPA_FONTDIR=C:/Windows/Fonts` and `widget.grab().save(...)`.
 - Record a test fixture from a capture: `PYTHONPATH="src;tests" .venv/Scripts/python.exe tools/record_pixels.py captures/<name>.png`.
   It runs every screen reader and saves only the pixels they sampled to
   `tests/fixtures/battle/<name>.json` (no whole screenshots in the repo). Tests replay them
@@ -103,6 +108,12 @@ badge). Style rules are in plan.md's M11 entry. Positions are mockup pixels at 1
 kept relative to the button's own UIPoint (`_by(point, dx, dy)`). Hints on the seven
 remappable screens carry `act=(table, actions, hold)` (`_walk`, `_bt`, `_sh`, `_fr`, `_np`,
 `_bk`) and `hints_for` swaps in the config's button; give every new hint there an act.
+
+Settings window (M12): `settings_window.py` (PySide6, Windows-style, follows the dark/light
+theme) over `settings_model.py` (no Qt: tables, labels, move/swap, `SettingsStore` writing only
+the touched keys of config.json, tables as differences from the defaults, backup first).
+Run `ToontownControllerSettings` or `ttcontroller --settings`. A new action needs a label in
+the table's `actions` in settings_model (a test checks every default action has one).
 
 `output.MouseClicker` is a queue: click, hover, scroll, hold/release. `busy` includes holding.
 

@@ -142,6 +142,12 @@ _user32.SetWindowDisplayAffinity.argtypes = (wintypes.HWND, wintypes.DWORD)
 _user32.SetWindowPos.argtypes = (wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int,
                                  ctypes.c_int, wintypes.UINT)
 _user32.ShowWindow.argtypes = (wintypes.HWND, ctypes.c_int)
+_user32.BeginDeferWindowPos.argtypes = (ctypes.c_int,)
+_user32.BeginDeferWindowPos.restype = wintypes.HANDLE
+_user32.DeferWindowPos.argtypes = (wintypes.HANDLE, wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int,
+                                   ctypes.c_int, ctypes.c_int, wintypes.UINT)
+_user32.DeferWindowPos.restype = wintypes.HANDLE
+_user32.EndDeferWindowPos.argtypes = (wintypes.HANDLE,)
 _user32.DestroyWindow.argtypes = (wintypes.HWND,)
 _user32.GetDC.argtypes = (wintypes.HWND,)
 _user32.GetDC.restype = wintypes.HDC
@@ -179,6 +185,24 @@ def _register() -> None:
         _registered = True
 
 
+def stack(windows: list) -> None:
+    """Raise these overlay windows above everything in one atomic move, the first on top
+    and each one just under the one before. Raising them one at a time every frame let
+    overlapping hints trade places mid-frame and flicker."""
+    windows = [w for w in windows if w.visible and w.hwnd]
+    if not windows:
+        return
+    batch = _user32.BeginDeferWindowPos(len(windows))
+    after = HWND_TOPMOST
+    for w in windows:
+        if batch:
+            batch = _user32.DeferWindowPos(batch, w.hwnd, after, 0, 0, 0, 0,
+                                           SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
+        after = w.hwnd
+    if batch:
+        _user32.EndDeferWindowPos(batch)
+
+
 class Highlighter:
     """Shows the frame around a rectangle of the screen, or hides it."""
 
@@ -206,16 +230,18 @@ class Highlighter:
         # Stay above TTR, which can be topmost-ish in fullscreen-like modes.
         _user32.SetWindowPos(self.hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
 
-    def show_image(self, left: int, top: int, image: np.ndarray, key) -> None:
+    def show_image(self, left: int, top: int, image: np.ndarray, key, raise_it: bool = True) -> None:
         """Show a premultiplied BGRA image with its top left at (left, top) on screen
-        (the golf green's aim line and crosshair). key: redrawn only when it changes."""
+        (the golf green's aim line and crosshair). key: redrawn only when it changes.
+        raise_it=False leaves the z-order to the caller (`stack`, for the hint windows)."""
         if key != self._shown:
             self._shown = key
             self._blit(left, top, image)
         if not self.visible:
             _user32.ShowWindow(self.hwnd, SW_SHOWNOACTIVATE)
             self.visible = True
-        _user32.SetWindowPos(self.hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
+        if raise_it:
+            _user32.SetWindowPos(self.hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
 
     def show_pointer(self, left: int, middle: int, unit: int, now: float | None = None) -> None:
         """The pulsing pointer, pointing at an item whose left edge is at `left` and middle

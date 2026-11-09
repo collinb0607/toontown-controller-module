@@ -54,6 +54,8 @@ HELP = {
     "hints_walking_bar": "true: while walking around, a small bar beside the laff meter lists the main buttons "
                          "(walk, jump, gags, tasks, map, unite). false: just the badges on TTR's buttons.",
     "hints_scale": "How big the hints are drawn: 1 is the normal size, 1.25 a quarter bigger.",
+    "controller": "Which controller to use, by name (the settings window lists them). Empty: the first one "
+                  "plugged in. If the named one isn't plugged in, the first one is used.",
     "book": "Bindings used while the shticker book is open. "
             "Actions: " + "; ".join(f"{name} = {desc}" for name, desc in BOOK_ACTIONS.items()),
 }
@@ -81,6 +83,8 @@ class Config:
     hints: bool = True
     hints_walking_bar: bool = True
     hints_scale: float = 1.0
+    # The controller to use, by name ("": the first one plugged in).
+    controller: str = ""
     timing: Timing = field(default_factory=Timing)
 
 
@@ -103,6 +107,7 @@ def to_json(config: Config) -> dict:
         "hints": config.hints,
         "hints_walking_bar": config.hints_walking_bar,
         "hints_scale": config.hints_scale,
+        "controller": config.controller,
         "movement": asdict(config.movement),
         "timing": asdict(config.timing),
     }
@@ -184,6 +189,11 @@ def parse(data: dict) -> tuple[Config, list[str]]:
         config = replace(config, hints_scale=float(scale))
     else:
         warnings.append(f"hints_scale: must be a number from 0.25 to 4 (using {defaults.hints_scale})")
+    controller = data.get("controller", defaults.controller)
+    if isinstance(controller, str):
+        config = replace(config, controller=controller)
+    else:
+        warnings.append('controller: must be a controller name, or "" for the first one')
     for name in ("auto_sprint", "hide_cursor", "toggle_hud", "hints", "hints_walking_bar"):
         value = data.get(name, getattr(defaults, name))
         if isinstance(value, bool):

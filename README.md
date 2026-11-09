@@ -29,10 +29,7 @@ Working now:
 
 Planned:
 
-- **Make-a-Toon:** creating a toon with the controller, naming included.
 - **Trolley games and fishing (after 1.0):** support for each minigame. Treasure Dive and Cannon already work with the existing controls.
-- **On-screen hints:** button prompts that change with what you're doing in game.
-- **Settings window:** remap buttons without editing a file.
 
 ## Default controls
 
@@ -135,7 +132,15 @@ Working now:
 
 ## Changing controls
 
-On first run the module creates `%APPDATA%\ToontownControllerModule\config.json`. Edit it while the module is running and changes apply right away. The `_help` section at the top lists every button name and action.
+The easiest way is the settings window: press **Settings** in the module's window, or run `ToontownControllerSettings` (or `ttcontroller --settings`). It follows Windows' dark or light theme and saves every change at once, and the running module picks changes up right away.
+
+- **General:** which controller to use (with a live button test), hints on or off, the walking bar, hint size, the stick deadzone, walk speed, auto-sprint and the hold time.
+- **Controls:** a tab for each mode (Walking, Battle, Gag Shop, NPC chat, SpeedChat, Friends, Book) with each button's press and hold action. **Move…** listens for another button and moves what this one does there; if that button already does something, it offers to swap them.
+- **Hints:** a preview at the size you pick, and the hint settings.
+- **Game options:** hide TTR's cursor, map/tasks/gags stay open, and an Advanced section (diagonals, stick press point, sprint tap speed).
+- **About:** where the settings file is, restore every setting (your file is backed up to `config.backup.json` first), and the issue page.
+
+The settings live in `%APPDATA%\ToontownControllerModule\config.json`, created on first run. You can also edit it by hand while the module is running; changes apply right away. The `_help` section at the top lists every button name and action.
 
 ```json
 "bindings": {
@@ -152,6 +157,7 @@ On first run the module creates `%APPDATA%\ToontownControllerModule\config.json`
 - **`press`:** button → action. An action is any TTR control name from TTR's Options > Controls (e.g. `jump`, `showGags`), or one of `sprint`, `friendsList`, `speedchat`, `unite` or `back`. The triggers are `lt` and `rt`. Set a button to `null` to unbind it.
 - **`hold`:** button → action after holding it for `timing.hold_seconds`. That button's `press` action then fires as a tap when it's released early.
 - **`movement`** and **`timing`** hold the stick deadzone, walk threshold, hold time and sprint timing. **`auto_sprint`** (true or false) is the auto-sprint setting; LS flips it and saves it here. **`toggle_hud`** (true or false, default false): when true, the map, tasks and gags buttons show them on one press and hide them on the next, instead of only while held.
+- **`controller`** (default `""`): the controller to use, by name; empty uses the first one plugged in.
 - **`hints`** (true or false, default true) shows the controller button hints. **`hints_walking_bar`** (default true) adds the small bar beside the laff meter while walking around (walk, jump, gags, tasks, map, unite). **`hints_scale`** (default 1) makes them bigger or smaller (0.25 to 4).
 
 If something in the file is wrong, the console prints `Config problem: ...` and the module uses the default for that setting.
@@ -163,37 +169,47 @@ If something in the file is wrong, the console prints `Config problem: ...` and 
 3. ~~Overworld hotkeys, friends list, speedchat open/close, config file~~
 4. ~~Battles~~ (including teammate hover, Toon-Up targets and the trunk)
 5. ~~Gag shop, NPC dialogue and task choice, speedchat menus, friends list~~ (plus the Unite hotkey, hidden cursor and auto-sprint)
-6. Shticker book
-7. Settings window
+6. ~~Shticker book~~
+7. Settings window (built)
 8. Boss fights
 9. Trolley games and fishing
-10. On-screen hints overlay
+10. ~~On-screen hints overlay~~
 11. First release
 
-**After 1.0:** two toons on one machine (one on keyboard and mouse and one on a controller, or a controller each), minigames, Toontown Corporate Clash, PlayStation/Switch controllers, Mac, borderless fullscreen.
+**Coming in 1.0:** two toons on one machine, one on keyboard and mouse and one on a controller.
+
+**After 1.0:** a controller each for two toons, minigames, Toontown Corporate Clash, PlayStation/Switch controllers, Mac, borderless fullscreen.
 
 ## Development
 
-Built with Python 3.12+ and pygame-ce (controller input). Keyboard and mouse output, window tracking and screen reading use the Windows API directly. PySide6 (settings window and overlay) comes in a later milestone.
+Built with Python 3.12+, pygame-ce (controller input) and PySide6 (the settings window). Keyboard and mouse output, window tracking, screen reading and the overlay use the Windows API directly.
 
 ```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 
-# Run it (controls only work while the TTR window is focused)
+# Run it: a small window shows what it's doing, with Settings and the log.
+# Controls only work while the TTR window is focused; closing the window quits.
 .\.venv\Scripts\ToontownControllerModule.exe
 
 # Print the keys it would send instead of sending them
 .\.venv\Scripts\ToontownControllerModule.exe --dry-run
 
-# Log every button press, key and click while playing
+# Log every button press, key and click while playing (Show log in the window)
 .\.venv\Scripts\ToontownControllerModule.exe --debug
+
+# The same in a console instead of a window (Ctrl+C quits)
+.\.venv\Scripts\ttcontroller.exe --debug
+
+# The settings window on its own
+.\.venv\Scripts\ToontownControllerSettings.exe
 
 # Run the tests
 .\.venv\Scripts\python.exe -m pytest
 ```
 
 The module reads your keybinds from TTR's `settings.json`, so rebinding keys in TTR's Options works automatically.
+Each run's log is also saved to `%APPDATA%\ToontownControllerModule\ttcontroller.log`, handy for bug reports.
 
 ### Adding an on-screen button
 

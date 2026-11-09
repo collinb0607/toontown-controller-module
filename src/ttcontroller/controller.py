@@ -48,13 +48,39 @@ def _axis(pad, axis: int) -> float:
     return max(-1.0, min(1.0, pad.get_axis(axis) / _AXIS_MAX))
 
 
-class ControllerReader:
-    """Opens the first connected controller and handles plugging/unplugging."""
+def connected_names() -> list[str]:
+    """The names of the controllers plugged in now (starting SDL if needed). Each is opened
+    to read its name and left open: pygame hands back the same object for a controller
+    that's already open, so closing it here would close the reader's too."""
+    if not sdl_controller.get_init():
+        pygame.init()
+        sdl_controller.init()
+    names = []
+    for index in range(sdl_controller.get_count()):
+        if sdl_controller.is_controller(index):
+            names.append(sdl_controller.Controller(index).name or f"Controller {index + 1}")
+    return names
 
-    def __init__(self):
+
+class ControllerReader:
+    """Opens a connected controller and handles plugging/unplugging. With `preferred`
+    set (a controller's name, from the settings window), that one is opened when it's
+    plugged in; otherwise, or when it isn't, the first one."""
+
+    def __init__(self, preferred: str = ""):
         pygame.init()
         sdl_controller.init()
         self._pad = None
+        self.preferred = preferred
+
+    def set_preferred(self, preferred: str) -> None:
+        """Switch to another preferred controller, reopening if that changes which one."""
+        if preferred == self.preferred:
+            return
+        self.preferred = preferred
+        if self._pad is not None:
+            self._pad.quit()
+            self._pad = None
 
     @property
     def name(self) -> str | None:
@@ -81,10 +107,12 @@ class ControllerReader:
         )
 
     def _open_first(self) -> None:
-        for index in range(sdl_controller.get_count()):
-            if sdl_controller.is_controller(index):
-                self._pad = sdl_controller.Controller(index)
-                return
+        indexes = [i for i in range(sdl_controller.get_count()) if sdl_controller.is_controller(i)]
+        if self.preferred:
+            named = [i for i in indexes if sdl_controller.Controller(i).name == self.preferred]
+            indexes = named + [i for i in indexes if i not in named]
+        if indexes:
+            self._pad = sdl_controller.Controller(indexes[0])
 
     def close(self) -> None:
         if self._pad:
