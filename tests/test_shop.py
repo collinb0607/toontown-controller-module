@@ -41,6 +41,16 @@ def test_pouch_full_nothing_buyable():
     assert replay("shop_full_1920x1009").usable == grid(*["......."] * 7)
 
 
+def test_empty_throw_slots_are_not_delete_mode():
+    # A newer toon's empty Throw slots are orange, which once read as delete mode's red:
+    # the hover only moved between them, and B clicked the trash can (Nov 8).
+    screen = replay("shop_empty_throw_slots_1920x1009")
+    assert screen.kind == "shop" and not screen.delete_mode
+    assert screen.usable == grid(".......", ".......", ".......", "BB.....", "BBBB...", "BBB....", "B......")
+    full = replay("shop_full_empty_throw_slots_1920x1009")
+    assert not full.delete_mode and full.usable == grid(*["......."] * 7)
+
+
 @pytest.mark.parametrize("name", ["shop_delete_mode_1920x1009", "shop_delete_mode_hover_1920x1009"])
 def test_delete_mode(name):
     screen = replay(name)

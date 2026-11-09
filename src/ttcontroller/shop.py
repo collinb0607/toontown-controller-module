@@ -59,9 +59,11 @@ def is_button_blue(c: RGB) -> bool:
 
 
 def is_delete_red(c: RGB) -> bool:
-    """Gags you can delete one of, in delete mode (lighter when hovered)."""
+    """Gags you can delete one of, in delete mode (lighter when hovered). A true red, green
+    and blue alike (182,54,54; hovered 213,127,127): an empty Throw slot is orange
+    (174,99,45) and fooled it into reading delete mode on."""
     r, g, b = c
-    return r > 160 and r - g > 70 and r - b > 70
+    return r > 160 and r - g > 70 and r - b > 70 and abs(g - b) < 30
 
 
 # Each track's label band, left of its gags.
