@@ -30,7 +30,8 @@ Working now:
 
 Planned:
 
-- **Trolley games and fishing (after 1.0):** support for each minigame. Treasure Dive and Cannon already work with the existing controls.
+- **Fishing (planned for 1.0):** casting, reeling in and selling fish with the controller.
+- **Trolley games (after 1.0):** support for each minigame. Treasure Dive and Cannon already work with the existing controls.
 
 ## Default controls
 
@@ -188,15 +189,15 @@ If something in the file is wrong, the console prints `Config problem: ...` and 
 4. ~~Battles~~ (including teammate hover, Toon-Up targets and the trunk)
 5. ~~Gag shop, NPC dialogue and task choice, speedchat menus, friends list~~ (plus the Unite hotkey, hidden cursor and auto-sprint)
 6. ~~Shticker book~~
-7. Settings window (built)
+7. ~~Settings window~~
 8. Boss fights
-9. Trolley games and fishing
+9. Fishing (trolley games after 1.0)
 10. ~~On-screen hints overlay~~
-11. First release
+11. ~~Two toons on one machine~~ (one on keyboard and mouse, one on a controller)
+12. A full play-test
+13. First release
 
-**Coming in 1.0:** two toons on one machine, one on keyboard and mouse and one on a controller.
-
-**After 1.0:** a controller each for two toons, minigames, Toontown Corporate Clash, PlayStation/Switch controllers, Mac, borderless fullscreen.
+**After 1.0:** a controller each for two toons, trolley games, Toontown Corporate Clash, PlayStation/Switch controllers, Mac, borderless fullscreen.
 
 ## Development
 
