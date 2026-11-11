@@ -54,7 +54,9 @@ and sends keyboard keys and real mouse clicks (SendInput) to drive the game.
   scrolls fast (`held_scroll.py`).
 - Confirms: A = OK, B = Cancel. Destructive second confirms can require Y instead of A
   (toon deletion types "delete" and presses OK on Y only).
-- LB + RB together takes a TTR screenshot (combo window 0.08 s; the user found 0.12 laggy).
+- LB + RB together takes a TTR screenshot when both are let go (combo window 0.08 s; the user found
+  0.12 laggy). While both are held, D-pad left/right brings the TTR window on that side to the
+  front (one toon), and then letting go takes no screenshot.
   LT is Unite and must never be delayed.
 
 ## Commands

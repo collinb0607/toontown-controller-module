@@ -24,13 +24,14 @@ Working now:
 - **Hints:** while you use the controller, small Xbox button pictures sit on TTR's buttons to show which controller button presses them, and popup buttons (OK, Cancel, Yes, No...) are covered by theirs. A few screens get a small bar for things that have no button of their own, and pressing a button gives its picture a little bounce. If you remap a button in the config, its hint shows your button. Turn them off with `"hints": false`. The button pictures come from `input_sprites/xbox-spritesheet.png`, published with the code.
 - **Highlight frame:** where it's hard to tell what's hovered with the cursor hidden (battle gags, the trunk and the which cog/toon arrows, the gag shop, and the shticker book's Gags and Trunk tabs), a glowing frame is drawn around it, like a console game.
 - **Hidden cursor:** the cursor disappears while you use the controller and comes back as soon as you move the mouse. When nothing needs hovering it waits on the window's title bar, out of the way. TTR's custom cursor can't be hidden and has no switch in TTR's Options, so set `"hide_cursor": true` in the config and the module turns it off in TTR's settings.json for you (it takes effect the next time TTR starts).
+- **Switching windows:** with several TTR windows open (not in two-toon mode), hold LB + RB and press D-pad left or right to bring the TTR window on that side to the front, in screen order, wrapping around. Works anywhere, battles included; it has no hint.
 - **Two toons:** play one toon with keyboard and mouse and a second, in its own TTR window, with the controller at the same time. Turn on **Two toons** in the module's window and pick which window is the controller's (see [Two toons](#two-toons)).
 - **Mouse pauses the controller:** move or click the mouse in TTR and the controller pauses, like switching away from TTR. Press any controller button to resume (that press only resumes; it isn't sent).
 - Uses your TTR keybinds automatically, works at any window size, and never blocks your keyboard or mouse.
 
 Planned:
 
-- **Fishing (planned for 1.0):** casting, reeling in and selling fish with the controller.
+- **Fishing:** hold A and pull the left stick back to cast, like a slingshot; A keeps a catch and B throws it back. Fish bingo is next.
 - **Trolley games (after 1.0):** support for each minigame. Treasure Dive and Cannon already work with the existing controls.
 
 ## Default controls
@@ -46,7 +47,7 @@ Working now:
 | RS (click the right stick) | Switch camera |
 | Right stick up/down | Look up/down |
 | RB | Friends list (press again to close) |
-| LB + RB | Take a screenshot (TTR's own Screenshot key), anywhere: walking, battles, the book |
+| LB + RB | Take a screenshot (TTR's own Screenshot key) when you let go of both, anywhere: walking, battles, the book · while both are held, D-pad left/right switches to the TTR window on that side instead (one toon) |
 | View | Speedchat (press again to close) |
 | LT | Unite: opens speedchat at UNITE! with Toon-Up highlighted (in battle too) |
 | RT | Clarabelle's mail: closes her popup if one is showing, otherwise clicks her icon (only while walking around with nothing else open; fires on letting go) |
@@ -117,12 +118,14 @@ Working now:
 
 | Boss fights | Controls |
 |---|---|
-| VP pie round, CJ evidence round | RT throws (TTR's throw key, Delete by default): press for one, hold to wind up, as with the key |
+| VP pie round, CJ evidence round | RB throws (TTR's throw key, Delete by default): press for one, hold to wind up, as with the key |
 | CJ cannon round | Same as the trolley's Cannon game (already works) |
 | CFO | Left stick move crane · hold X magnet · B leave the crane (clicks its red X) |
 | CEO | Left stick turn · hold X charge, release to fire · B leaves the seltzer bottle or golf ball (clicks its red X) |
 | Elevators and golf karts | B Hop off (with speedchat open, B closes it first, and B again hops off) |
 | Boarding groups (by a Cog HQ elevator) | Right stick right opens the panel (the tab at the left edge), left closes it · while open: D-pad up/down hover a member (Start a Group is hovered as soon as it opens), A click it (a member opens their toon panel) · hold B leave the group (or disband it, as leader): A Yes / B No · "You cannot leave this area": A or B Cancel · walking still works |
+| Gardening introduction (the first time) | A next page (Done on the last) · B or D-pad left previous page · D-pad right next page |
+| Fishing (on a dock) | Hold A to grab the Cast button · while holding, the left stick moves the pull like a slingshot (pull back to cast forward, back-left to cast to the right); it stays put when you let go of the stick and stops at the longest pull · let go of A to cast (the next cast starts where this one was let go) · LS switches to the stick *being* the aim (where it points; the shortest cast straight forward at rest) and back, remembered in the config · B leaves the dock · catch card: X keep the fish, B throw it back, or just hold A to cast again with the card up · bucket full / out of jellybeans: A or B Exit |
 | Cog Golf golf green (colored balls) | Left stick aims (an aim line and crosshair show where) · D-pad left/right fine-tune the aim · A shoot · Y How to Play · hold B Exit for Now |
 
 ## Two toons
@@ -176,7 +179,9 @@ The settings live in `%APPDATA%\ToontownControllerModule\config.json`, created o
 - **`hold`:** button → action after holding it for `timing.hold_seconds`. That button's `press` action then fires as a tap when it's released early.
 - **`movement`** and **`timing`** hold the stick deadzone, walk threshold, hold time and sprint timing. **`auto_sprint`** (true or false) is the auto-sprint setting; LS flips it and saves it here. **`toggle_hud`** (true or false, default false): when true, the map, tasks and gags buttons show them on one press and hide them on the next, instead of only while held.
 - **`controller`** (default `""`): the controller to use, by name; empty uses the first one plugged in.
+- **`fishing_cast`** (`"move"` or `"stick"`, default `"move"`): how the left stick casts while fishing; LS on the dock switches it and saves it here.
 - **`two_toons`** (true or false, default false): [two toons](#two-toons). Only the mode is saved; the module's window asks which TTR window is the controller's each time.
+- **`close_to_tray`** (true or false, default true): closing the module's window keeps the controller running, with its icon in the notification area. Click the icon to open the window again; right-click it for Settings and Quit. Starting the module again also brings the window back. false: closing the window quits.
 - **`hints`** (true or false, default true) shows the controller button hints. **`hints_walking_bar`** (default true) adds the small bar beside the laff meter while walking around (walk, jump, gags, tasks, map, unite). **`hints_scale`** (default 1) makes them bigger or smaller (0.25 to 4).
 
 If something in the file is wrong, the console prints `Config problem: ...` and the module uses the default for that setting.
@@ -226,6 +231,17 @@ py -3.12 -m venv .venv
 # Run the tests
 .\.venv\Scripts\python.exe -m pytest
 ```
+
+### Building the exe
+
+`ToontownController.exe` is the module packaged with its own icon (`input_sprites/icon.png`), no Python needed to run it:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[build]"
+.\.venv\Scripts\python.exe tools\build_exe.py
+```
+
+It lands in `dist\ToontownController\`. Share the whole folder: the exe needs the `_internal` folder beside it. Its Settings button opens Settings as the same exe.
 
 The module reads your keybinds from TTR's `settings.json`, so rebinding keys in TTR's Options works automatically.
 Each run's log is also saved to `%APPDATA%\ToontownControllerModule\ttcontroller.log`, handy for bug reports.
