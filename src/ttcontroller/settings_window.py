@@ -16,6 +16,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 import numpy as np
 
+from .app_icon import app_pixmap, use_app_icon
 from .config import CONFIG_DIR, CONFIG_FILE, Config
 from .controller import ControllerReader, connected_names
 from .hint_draw import RING_STEPS, Drawer, find_sheet
@@ -26,7 +27,7 @@ from .settings_model import (ACTION_HELP, BUTTON_LABELS, BUTTON_SPRITES, TABLES,
 from .ui import UIPoint
 
 from PySide6.QtCore import QObject, QRectF, Qt, QTimer, QUrl, Signal  # noqa: E402
-from PySide6.QtGui import (QColor, QDesktopServices, QFont, QGuiApplication, QIcon, QImage, QPainter,  # noqa: E402
+from PySide6.QtGui import (QColor, QDesktopServices, QFont, QGuiApplication, QImage, QPainter,  # noqa: E402
                            QPen, QPixmap)
 from PySide6.QtWidgets import (QAbstractButton, QApplication, QComboBox, QDialog, QFrame, QGridLayout,  # noqa: E402
                                QHBoxLayout, QLabel, QListWidget, QMainWindow, QMessageBox, QPushButton,
@@ -195,6 +196,8 @@ class Toggle(QAbstractButton):
         t = self._theme()
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
+        if not self.isEnabled():
+            p.setOpacity(0.4)  # locked
         on = self.isChecked()
         if on:
             p.setPen(QColor(t["accent"]))
@@ -471,7 +474,6 @@ class SettingsWindow(QMainWindow):
         self.pad = pad or Pad(self.store.config.controller, self.store.config.timing.stick_button_threshold)
         self.theme = DARK if is_dark() else LIGHT
         self.setWindowTitle("Toontown Controller Settings")
-        self.setWindowIcon(QIcon(self.art.pixmap("A", 64)))
         self.resize(1100, 780)
         self.setMinimumSize(860, 560)
         self._refreshers = []
@@ -485,13 +487,14 @@ class SettingsWindow(QMainWindow):
         side = QVBoxLayout()
         side.setContentsMargins(10, 18, 10, 18)
         brand = QHBoxLayout()
-        brand.setContentsMargins(12, 6, 12, 14)
+        brand.setContentsMargins(8, 0, 8, 16)
         brand.setSpacing(10)
         logo = QLabel()
-        logo.setPixmap(self.art.pixmap("A", 22))
+        logo.setPixmap(app_pixmap(56) or self.art.pixmap("A", 44))
         brand.addWidget(logo)
+        # Well bigger than the sections below it (10pt): the app's name (the user, Nov 10).
         name = label("Toontown Controller")
-        name.setStyleSheet("font-size: 9pt; font-weight: 600;")
+        name.setStyleSheet("font-size: 16pt; font-weight: 700;")
         brand.addWidget(name)
         brand.addStretch(1)
         side.addLayout(brand)
@@ -604,6 +607,11 @@ class SettingsWindow(QMainWindow):
                      "The module’s window asks which TTR window is the controller’s.",
                      lambda v: self.save("two_toons", v))
         lay.addWidget(two.card)
+        tray = Switch(lambda: self.theme, "Close to tray",
+                      "Closing the module’s window keeps the controller running, with its icon in the "
+                      "notification area. Click the icon to open the window again; right-click it to quit.",
+                      lambda v: self.save("close_to_tray", v))
+        lay.addWidget(tray.card)
 
         lay.addWidget(label("Hints", h2=True))
         show = Switch(lambda: self.theme, "Show hints",
@@ -651,6 +659,7 @@ class SettingsWindow(QMainWindow):
             walk.set(c().movement.walk_threshold)
             sprint.set(c().auto_sprint)
             two.set(c().two_toons)
+            tray.set(c().close_to_tray)
             hold.set(c().timing.hold_seconds)
             self._refresh_pads()
             self._light_test(self.pad.buttons)
@@ -1056,6 +1065,7 @@ def main() -> None:
     app = QApplication.instance() or QApplication(sys.argv)
     app.setStyle("Fusion")
     app.setApplicationName("Toontown Controller Settings")
+    use_app_icon(app)
     window = SettingsWindow()
     window.show()
     sys.exit(app.exec())

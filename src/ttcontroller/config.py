@@ -59,6 +59,9 @@ HELP = {
     "two_toons": "true: two TTR windows, one played with keyboard and mouse and one with the controller "
                  "in the background. The module's window asks which TTR window is the controller's each time. "
                  "false: the controller plays the TTR window in front.",
+    "close_to_tray": "true: closing the module's window keeps the controller running, with an icon in the "
+                     "notification area (click it to open the window again, right-click for Settings and Quit). "
+                     "false: closing it quits.",
     "hints_scale": "How big the hints are drawn: 1 is the normal size, 1.25 a quarter bigger.",
     "controller": "Which controller to use, by name (the settings window lists them). Empty: the first one "
                   "plugged in. If the named one isn't plugged in, the first one is used.",
@@ -94,6 +97,8 @@ class Config:
     # Two toons (M13): the controller plays a chosen TTR window in the background. Only the
     # mode is kept; the window is picked in the module's window each session.
     two_toons: bool = False
+    # Closing the module's window keeps it running in the notification area (the user: on by default).
+    close_to_tray: bool = True
     # Fishing (M14): "move" (the stick moves the aim) or "stick" (the stick is the aim).
     fishing_cast: str = "move"
     timing: Timing = field(default_factory=Timing)
@@ -120,6 +125,7 @@ def to_json(config: Config) -> dict:
         "hints_scale": config.hints_scale,
         "controller": config.controller,
         "two_toons": config.two_toons,
+        "close_to_tray": config.close_to_tray,
         "fishing_cast": config.fishing_cast,
         "movement": asdict(config.movement),
         "timing": asdict(config.timing),
@@ -212,7 +218,8 @@ def parse(data: dict) -> tuple[Config, list[str]]:
         config = replace(config, fishing_cast=cast)
     else:
         warnings.append(f'fishing_cast: must be "move" or "stick" (using "{defaults.fishing_cast}")')
-    for name in ("auto_sprint", "hide_cursor", "toggle_hud", "hints", "hints_walking_bar", "two_toons"):
+    for name in ("auto_sprint", "hide_cursor", "toggle_hud", "hints", "hints_walking_bar", "two_toons",
+                 "close_to_tray"):
         value = data.get(name, getattr(defaults, name))
         if isinstance(value, bool):
             config = replace(config, **{name: value})

@@ -220,7 +220,8 @@ def test_the_two_toons_switch_asks_for_a_window_and_saves_the_mode(qt, tmp_path)
             return self.chosen is not None
 
     path = tmp_path / "config.json"
-    window = launcher.ModuleWindow(start=False, config_path=path, pick_dialog=FakePick)
+    window = launcher.ModuleWindow(start=False, config_path=path, pick_dialog=FakePick,
+                                   place_path=tmp_path / "window.json")
     try:
         assert not window.choice.two_toons and window.pick_row.isHidden()
         window.two.toggle.click()
@@ -250,7 +251,8 @@ def test_the_module_window_follows_the_settings_window(qt, tmp_path):
             return False
 
     path = tmp_path / "config.json"
-    window = launcher.ModuleWindow(start=False, config_path=path, pick_dialog=NoPick)
+    window = launcher.ModuleWindow(start=False, config_path=path, pick_dialog=NoPick,
+                                   place_path=tmp_path / "window.json")
     try:
         data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
         data["two_toons"] = True

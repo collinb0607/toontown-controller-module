@@ -11,28 +11,35 @@ shared TargetChoice.
 """
 
 import argparse
+import base64
 import ctypes
+import json
 import subprocess
 import sys
 import threading
 import traceback
 from pathlib import Path
 
+from .app_icon import app_pixmap, use_app_icon
 from .config import CONFIG_DIR, CONFIG_FILE
 from .screen import grab
 from .settings_model import SettingsStore
-from .settings_window import DARK, LIGHT, Art, Switch, is_dark, label, stylesheet
+from .settings_window import DARK, LIGHT, Art, Toggle, is_dark, label, stylesheet
 from .window import TargetChoice, client_rect, ttr_windows
 
-from PySide6.QtCore import QObject, QSize, Qt, QTimer, Signal  # noqa: E402
-from PySide6.QtGui import QGuiApplication, QIcon, QImage, QPixmap, QTextCursor  # noqa: E402
+from PySide6.QtCore import QByteArray, QObject, QSize, Qt, QTimer, Signal  # noqa: E402
+from PySide6.QtGui import QAction, QGuiApplication, QIcon, QImage, QPixmap, QTextCursor  # noqa: E402
 from PySide6.QtWidgets import (QApplication, QDialog, QFrame, QHBoxLayout, QLabel, QMainWindow,  # noqa: E402
-                               QMessageBox, QPlainTextEdit, QPushButton, QSizePolicy, QToolButton,
+                               QMenu, QMessageBox, QPlainTextEdit, QPushButton, QSizePolicy,
+                               QSystemTrayIcon, QToolButton,
                                QVBoxLayout, QWidget)
 
 TITLE = "Toontown Controller"
 SETTINGS_TITLE = "Toontown Controller Settings"
 LOG_FILE = CONFIG_DIR / "ttcontroller.log"  # this session's log, for bug reports
+# Where the window was when it closed, and whether the log was open, so it comes back the
+# same way (the user, Nov 9). Its own file: config.json is the user's settings.
+PLACE_FILE = CONFIG_DIR / "window.json"
 _MUTEX = "Local\\ToontownControllerModule"
 _LOG_LINES = 500  # kept in the window
 
@@ -43,6 +50,18 @@ _user32.FindWindowW.argtypes = (ctypes.c_wchar_p, ctypes.c_wchar_p)
 _user32.SetForegroundWindow.argtypes = (ctypes.c_void_p,)
 _user32.ShowWindow.argtypes = (ctypes.c_void_p, ctypes.c_int)
 SW_RESTORE = 9
+# A second copy started while this one hides in the tray sets this event; the running
+# copy sees it and shows its window (FindWindow can't bring back a window Qt hid).
+_SHOW_EVENT = "Local\\ToontownControllerModuleShow"
+_kernel32.CreateEventW.restype = ctypes.c_void_p
+_kernel32.CreateEventW.argtypes = (ctypes.c_void_p, ctypes.c_bool, ctypes.c_bool, ctypes.c_wchar_p)
+_kernel32.OpenEventW.restype = ctypes.c_void_p
+_kernel32.OpenEventW.argtypes = (ctypes.c_uint32, ctypes.c_bool, ctypes.c_wchar_p)
+_kernel32.SetEvent.argtypes = (ctypes.c_void_p,)
+_kernel32.WaitForSingleObject.argtypes = (ctypes.c_void_p, ctypes.c_uint32)
+_kernel32.CloseHandle.argtypes = (ctypes.c_void_p,)
+EVENT_MODIFY_STATE = 0x0002
+WAIT_OBJECT_0 = 0
 ERROR_ALREADY_EXISTS = 183
 CREATE_NO_WINDOW = 0x08000000
 
@@ -148,13 +167,82 @@ class _Bridge(QObject):
     stopped = Signal(str)  # "" when it stopped because the window asked
 
 
+def help_mark(text: str) -> QLabel:
+    """A small ? whose hover tooltip is `text`."""
+    mark = QLabel("?")
+    mark.setProperty("help", True)
+    mark.setFixedSize(16, 16)
+    mark.setAlignment(Qt.AlignCenter)
+    mark.setToolTip(text)
+    mark.setAccessibleName(text)
+    return mark
+
+
+class CompactSwitch:
+    """One line: the name, a ? with the description, then On/Off and the toggle."""
+
+    def __init__(self, theme, title: str, desc: str, save):
+        self.toggle = Toggle(theme, title)
+        self.toggle.setToolTip(desc)
+        self.state = label()
+        self.toggle.toggled.connect(self._toggled)
+        self._save = save
+        self.card = QWidget()
+        row = QHBoxLayout(self.card)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+        row.addWidget(label(title))
+        row.addWidget(help_mark(desc))
+        row.addStretch(1)
+        row.addWidget(self.state)
+        row.addSpacing(6)
+        row.addWidget(self.toggle)
+
+    def _toggled(self, on: bool) -> None:
+        self.state.setText("On" if on else "Off")
+        self._save(on)
+
+    def set(self, on: bool) -> None:
+        self.toggle.blockSignals(True)
+        self.toggle.setChecked(on)
+        self.toggle.blockSignals(False)
+        self.state.setText("On" if on else "Off")
+        self.toggle.update()
+
+
+COMING_SOON = "Corporate Clash is coming soon."
+
+
+class GameSwitch:
+    """Rewritten or Corporate Clash: locked on Rewritten for now, and does nothing."""
+
+    def __init__(self, theme):
+        self.toggle = Toggle(theme, "Game: Rewritten or Corporate Clash")
+        self.toggle.setEnabled(False)
+        self.card = QWidget()
+        self.card.setToolTip(COMING_SOON)
+        row = QHBoxLayout(self.card)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+        # Kept together (the user: wide gaps looked odd), the space after them.
+        row.addWidget(label("Rewritten"))
+        row.addSpacing(4)
+        row.addWidget(self.toggle)
+        row.addSpacing(4)
+        clash = label("Corporate Clash")
+        clash.setProperty("sub", True)
+        row.addWidget(clash)
+        row.addWidget(help_mark(COMING_SOON))
+        row.addStretch(1)
+
+
 class ModuleWindow(QMainWindow):
     def __init__(self, ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
-                 start: bool = True, config_path: Path = CONFIG_FILE, pick_dialog=PickDialog):
+                 start: bool = True, config_path: Path = CONFIG_FILE, pick_dialog=PickDialog,
+                 place_path: Path = PLACE_FILE, tray: bool = True):
         super().__init__()
         self.setWindowTitle(TITLE)
         art = Art()
-        self.setWindowIcon(QIcon(art.pixmap("A", 64)))
         self._settings: subprocess.Popen | None = None
         self._bridge = _Bridge()
         self._bridge.line.connect(self._add_line)
@@ -179,7 +267,7 @@ class ModuleWindow(QMainWindow):
         head = QHBoxLayout()
         head.setSpacing(10)
         logo = QLabel()
-        logo.setPixmap(art.pixmap("A", 28))
+        logo.setPixmap(app_pixmap(32) or art.pixmap("A", 28))
         head.addWidget(logo)
         name = QLabel(TITLE)
         name.setProperty("title", True)
@@ -211,11 +299,20 @@ class ModuleWindow(QMainWindow):
         cl.addWidget(self.controller)
         lay.addWidget(card)
 
-        # Two toons (M13): the switch, then which TTR window the controller plays.
-        self.two = Switch(lambda: self.theme, "Two toons",
-                          "One toon on keyboard and mouse, another on the controller.", self._set_two_toons)
+        # Compact switches, each with a ? whose hover says what it does (the user, Nov 10):
+        # Two toons (M13), then which game, locked to Rewritten until Corporate Clash comes.
+        switches = QFrame()
+        switches.setProperty("card", True)
+        sl = QVBoxLayout(switches)
+        sl.setContentsMargins(14, 8, 14, 8)
+        sl.setSpacing(6)
+        self.two = CompactSwitch(lambda: self.theme, "Two toons",
+                                 "One toon on keyboard and mouse, another on the controller.", self._set_two_toons)
         self.two.set(self.choice.two_toons)
-        lay.addWidget(self.two.card)
+        sl.addWidget(self.two.card)
+        self.game = GameSwitch(lambda: self.theme)
+        sl.addWidget(self.game.card)
+        lay.addWidget(switches)
         self.pick_row = QFrame()
         self.pick_row.setProperty("card", True)
         pr = QHBoxLayout(self.pick_row)
@@ -263,6 +360,8 @@ class ModuleWindow(QMainWindow):
         except AttributeError:
             pass
         self._fit()
+        self._place_path = place_path
+        self._restore_place()
 
         self._log_file = None
         try:
@@ -273,6 +372,14 @@ class ModuleWindow(QMainWindow):
         self._thread = threading.Thread(target=self._run, args=(ttr_dir, dry_run, debug), daemon=True)
         if start:
             self._thread.start()
+        # Close to tray: an icon in the notification area while the window is hidden.
+        self._quitting = False
+        self._tray_told = False  # the "still running" notice, shown on the first close only
+        self.tray = self._make_tray() if tray and QSystemTrayIcon.isSystemTrayAvailable() else None
+        self._show_event = _kernel32.CreateEventW(None, False, False, _SHOW_EVENT) if tray else None
+        self._show_timer = QTimer(self)
+        self._show_timer.timeout.connect(self._check_show_event)
+        self._show_timer.start(300)
         # The settings window can switch two toons too: follow config.json.
         self._config_timer = QTimer(self)
         self._config_timer.timeout.connect(self._check_config)
@@ -312,11 +419,15 @@ class ModuleWindow(QMainWindow):
         headline, detail, tone = status_text(controller, focused, mouse_paused, target)
         self.headline.setText(headline)
         self.detail.setText(detail)
+        if self.tray is not None:
+            self.tray.setToolTip(f"{TITLE}: {headline}")
         self.controller.setText(f"Controller: {controller}" if controller else "")
         self.controller.setVisible(bool(controller))
         self._tone = tone
         self._paint_dot()
-        self._fit()  # the detail may wrap onto more lines
+        # The detail may wrap onto more or fewer lines; its new height is only known once
+        # Qt has handled the text change, so fit after that.
+        QTimer.singleShot(0, self._fit)
 
     def _on_stopped(self, error: str) -> None:
         if not error:
@@ -399,11 +510,15 @@ class ModuleWindow(QMainWindow):
     def open_settings(self) -> None:
         if self._settings is not None and self._settings.poll() is None and bring_to_front(SETTINGS_TITLE):
             return
-        python = Path(sys.executable)
-        windowed = python.with_name("pythonw.exe")
-        exe = windowed if windowed.exists() else python
-        self._settings = subprocess.Popen([str(exe), "-m", "ttcontroller", "--settings"],
-                                          creationflags=CREATE_NO_WINDOW)
+        if getattr(sys, "frozen", False):
+            # The packaged ToontownController.exe opens Settings as itself (see main).
+            command = [sys.executable, "--settings"]
+        else:
+            python = Path(sys.executable)
+            windowed = python.with_name("pythonw.exe")
+            exe = windowed if windowed.exists() else python
+            command = [str(exe), "-m", "ttcontroller", "--settings"]
+        self._settings = subprocess.Popen(command, creationflags=CREATE_NO_WINDOW)
 
     # ---- look ------------------------------------------------------------------------------
     def apply_theme(self) -> None:
@@ -412,6 +527,7 @@ class ModuleWindow(QMainWindow):
         self.setStyleSheet(stylesheet(t) + f"""
             QLabel[title="true"] {{ font-size: 12pt; font-weight: 600; }}
             QLabel[headline="true"] {{ font-weight: 600; }}
+            QLabel[help="true"] {{ color: {t['sub']}; border: 1px solid {t['sub']}; border-radius: 8px; font-size: 8pt; font-weight: 600; }}
             QPushButton:checked {{ background: {t['nav']}; }}
             QPlainTextEdit {{ background: {t['well']}; border: 1px solid {t['border']}; border-radius: 6px; padding: 4px; font-family: Consolas, monospace; font-size: 9pt; }}
         """)
@@ -435,11 +551,82 @@ class ModuleWindow(QMainWindow):
         else:
             # Wrapped text needs its height worked out at the window's width.
             layout = self.centralWidget().layout()
+            layout.invalidate()  # it keeps the last answer otherwise, from before the text changed
             height = layout.totalHeightForWidth(360) if layout.hasHeightForWidth() else self.sizeHint().height()
             self.setMinimumSize(0, 0)
             self.setFixedSize(360, max(height, self.sizeHint().height()))
 
+    def _restore_place(self) -> None:
+        """Back where it was when it last closed. Qt moves it onto a screen that's still
+        there if that monitor is gone."""
+        try:
+            place = json.loads(self._place_path.read_text(encoding="utf-8"))
+            geometry = base64.b64decode(place["geometry"])
+        except (OSError, ValueError, KeyError, TypeError):
+            return
+        if place.get("log"):
+            self.log_button.setChecked(True)
+        self._tray_told = bool(place.get("tray_told"))
+        self.restoreGeometry(QByteArray(geometry))
+
+    def _save_place(self) -> None:
+        place = {"geometry": base64.b64encode(bytes(self.saveGeometry())).decode("ascii"),
+                 "log": self.log_button.isChecked(), "tray_told": self._tray_told}
+        try:
+            self._place_path.parent.mkdir(parents=True, exist_ok=True)
+            self._place_path.write_text(json.dumps(place), encoding="utf-8")
+        except OSError:
+            pass
+
+    # ---- the tray -------------------------------------------------------------------------
+    def _make_tray(self) -> QSystemTrayIcon:
+        tray = QSystemTrayIcon(QApplication.windowIcon(), self)
+        tray.setToolTip(TITLE)
+        menu = QMenu(self)
+        for text, slot in (("Open", self.show_window), ("Settings", self.open_settings), ("Quit", self.quit)):
+            action = QAction(text, menu)
+            action.triggered.connect(slot)
+            menu.addAction(action)
+        tray.setContextMenu(menu)
+        tray.activated.connect(self._tray_clicked)
+        tray.show()
+        return tray
+
+    def _tray_clicked(self, reason) -> None:
+        if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
+            self.show_window()
+
+    def show_window(self) -> None:
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def _check_show_event(self) -> None:
+        if self._show_event and _kernel32.WaitForSingleObject(self._show_event, 0) == WAIT_OBJECT_0:
+            self.show_window()
+
+    def quit(self) -> None:
+        """Really stop (the tray's Quit): the controller and the window."""
+        self._quitting = True
+        self.close()
+
     def closeEvent(self, event) -> None:
+        if not self._quitting and self.tray is not None and self.store.config.close_to_tray:
+            # Hide, keep running (the user, Nov 10). The first time, say where it went.
+            self._save_place()
+            event.ignore()
+            self.hide()
+            if not self._tray_told:
+                self._tray_told = True
+                self._save_place()
+                self.tray.showMessage(TITLE, "Still running in the notification area. "
+                                      "Right-click its icon to quit.", QApplication.windowIcon(), 4000)
+            return
+        self._save_place()
+        self._show_timer.stop()
+        if self._show_event:
+            _kernel32.CloseHandle(self._show_event)
+            self._show_event = None
         self._config_timer.stop()
         self._end_flash()
         self._stop.set()
@@ -448,6 +635,9 @@ class ModuleWindow(QMainWindow):
         if self._log_file is not None:
             self._log_file.close()
         super().closeEvent(event)
+        if self.tray is not None:
+            self.tray.hide()
+            QApplication.quit()  # nothing keeps running once the window really closes
 
 
 def main() -> None:
@@ -455,17 +645,31 @@ def main() -> None:
     parser.add_argument("--ttr-dir", type=Path, help="TTR install folder (default: detected from the running game)")
     parser.add_argument("--dry-run", action="store_true", help="print keys instead of sending them")
     parser.add_argument("--debug", action="store_true", help="log button presses and every key sent")
+    parser.add_argument("--settings", action="store_true", help="open the settings window instead")
     args = parser.parse_args()
+    if args.settings:
+        # The packaged exe's Settings button runs it again with this (one exe, two windows).
+        from .settings_window import main as settings
+        settings()
+        return
 
     app = QApplication.instance() or QApplication(sys.argv)
     app.setStyle("Fusion")
     app.setApplicationName(TITLE)
+    use_app_icon(app)
     # One copy at a time: a second one would fight the first over the keys and cursor.
     mutex = _kernel32.CreateMutexW(None, False, _MUTEX)
     if ctypes.get_last_error() == ERROR_ALREADY_EXISTS:
-        if not bring_to_front(TITLE):
+        # The running copy may be hidden in the tray: ask it to show its window.
+        show = _kernel32.OpenEventW(EVENT_MODIFY_STATE, False, _SHOW_EVENT)
+        if show:
+            _kernel32.SetEvent(show)
+            _kernel32.CloseHandle(show)
+        elif not bring_to_front(TITLE):
             QMessageBox.information(None, TITLE, "Toontown Controller is already running.")
         return
+    # Hidden in the tray isn't closed: only the window's real close (or Quit) ends it.
+    app.setQuitOnLastWindowClosed(False)
     window = ModuleWindow(ttr_dir=args.ttr_dir, dry_run=args.dry_run, debug=args.debug)
     window.show()
     code = app.exec()

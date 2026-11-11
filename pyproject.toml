@@ -16,6 +16,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+# tools/build_exe.py: ToontownController.exe, with the app icon.
+build = ["pyinstaller>=6"]
 
 [project.scripts]
 # In a console, logging there (--debug, --dry-run; --settings opens the settings window).
