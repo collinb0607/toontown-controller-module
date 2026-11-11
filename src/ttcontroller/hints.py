@@ -33,6 +33,7 @@ from .book import (BACK_TO_PLAYGROUND, COLOR_LEFT, COLOR_RIGHT, GO_HOME, SNAPSHO
                    TELEPORT as DISTRICT_TELEPORT, BookScreen, default_book_bindings)
 from .boarding import BoardingScreen
 from .facility import CLOSE as FACILITY_CLOSE, TELEPORT as FACILITY_TELEPORT, FacilityScreen
+from .fishing import CARD_KEEP, CARD_RELEASE, CAST, EXIT as FISHING_EXIT, FishingScreen
 from .friends import FriendsScreen, default_friends_bindings
 from .garden import PLANT, PLANT_CANCEL, PLANT_RESET, SELL_ALL, SELL_CANCEL, GardenScreen
 from .garden_intro import DONE as INTRO_DONE, NEXT as INTRO_NEXT, PREVIOUS as INTRO_PREVIOUS, GardenIntro
@@ -148,7 +149,8 @@ _DIRS4 = ("up", "down", "left", "right")
 class Context:
     """What's showing, as app.py decides it. mode: the screen that owns the controller:
     "options", "mat", "pregame", "battle", "shop", "speedchat", "friends", "npc", "book",
-    "golf" (the golf green) or "free" (walking around, maybe with a small panel up)."""
+    "golf" (the golf green), "fishing" (on a dock) or "free" (walking around, maybe with a
+    small panel up)."""
     mode: str = "free"
     options: OptionsScreen = field(default_factory=OptionsScreen)
     options_row_y: float | None = None  # TTR's Options: the hovered row
@@ -161,6 +163,8 @@ class Context:
     npc: NpcScreen = field(default_factory=NpcScreen)
     book: BookScreen = field(default_factory=BookScreen)
     book_task: int | None = None  # the ToonTasks page: the hovered task
+    fishing: FishingScreen = field(default_factory=FishingScreen)
+    fishing_cast: str = "move"  # how the stick casts ("move" or "stick")
     garden: GardenScreen = field(default_factory=GardenScreen)
     garden_intro: GardenIntro = field(default_factory=GardenIntro)
     mailbox: MailboxScreen = field(default_factory=MailboxScreen)
@@ -428,7 +432,21 @@ def _mat(c: Context) -> list:
     return out
 
 
-_MODES = {"free": _free, "battle": _battle, "shop": _shop, "friends": _friends, "npc": _npc,
+# ---- fishing (M14) -------------------------------------------------------------------
+def _fishing(c: Context) -> list:
+    if c.fishing.kind == "card":
+        # A still casts with the card up (the user, Nov 9).
+        out = [_cover("X", CARD_KEEP, 0.04), _cover("B", CARD_RELEASE, 0.04)]
+    else:
+        out = [_badge("B", FISHING_EXIT, -30, -28)]
+    if c.fishing.can_cast:
+        out += [_badge("A", CAST, -40, -32),
+                Bar((("A", "Hold to cast"), ("L", "Move the aim" if c.fishing_cast == "move" else "Pull back to aim"),
+                     ("LS", "Switch")), _px(960, 985, "center", "bottom"), S * 0.6)]
+    return out
+
+
+_MODES = {"free": _free, "fishing": _fishing, "battle": _battle, "shop": _shop, "friends": _friends, "npc": _npc,
           "options": _options, "book": _book, "pregame": _pregame, "mat": _mat}
 
 

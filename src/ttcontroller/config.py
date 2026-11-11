@@ -53,6 +53,9 @@ HELP = {
              "(and covering popup buttons), while the controller is in use. false: no hints.",
     "hints_walking_bar": "true: while walking around, a small bar beside the laff meter lists the main buttons "
                          "(walk, jump, gags, tasks, map, unite). false: just the badges on TTR's buttons.",
+    "fishing_cast": "How the left stick casts while fishing (A held): \"move\" moves the aim at a steady speed "
+                    "(it stays put when the stick is let go), \"stick\" puts it where the stick points (at rest, the shortest cast). "
+                    "LS switches between them on the dock and saves it here.",
     "two_toons": "true: two TTR windows, one played with keyboard and mouse and one with the controller "
                  "in the background. The module's window asks which TTR window is the controller's each time. "
                  "false: the controller plays the TTR window in front.",
@@ -91,6 +94,8 @@ class Config:
     # Two toons (M13): the controller plays a chosen TTR window in the background. Only the
     # mode is kept; the window is picked in the module's window each session.
     two_toons: bool = False
+    # Fishing (M14): "move" (the stick moves the aim) or "stick" (the stick is the aim).
+    fishing_cast: str = "move"
     timing: Timing = field(default_factory=Timing)
 
 
@@ -115,6 +120,7 @@ def to_json(config: Config) -> dict:
         "hints_scale": config.hints_scale,
         "controller": config.controller,
         "two_toons": config.two_toons,
+        "fishing_cast": config.fishing_cast,
         "movement": asdict(config.movement),
         "timing": asdict(config.timing),
     }
@@ -201,6 +207,11 @@ def parse(data: dict) -> tuple[Config, list[str]]:
         config = replace(config, controller=controller)
     else:
         warnings.append('controller: must be a controller name, or "" for the first one')
+    cast = data.get("fishing_cast", defaults.fishing_cast)
+    if cast in ("move", "stick"):
+        config = replace(config, fishing_cast=cast)
+    else:
+        warnings.append(f'fishing_cast: must be "move" or "stick" (using "{defaults.fishing_cast}")')
     for name in ("auto_sprint", "hide_cursor", "toggle_hud", "hints", "hints_walking_bar", "two_toons"):
         value = data.get(name, getattr(defaults, name))
         if isinstance(value, bool):
@@ -272,18 +283,23 @@ class ConfigWatcher:
     def save_auto_sprint(self, on: bool) -> None:
         """Remember auto-sprint in the file, keeping everything else as the user wrote it.
         Not reported as a change by check(), since the running module already has it."""
+        self.save_value("auto_sprint", on)
+
+    def save_value(self, key: str, value) -> None:
+        """Remember one top-level setting the module changed itself (auto-sprint from LS,
+        the fishing cast), the same way."""
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return
         if not isinstance(data, dict):
             return
-        data["auto_sprint"] = on
+        data[key] = value
         try:
             self.path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
         except OSError:
             return
-        self.config = replace(self.config, auto_sprint=on)
+        self.config = replace(self.config, **{key: value})
         self._mtime = self._stat()
 
     def check(self) -> Config | None:

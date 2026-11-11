@@ -20,6 +20,7 @@ from .garden_intro import GardenIntro, GardenIntroMapper, read_garden_intro
 from .golf_green import AIM_RADIUS, PIVOT, GolfGreenMapper, GolfGreenScreen, aim_image, read_golf_green
 from .hud import HudMapper, HudScreen, read_hud
 from .facility import FacilityMapper, FacilityScreen, read_facility
+from .fishing import FishingMapper, FishingScreen, read_fishing
 from .mailbox import MailboxMapper, MailboxScreen, read_mailbox
 from .boarding import BoardingMapper, BoardingScreen, read_boarding
 from .silly import SillyMapper, SillyScreen, read_silly
@@ -180,6 +181,9 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
     golf_mapper = GolfGreenMapper()  # the Cog Golf golf green puzzle
     golf_screen = GolfGreenScreen()
     golf_aim = None  # its aim angle, while aiming (for the aim line and crosshair)
+    fishing_mapper = FishingMapper()  # a pond's dock: hold A to cast (M14)
+    fishing_mapper.method = config.fishing_cast
+    fishing_screen = FishingScreen()
     mailbox_mapper = MailboxMapper()  # the estate mailbox, open
     facility_mapper = FacilityMapper()  # Cog HQ facility nametags and their teleport popup
     facility_screen = FacilityScreen()
@@ -370,6 +374,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                     speedchat_mapper.set_bindings(config.speedchat)
                     friends_mapper.set_bindings(config.friends)
                     book_mapper.set_bindings(config.book)
+                    fishing_mapper.method = config.fishing_cast
 
             if mouse_paused and (not focused or controller_used(state)):
                 mouse_paused = False
@@ -419,6 +424,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                 silly_mapper.reset_buttons()
                 silly_screen = SillyScreen()
                 golf_screen = GolfGreenScreen()
+                fishing_mapper.reset()
+                fishing_screen = FishingScreen()
                 facility_screen = FacilityScreen()
                 book_screen = BookScreen()
                 output.release_all()
@@ -524,6 +531,12 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                     if golf.is_open != golf_screen.is_open and (dry_run or debug):
                         log(f"Golf green: {'up' if golf.is_open else 'gone'}")
                     golf_screen = golf
+                    fishing = (read_fishing(frame.width, frame.height, frame.get_pixel)
+                               if in_game and screen.kind is None and shop.kind is None and not book.is_open
+                               else FishingScreen())
+                    if fishing.kind != fishing_screen.kind and (dry_run or debug):
+                        log(f"Fishing: {fishing.kind or 'none'}")
+                    fishing_screen = fishing
                     facility = (read_facility(frame.width, frame.height, frame.get_pixel)
                                 if in_game and screen.kind is None and shop.kind is None and not book.is_open
                                 and not golf.is_open else FacilityScreen())
@@ -534,7 +547,10 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                     npc = (read_npc(frame.width, frame.height, frame.get_pixel, frame.rgb())
                            if (in_game and screen.kind is None and shop.kind is None and not book.is_open
                                and hud.kind != "trunk" and not garden.popup and not mailbox.is_open
-                               and not golf.is_open and not facility.popup)
+                               and not golf.is_open and not facility.popup
+                               # The bubble search took the fishing bucket's "4/20" for a
+                               # bubble's arrow; nobody talks to NPCs from a dock.
+                               and fishing.kind is None and not intro.is_open)
                            else NpcScreen())
                     if npc.kind != npc_screen.kind and (dry_run or debug):
                         log(f"NPC screen: {npc.kind or 'none'}")
@@ -696,16 +712,22 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                 # The golf green: the left stick aims instead of walking.
                 in_golf = golf_screen.is_open and not (in_options or in_mat or in_pregame or in_battle or in_shop
                                                        or in_speedchat or in_friends or book_screen.is_open)
+                # Fishing on a dock: A casts (held, the stick pulls), B leaves. Its popups
+                # (bucket full, out of jellybeans) are dialogs with one button (stray_dialog).
+                in_fishing = (fishing_screen.kind is not None and stray_dialog is None
+                              and not (in_options or in_mat or in_pregame or in_battle or in_shop
+                                       or in_speedchat or in_friends or book_screen.is_open))
                 # Walking still works mid-conversation (it walks away); not while choosing a task.
                 walk = not (in_options or in_mat or in_battle or in_shop or in_book or npc_screen.kind == "tasks"
-                            or (in_pregame and pregame_screen.kind != "startup") or in_golf)
+                            or (in_pregame and pregame_screen.kind != "startup") or in_golf or in_fishing)
                 for control in book_mapper.take_taps():
                     mapper.tap(control, now)
                 if book_mapper.take_left_page():
                     highlight = None
                 # The book and friends list let go of their own holds while open (the kart, a
                 # scroll triangle); one held when it closes, or the other opens, is let go here.
-                holder = "options" if in_options else "makeatoon" if in_mat else "book" if in_book else "friends" if in_friends else None
+                holder = ("options" if in_options else "makeatoon" if in_mat else "book" if in_book
+                          else "friends" if in_friends else "fishing" if in_fishing else None)
                 if holder is None or holder != last_holder:
                     clicker.release()
                 last_holder = holder
@@ -721,6 +743,20 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                     if golf_aim is not None or golf_mapper.angle is not None:
                         golf_mapper.reset()
                     golf_aim = None
+                if in_fishing:
+                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
+                    blocked = blocked | fishing_mapper.buttons(fishing_screen)
+                    fishing_commands = fishing_mapper.update(buttons, state.left_stick, now, fishing_screen)
+                else:
+                    # Let go of a cast in progress when the dock goes (a popup, the book).
+                    fishing_commands = fishing_mapper.update(frozenset(), (0.0, 0.0), now, FishingScreen())
+                for command in fishing_commands:
+                    point(command.kind, command.point, command.name, view, restore=False)
+                if fishing_mapper.take_switch():
+                    log("Fishing: the stick " + ("moves the aim." if fishing_mapper.method == "move"
+                                                 else "is the aim (where it points)."))
+                    config_watcher.save_value("fishing_cast", fishing_mapper.method)
+                    config = config_watcher.config
                 # The gardening HUD's buttons on Y and X, instead of showing gags and tasks.
                 if free and garden_screen.is_open:
                     buttons = controller_buttons(state, config.timing.stick_button_threshold)
@@ -796,6 +832,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                 # Nothing to hover: while the cursor is hidden, leave it off the game area.
                 # Book pages without controls of their own don't hover anything.
                 idle = not (in_battle or in_shop or in_speedchat or in_friends or npc_screen.kind == "tasks" or in_golf
+                            or (in_fishing and fishing_mapper.holding)
                             or (in_hud and hud_mapper.hovering())
                             or (free and garden_screen.planting and garden_mapper.hovering)
                             or (in_book and book_mapper.hovering(book_screen))
@@ -821,12 +858,14 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                     mode = ("options" if in_options else "mat" if in_mat else "pregame" if in_pregame
                             else "speedchat" if in_speedchat else "friends" if in_friends else "battle" if in_battle
                             else "shop" if in_shop else "npc" if in_npc else "book" if in_book
-                            else "golf" if in_golf else "free")
+                            else "golf" if in_golf else "fishing" if in_fishing else "free")
                     hints = hint_layout.hints_for(hint_layout.Context(
                         mode=mode, options=options_screen, options_row_y=options_mapper.row_y, mat=mat_screen,
                         pregame=pregame_screen, toon_slot=pregame_mapper.slot, battle=battle_screen,
                         shop=shop_screen, friends=friends_screen, npc=npc_screen, book=book_screen,
-                        book_task=book_mapper.hovered_task, garden=garden_screen if free else GardenScreen(),
+                        book_task=book_mapper.hovered_task, fishing=fishing_screen,
+                        fishing_cast=fishing_mapper.method, garden=garden_screen if free else GardenScreen(),
+                        garden_intro=garden_intro if free and stray_dialog is None else GardenIntro(),
                         mailbox=mailbox_screen if free else MailboxScreen(),
                         facility=facility_screen if free else FacilityScreen(),
                         silly=silly_screen if free else SillyScreen(),

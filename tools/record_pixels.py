@@ -27,6 +27,7 @@ from ttcontroller.friends import read_friends  # noqa: E402
 from ttcontroller.garden import read_garden  # noqa: E402
 from ttcontroller.garden_intro import read_garden_intro  # noqa: E402
 from ttcontroller.facility import read_facility  # noqa: E402
+from ttcontroller.fishing import read_fishing  # noqa: E402
 from ttcontroller.golf_green import read_golf_green  # noqa: E402
 from ttcontroller.hud import read_hud  # noqa: E402
 from ttcontroller.mail import read_mail  # noqa: E402
@@ -78,6 +79,8 @@ def main() -> None:
         read_mailbox(w, h, get_pixel)
         read_golf_green(w, h, get_pixel)
         read_facility(w, h, get_pixel)
+        fishing = read_fishing(w, h, get_pixel)
+        intro = read_garden_intro(w, h, get_pixel)
         path = OUT / f"{capture.stem}.json"
         path.write_text(json.dumps({"size": [w, h], "pixels": seen}, separators=(",", ":")), encoding="utf-8")
         print(f"wrote {path.name}: {(options.kind and f'options {options.kind}') or (mat.kind and f'make-a-toon {mat.kind}') or pregame.kind or screen.kind or shop.kind or npc.kind or ('speedchat' if speedchat.is_open else friends.kind) or (book.page and f'book {book.page}') or (hud.kind and f'{hud.kind} HUD')}, {len(seen)} pixels")
