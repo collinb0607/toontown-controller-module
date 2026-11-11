@@ -80,7 +80,7 @@ _ARROW_SCAN_HALF_WIDTH = 0.42
 _PANEL_SPACING = {True: {2: 0.254, 3: 0.276, 4: 0.251}, False: {2: 0.187, 3: 0.2055, 4: 0.187}}
 _PANEL_MIDDLE = -0.0075
 _PANEL_HALF_WIDTH = 0.088
-_PANEL_MIN_COLUMNS = 7  # of 11
+_PANEL_MIN_COLUMNS = 6  # of 11: a big white face can cover five (battle_waiting_teammates_picked)
 _CHOICE_OFFSET = 0.0415  # choice circle center, right of the panel center
 _CHOICE_ROW = 0.412
 _PANEL_ROWS = tuple(0.37 + 0.01 * i for i in range(11))
@@ -528,9 +528,6 @@ class BattleMapper:
         self.sos_filter = 0  # index into SOS_FILTERS, as last picked through the module
         self._filtered = False  # just picked a filter: start on the first card
         self.teammate: int | None = None  # which teammate's choice is hovered, if any
-        # "?" circles seen while picking: one of them is yours.
-        self._maybe_mine: frozenset[ui.UIPoint] = frozenset()
-        self._mine: ui.UIPoint | None = None
         # The target arrows seen on this "which cog/toon?" screen. The hovered arrow
         # lights up and can drop out of a read, so a shorter read is ignored.
         self._targets: tuple[ui.UIPoint, ...] = ()
@@ -563,14 +560,6 @@ class BattleMapper:
 
     def update(self, buttons: frozenset[str], now: float, screen: BattleScreen) -> list[PointerCommand]:
         _, fired = self._actions.update(buttons & self.buttons, now)
-        if screen.kind == "picker":
-            self._maybe_mine = frozenset(screen.unpicked)
-            self._mine = None
-        elif screen.kind == "waiting" and self._mine is None:
-            changed = [p for p in screen.teammates if p in self._maybe_mine]
-            if len(changed) == 1:
-                # Remembered, so it's still skipped after teammates pick too.
-                self._mine = changed[0]
         if now < self._settle_until:
             # Right after a click the old screen may still show; wait for the next one.
             return []
@@ -599,11 +588,9 @@ class BattleMapper:
         return commands
 
     def _others(self, screen: BattleScreen) -> tuple[ui.UIPoint, ...]:
-        """Teammates' choices to hover. While waiting, your own circle shows your gag
-        too: it's the one "?" from the picker that changed first, if only one did."""
-        if screen.kind != "waiting":
-            return screen.teammates
-        return tuple(p for p in screen.teammates if p != self._mine)
+        """Choices to hover, left to right. Your own is one of them while waiting: it's
+        part of the sequence (the user, Nov 10)."""
+        return screen.teammates
 
     def _on_appear(self, screen: BattleScreen, now: float) -> list[PointerCommand]:
         if self._scrolling is not None:

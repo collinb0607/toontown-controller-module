@@ -155,3 +155,10 @@ def test_a_light_gray_backdrop_isnt_speedchat():
     # passes the margin check but isn't where the menu opens.
     from ttcontroller.speedchat import read_speedchat
     assert not read_speedchat(1920, 1009, lambda x, y: (200, 200, 205)).is_open
+
+
+def test_group_leaders_orange_row_isnt_the_hovered_one():
+    # In a boarding group, GROUP LEADER is always orange; HELLO is hovered, its phrases open.
+    _, _, screen = replay("speedchat_boarding_hello_1920x1009")
+    top, hello = screen.menus
+    assert top.highlighted == 6 and len(hello.rows) == 9 and hello.highlighted is None

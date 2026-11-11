@@ -46,6 +46,7 @@ from dataclasses import dataclass, field
 from . import ui
 from .battle import PointerCommand
 from .bindings import Bindings, ButtonActions
+from .dialog import find_ok_cancel
 from .held_scroll import HeldScroll
 
 RGB = tuple[int, int, int]
@@ -490,7 +491,14 @@ def read_friends(width: int, height: int, get_pixel: PixelReader, dialogs: bool 
         dialog = _read_dialog(width, height, get_pixel)
         if dialog is not None:
             return dialog
-    if ui.is_visible(ui.FRIENDS_CLOSE, width, height, get_pixel):
+    listed = ui.is_visible(ui.FRIENDS_CLOSE, width, height, get_pixel)
+    if listed or ui.is_visible(PORTRAIT, width, height, get_pixel):
+        # A centered Yes/No over them: Invite for a +1 ("Would you like to invite ... as one
+        # of your remaining +1 spaces?", boarding_groups_plus_one_invite_popup).
+        centered = find_ok_cancel(width, height, get_pixel)
+        if centered is not None:
+            return FriendsScreen("popup", yes=centered[0], no=centered[1], popup="yes/no")
+    if listed:
         rows = []
         rows = _name_rows(width, height, get_pixel)
         return FriendsScreen("list", rows=tuple(rows), whisper=_whispering(width, height, get_pixel))

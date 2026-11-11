@@ -390,7 +390,7 @@ def circle(x):
     return battle._center(x, 0.412)
 
 
-def test_waiting_hovers_teammates_but_not_your_own_choice():
+def test_waiting_hovers_every_choice_yours_too():
     picker = BattleScreen("picker", usable=SOLO_LURE_GRAYED, teammates=(circle(-0.3),),
                           unpicked=(circle(0.0), circle(0.3)))
     m = BattleMapper()
@@ -399,29 +399,48 @@ def test_waiting_hovers_teammates_but_not_your_own_choice():
     # You picked (the middle circle); the right-hand teammate is still choosing.
     waiting = BattleScreen("waiting", teammates=(circle(-0.3), circle(0.0)), unpicked=(circle(0.3),))
     assert [c.point for c in m.update(frozenset(), 2.0, waiting)] == [circle(-0.3)]
-    assert press(m, waiting, 3.0, "dpad_right")[-1].point == circle(-0.3)  # yours is skipped
+    assert press(m, waiting, 3.0, "dpad_right")[-1].point == circle(0.0)  # yours is in the sequence (the user)
     assert press(m, waiting, 4.0, "lb") == []  # LB does nothing here
-    # The last teammate picks: now there are two to look at.
+    # The last teammate picks: one more to the right.
     later = BattleScreen("waiting", teammates=(circle(-0.3), circle(0.0), circle(0.3)))
     assert press(m, later, 5.0, "dpad_right")[-1].point == circle(0.3)
     assert [c.point for c in press(m, later, 6.0, "b")] == [WAITING_BACK]
 
 
-def test_waiting_starts_hovering_when_the_first_teammate_picks():
+def test_waiting_starts_on_the_first_choice_and_keeps_it_as_others_pick():
     picker = BattleScreen("picker", usable=SOLO_LURE_GRAYED, unpicked=(circle(-0.1), circle(0.1)))
     m = BattleMapper()
     m.update(frozenset(), 0.0, picker)
     press(m, picker, 1.0, "a")
     alone = BattleScreen("waiting", teammates=(circle(0.1),), unpicked=(circle(-0.1),))
-    assert m.update(frozenset(), 2.0, alone) == []  # only your own choice so far
+    assert [c.point for c in m.update(frozenset(), 2.0, alone)] == [circle(0.1)]  # your own
     both = BattleScreen("waiting", teammates=(circle(-0.1), circle(0.1)))
-    assert [c.point for c in m.update(frozenset(), 3.0, both)] == [circle(-0.1)]
+    assert m.update(frozenset(), 3.0, both) == []
+    assert press(m, both, 4.0, "dpad_left")[-1].point == circle(-0.1)
+
+
+def test_three_picked_one_waiting_can_reach_the_right_end():
+    # The user's case: you and two others picked, one still choosing.
+    screen = replay("battle_waiting_one_left_1920x1009")
+    assert len(screen.teammates) == 3 and len(screen.unpicked) == 1
+    m = BattleMapper()
+    assert [c.point for c in m.update(frozenset(), 0.0, screen)] == [screen.teammates[0]]
+    assert press(m, screen, 1.0, "dpad_right")[-1].point == screen.teammates[1]
+    assert press(m, screen, 2.0, "dpad_right")[-1].point == screen.teammates[2]
 
 
 def test_waiting_capture_finds_both_circles():
     screen = replay("battle_waiting_1920x1009")
     assert screen.kind == "waiting"
     assert len(screen.teammates) == 1 and len(screen.unpicked) == 1
+
+
+def test_four_panels_with_a_big_white_face_over_one():
+    # A white toon's face covers five of the third panel's columns.
+    picking = replay("battle_waiting_teammates_picking_1920x1009")
+    assert len(picking.teammates) == 2 and len(picking.unpicked) == 2
+    picked = replay("battle_waiting_teammates_picked_1920x1009")
+    assert [p.to_client(1920, 1009)[0] for p in picked.teammates] == [614, 868, 1121, 1374]
 
 
 def test_targets_wrap_and_survive_the_hovered_arrow_dropping_out():

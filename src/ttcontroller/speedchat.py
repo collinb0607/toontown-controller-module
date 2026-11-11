@@ -50,6 +50,13 @@ def _is_colored(c: RGB) -> bool:
     return max(c) - min(c) > 60
 
 
+def _is_leader_orange(c: RGB) -> bool:
+    """In a boarding group, the top menu's GROUP LEADER row is always orange, (225, 131, 42),
+    hovered or not (speedchat_boarding_hello)."""
+    r, g, b = c
+    return r > 190 and 100 < g < 160 and b < 70
+
+
 _RUN_GAP = 3  # pixels
 
 
@@ -118,15 +125,16 @@ def _menu(width: int, height: int, get_pixel: PixelReader, left: int, y0: int, u
     ys = [y for y in ys if y < height - 0.25 * row]
     hover_x = (left + _HOVER_X * unit) / unit
     rows = tuple(ui.UIPoint("left", hover_x, y / unit) for y in ys)
-    highlighted = None
+    colored = []  # (row, leader orange): the hovered row, and GROUP LEADER's always-orange one
     for i, y in enumerate(ys):
         # Across the start of the row, where text can cover most points but never the arrow.
-        hits = sum(_is_colored(get_pixel(left + round((0.006 + 0.006 * k) * unit), round(y + dy * unit)))
-                   for k in range(16) for dy in (-0.006, 0, 0.006))
-        if hits >= 3:
-            highlighted = i
-            break
-    return Menu(ui.UIPoint("left", left / unit, top / unit), rows, highlighted), (top, bottom), ys
+        hits = [c for k in range(16) for dy in (-0.006, 0, 0.006)
+                if _is_colored(c := get_pixel(left + round((0.006 + 0.006 * k) * unit), round(y + dy * unit)))]
+        if len(hits) >= 3:
+            colored.append((i, sum(map(_is_leader_orange, hits)) * 2 > len(hits)))
+    highlighted = colored[0][0] if colored else None
+    menu = Menu(ui.UIPoint("left", left / unit, top / unit), rows, highlighted)
+    return menu, (top, bottom), ys, colored
 
 
 def _where_speedchat_opens(menu: Menu, width: int, height: int, unit: int) -> bool:
@@ -206,16 +214,27 @@ def read_speedchat(width: int, height: int, get_pixel: PixelReader, look_for_uni
         found = _menu(width, height, get_pixel, left, y0, unit)
         if found is None:
             break
-        menu, span, ys = found
+        menu, span, ys, colored = found
         if not menus and not _where_speedchat_opens(menu, width, height, unit):
             return SpeedchatScreen()
-        menus.append(menu)
         if menu.highlighted is None:
+            menus.append(menu)
             break
-        y0 = round(ys[menu.highlighted])
-        child = _find_child(width, height, get_pixel, left, y0, unit, span)
+        # More than one colored row (GROUP LEADER's orange): the hovered one is the one
+        # whose submenu is open, or else the one that isn't orange.
+        child = None
+        for i, _ in colored:
+            child = _find_child(width, height, get_pixel, left, round(ys[i]), unit, span)
+            if child is not None:
+                menu = Menu(menu.left, menu.rows, i)
+                break
+        else:
+            plain = [i for i, orange in colored if not orange]
+            menu = Menu(menu.left, menu.rows, plain[0] if plain else colored[0][0])
+        menus.append(menu)
         if child is None:
             break
+        y0 = round(ys[menu.highlighted])
         left = child
     if look_for_unite and menus:
         return SpeedchatScreen(tuple(menus), find_unite(width, height, get_pixel, menus[0]), True)

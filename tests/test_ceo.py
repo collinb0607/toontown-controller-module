@@ -61,3 +61,27 @@ def test_a_hovered_leave_button_is_yellow():
 
     point = read_leave(w, h, pixel)
     assert point is not None and point.to_client(w, h) == (cx, cy)
+
+
+def test_leave_crane_hovered_in_game():
+    point = replay("cfo_crane_hover_3024x1710", read_leave)
+    px, py = point.to_client(3024, 1710)
+    assert abs(px - 2409) <= 3 and abs(py - 1548) <= 3
+
+
+def test_a_darker_red_counts():
+    # The CFO's Leave Crane is a darker red than the CEO's (the user): (140, 55, 60) or so.
+    w, h = 1920, 1009
+    from ttcontroller.ceo import LEAVE
+    cx, cy = LEAVE.to_client(w, h)
+
+    def pixel(x, y):
+        if (x - cx) ** 2 + (y - cy) ** 2 <= 30 ** 2:
+            return (140, 55, 60)
+        if abs(y - (cy + 62)) <= 2 and abs(x - cx) < 80 and x % 7 < 3:
+            return (255, 255, 255)
+        return (40, 40, 40)
+
+    assert read_leave(w, h, pixel) is not None
+    assert read_leave(w, h, lambda x, y: (200, 120, 40) if (x - cx) ** 2 + (y - cy) ** 2 <= 900
+                      else (255, 255, 255) if abs(y - (cy + 62)) <= 2 and x % 7 < 3 else (40, 40, 40)) is None  # orange

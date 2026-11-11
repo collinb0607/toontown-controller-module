@@ -166,6 +166,15 @@ def test_reads_go_tos_teleport_popup_over_the_panel():
     assert abs(no[0] - 1485) <= 3 and abs(no[1] - 251) <= 3
 
 
+def test_reads_the_plus_one_invite_over_the_panel():
+    # Invite on the Boarding Group section for a +1: a centered Yes/No.
+    screen = replay("boarding_groups_plus_one_invite_popup_1920x1009")
+    assert screen.kind == "popup" and screen.popup == "yes/no"
+    yes, no = (p.to_client(1920, 1009) for p in (screen.yes, screen.no))
+    assert abs(yes[0] - 904) <= 4 and abs(yes[1] - 643) <= 4
+    assert abs(no[0] - 1014) <= 4 and abs(no[1] - 643) <= 4
+
+
 @pytest.mark.parametrize("button,answer", [("a", "yes"), ("b", "no")])
 def test_teleport_popup_a_yes_b_no_then_back_to_go_to(button, answer):
     m = FriendsMapper()

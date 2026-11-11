@@ -30,8 +30,10 @@ _LABEL_MIN = 4  # white letter pixels along that row
 
 
 def is_leave_red(c: RGB) -> bool:
+    # By hue, not brightness: the CEO's reds run from a pink shine (252, 142, 147) at the top
+    # to (187, 79, 86) lower down, and the CFO's Leave Crane is darker still (the user).
     r, g, b = c
-    return r > 180 and g < 100 and b < 100
+    return r > 120 and r - g > 60 and r - b > 60 and abs(g - b) < 40
 
 
 def is_leave_yellow(c: RGB) -> bool:
