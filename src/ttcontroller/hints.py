@@ -35,6 +35,7 @@ from .boarding import BoardingScreen
 from .facility import CLOSE as FACILITY_CLOSE, TELEPORT as FACILITY_TELEPORT, FacilityScreen
 from .friends import FriendsScreen, default_friends_bindings
 from .garden import PLANT, PLANT_CANCEL, PLANT_RESET, SELL_ALL, SELL_CANCEL, GardenScreen
+from .garden_intro import DONE as INTRO_DONE, NEXT as INTRO_NEXT, PREVIOUS as INTRO_PREVIOUS, GardenIntro
 from .mailbox import (CLOSE as MAILBOX_CLOSE, DISCARD as MAILBOX_DISCARD, LEFT as MAILBOX_LEFT,
                       RIGHT as MAILBOX_RIGHT, TAKE as MAILBOX_TAKE, MailboxScreen)
 from .makeatoon import BACK as MAT_BACK, CLOSE as MAT_CLOSE, MakeAToonScreen
@@ -161,6 +162,7 @@ class Context:
     book: BookScreen = field(default_factory=BookScreen)
     book_task: int | None = None  # the ToonTasks page: the hovered task
     garden: GardenScreen = field(default_factory=GardenScreen)
+    garden_intro: GardenIntro = field(default_factory=GardenIntro)
     mailbox: MailboxScreen = field(default_factory=MailboxScreen)
     facility: FacilityScreen = field(default_factory=FacilityScreen)
     silly: SillyScreen = field(default_factory=SillyScreen)
@@ -192,6 +194,14 @@ def _free(c: Context) -> list:
     if c.dialog is not None:
         ok, cancel = c.dialog
         return [_cover("B", cancel)] if ok == cancel else _covers(c.dialog)
+    if c.garden_intro.is_open:
+        i = c.garden_intro
+        out = [_badge("B", INTRO_PREVIOUS, -34, -30)] if i.previous else []
+        if i.done:
+            out.append(_badge("A", INTRO_DONE, -34, -30))
+        elif i.next:
+            out.append(_badge("A", INTRO_NEXT, -34, -30))
+        return out
     g = c.garden
     if g.selling:
         return [_cover("B", SELL_CANCEL), _cover("A", SELL_ALL)]

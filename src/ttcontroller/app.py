@@ -16,6 +16,7 @@ from .cursor import MOVE_TOLERANCE, CursorHider
 from .book import BookMapper, BookScreen, read_book
 from .friends import FriendsMapper, FriendsScreen, read_friends
 from .garden import GardenMapper, GardenScreen, read_garden
+from .garden_intro import GardenIntro, GardenIntroMapper, read_garden_intro
 from .golf_green import AIM_RADIUS, PIVOT, GolfGreenMapper, GolfGreenScreen, aim_image, read_golf_green
 from .hud import HudMapper, HudScreen, read_hud
 from .facility import FacilityMapper, FacilityScreen, read_facility
@@ -173,6 +174,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
     hud_screen = HudScreen()
     garden_mapper = GardenMapper(cache_path=module_config.CONFIG_DIR / "garden.json")  # the last flower's beans kept there
     garden_screen = GardenScreen()
+    garden_intro_mapper = GardenIntroMapper()  # the first-time gardening introduction's pages
+    garden_intro = GardenIntro()
     pie_round = False
     golf_mapper = GolfGreenMapper()  # the Cog Golf golf green puzzle
     golf_screen = GolfGreenScreen()
@@ -406,6 +409,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                 friends_screen = FriendsScreen()
                 hud_screen = HudScreen()
                 garden_screen = GardenScreen()
+                garden_intro_mapper.reset_buttons()
+                garden_intro = GardenIntro()
                 pie_round = False
                 stray_dialog = None
                 mailbox_screen = MailboxScreen()
@@ -489,6 +494,12 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                         log(f"Gardening: {'bean picker' if garden.planting else 'sell popup' if garden.selling else 'OK popup' if garden.ok else 'panel' if garden.is_open else 'none'}"
                             + (" (no beans)" if garden.planting and not garden.beans else ""))
                     garden_screen = garden
+                    intro = (read_garden_intro(frame.width, frame.height, frame.get_pixel)
+                             if in_game and screen.kind is None and shop.kind is None and not book.is_open
+                             else GardenIntro())
+                    if intro.is_open != garden_intro.is_open and (dry_run or debug):
+                        log(f"Gardening intro: {'open' if intro.is_open else 'closed'}")
+                    garden_intro = intro
                     mailbox = (read_mailbox(frame.width, frame.height, frame.get_pixel)
                                if in_game and screen.kind is None and shop.kind is None and not book.is_open
                                else MailboxScreen())
@@ -754,6 +765,14 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                 # The boarding group panel: the right stick opens and closes it; while open the
                 # D-pad and A work its list, and holding B leaves the group. Not over the HUD
                 # (it has the right stick) or a dialog (A and B are its).
+                # The gardening introduction: A next (Done on the last page), B / D-pad left back.
+                if free and garden_intro.is_open and stray_dialog is None:
+                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
+                    blocked = blocked | GardenIntroMapper.BUTTONS
+                    for command in garden_intro_mapper.update(buttons, now, garden_intro):
+                        point(command.kind, command.point, command.name, view)
+                else:
+                    garden_intro_mapper.reset_buttons()
                 # The Silly Meter's card: D-pad left its details, B closes the top card.
                 if free and silly_screen.card and stray_dialog is None:
                     buttons = controller_buttons(state, config.timing.stick_button_threshold)

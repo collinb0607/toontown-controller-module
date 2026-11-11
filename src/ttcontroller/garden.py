@@ -63,7 +63,9 @@ SELL_ALL = _center(0.2993, 0.2859)
 PLANT_CANCEL = _center(-0.1506, 0.1724)
 PLANT_RESET = _center(-0.0005, 0.1724)
 PLANT = _center(0.1492, 0.1710)
-_PLANT_FILL = (_center(0.337, -0.2027), _center(0.0, -0.1234), _center(0.337, 0.1938), _center(-0.337, 0.1938))
+# Not near the title: at a statue plot it reads "jellybeans / item" over two lines, reaching
+# (0.337, -0.2027), where this used to look (gardening_planting_statue, Nov 9).
+_PLANT_FILL = (_center(0.337, -0.1234), _center(0.0, -0.1234), _center(0.337, 0.1938), _center(-0.337, 0.1938))
 BEANS = 9  # red, green, orange, purple, blue, pink, yellow, cyan, gray
 _BEAN_X0, _BEAN_STEP, _BEAN_Y = -0.2071, 0.05228, -0.0535
 BEAN_SIZE = (0.050, 0.056)  # a bean's cell, for the highlight frame
@@ -87,8 +89,10 @@ _SELL_FILL = (_center(-0.4559, -0.0045), _center(0.4361, -0.0045), _center(0.0, 
 
 
 def _is_cancel_red(c: RGB) -> bool:
+    # A red, pink or dull red: in a short window (507 tall) the probes around the middle
+    # land on the button's shine (248,139,141) and its shaded lower half (195,117,123).
     r, g, b = c
-    return r > 170 and g < 110 and b < 110
+    return r > 170 and r - g > 60 and r - b > 60 and abs(g - b) < 40
 
 
 def _is_ok_blue(c: RGB) -> bool:

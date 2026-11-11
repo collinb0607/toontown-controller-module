@@ -88,6 +88,9 @@ def test_the_bean_picker():
     assert near(bean_point(0), 751, 451) and near(bean_point(8), 1173, 451)
     assert near(PLANT_CANCEL, 808, 678) and near(PLANT_RESET, 959, 678) and near(PLANT, 1110, 677)
     assert not replay("gardening_sell_popup_1920x1009", read_garden).planting
+    # At a statue plot: "jellybeans / item" over two lines, and a white item box.
+    statue = replay("gardening_planting_statue_1920x1009", read_garden)
+    assert statue.planting and statue.beans
 
 
 def hovers(commands):

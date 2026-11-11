@@ -25,6 +25,7 @@ from ttcontroller.silly import read_silly  # noqa: E402
 from ttcontroller.dialog import find_cancel_alone  # noqa: E402
 from ttcontroller.friends import read_friends  # noqa: E402
 from ttcontroller.garden import read_garden  # noqa: E402
+from ttcontroller.garden_intro import read_garden_intro  # noqa: E402
 from ttcontroller.facility import read_facility  # noqa: E402
 from ttcontroller.golf_green import read_golf_green  # noqa: E402
 from ttcontroller.hud import read_hud  # noqa: E402
