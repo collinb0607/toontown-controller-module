@@ -40,7 +40,8 @@ from .makeatoon import MakeAToonMapper, MakeAToonScreen, read_make_a_toon
 from .shop import ShopMapper, ShopScreen, read_shop
 from .speedchat import SpeedchatMapper, SpeedchatScreen, read_speedchat
 from .window import (BoundTarget, ForegroundTarget, ForegroundWatcher, TargetChoice, TTRView,  # noqa: F401
-                     client_rect, make_dpi_aware)
+                     client_rect, focus_window, make_dpi_aware, ttr_windows)
+from .window_switch import next_window
 
 FRAME_SECONDS = 1 / 120
 SETTINGS_CHECK_SECONDS = 1.0
@@ -291,7 +292,10 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
     last_shop_seen = -BATTLE_GRACE_SECONDS
     was_in_menu = False
     npc_was_paused = False  # the task panel was showing when speedchat or the friends list opened
-    bumper_combo = ButtonCombo()  # LB + RB: a screenshot
+    # LB + RB: a screenshot when let go; with D-pad left/right while held, the TTR window
+    # to that side comes to the front (one toon).
+    bumper_combo = ButtonCombo()
+    switch_until = 0.0  # just switched windows: paused until then, so the screens start over
     last_holder: str | None = None  # the menu that may hold the mouse button down ("book"/"friends")
     log(("Running." if stop is not None else "Running. Press Ctrl+C to quit.")
         + (" (dry run: keys are printed, not sent)" if dry_run else ""))
@@ -383,7 +387,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                     # Whatever the mouse opened is read right away.
                     next_battle_check = now
             # A swap starts like TTR losing focus: every screen and mapper starts over.
-            active = focused and not mouse_paused and not swapped
+            active = focused and not mouse_paused and not swapped and now >= switch_until
             # The hints and frame show while the controller is in use; in two-toon mode the
             # controller toon's window is the controller's alone, so always.
             presenting = hider.hidden or target.background
@@ -582,7 +586,18 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                     hint_leave = read_leave(frame.width, frame.height, frame.get_pixel) if calm else None
 
                 state = state or NEUTRAL
-                state, screenshot = bumper_combo.update(state, now)
+                state, screenshot, step = bumper_combo.update(state, now)
+                if step and not target.background and not dry_run:
+                    windows = [hwnd for hwnd, _ in ttr_windows()]
+                    after = next_window(windows, target.hwnd, step)
+                    if after is not None and after != target.hwnd:
+                        output.release_all()
+                        clicker.release()
+                        moved = focus_window(after)
+                        switch_until = now + 0.2
+                        log(f"Switched to the TTR window {'on the left' if step < 0 else 'on the right'} "
+                            f"({windows.index(after) + 1} of {len(windows)})." if moved
+                            else "Couldn't bring the next TTR window to the front.")
                 if screenshot:
                     log("Screenshot (LB + RB).")
                     mapper.tap("screenshot", now)

@@ -27,7 +27,13 @@ _user32.WindowFromPoint.argtypes = (wintypes.POINT,)
 _user32.WindowFromPoint.restype = wintypes.HWND
 _user32.GetAncestor.argtypes = (wintypes.HWND, wintypes.UINT)
 _user32.GetAncestor.restype = wintypes.HWND
+_user32.SetForegroundWindow.argtypes = (wintypes.HWND,)
+_user32.BringWindowToTop.argtypes = (wintypes.HWND,)
+_user32.ShowWindow.argtypes = (wintypes.HWND, ctypes.c_int)
+_user32.AttachThreadInput.argtypes = (wintypes.DWORD, wintypes.DWORD, wintypes.BOOL)
+_kernel32.GetCurrentThreadId.restype = wintypes.DWORD
 GA_ROOT = 2
+SW_RESTORE = 9
 _kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
 _kernel32.OpenProcess.restype = wintypes.HANDLE
 _kernel32.QueryFullProcessImageNameW.argtypes = (
@@ -219,6 +225,25 @@ def ttr_windows() -> list[tuple[int, str]]:
     rects = {hwnd: client_rect(hwnd) for hwnd in find_ttr_windows()}
     names = describe_windows(rects, _user32.GetForegroundWindow())
     return [(hwnd, names[hwnd]) for hwnd in sorted(rects, key=lambda h: (rects[h][0], rects[h][1]))]
+
+
+def focus_window(hwnd) -> bool:
+    """Bring a window to the front and give it the keyboard (restoring it if minimized).
+    Windows only lets the process in front do that, so this thread borrows the front
+    window's input for the moment. True if it's in front now."""
+    if _user32.IsIconic(hwnd):
+        _user32.ShowWindow(hwnd, SW_RESTORE)
+    front = _user32.GetForegroundWindow()
+    theirs = _user32.GetWindowThreadProcessId(front, None) if front else 0
+    mine = _kernel32.GetCurrentThreadId()
+    attached = bool(theirs and theirs != mine and _user32.AttachThreadInput(mine, theirs, True))
+    try:
+        _user32.BringWindowToTop(hwnd)
+        _user32.SetForegroundWindow(hwnd)
+    finally:
+        if attached:
+            _user32.AttachThreadInput(mine, theirs, False)
+    return _user32.GetForegroundWindow() == hwnd
 
 
 class TTRView:
