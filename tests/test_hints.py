@@ -76,8 +76,8 @@ def test_ceo_leave_bar_charges_with_a_and_no_ring():
 
 def test_battle_picker():
     hints = H.hints_for(H.Context(mode="battle", battle=BattleScreen("picker")))
-    assert sprites(hints) == ["Y", "B", "X"]
-    assert [h.hold for h in hints if isinstance(h, H.Badge)] == [False, True, False]
+    assert sprites(hints) == ["VIEW", "RB", "Y", "B", "X"]  # speedchat and friends work in battle too
+    assert [h.hold for h in hints if isinstance(h, H.Badge)] == [False, False, False, True, False]
     assert bars(hints) == [("Move", "Select", "Teammates")]
 
 
@@ -218,7 +218,7 @@ def _remapped(table, press=None, hold=None):
 def test_remapped_button_moves_its_badge():
     tables = _remapped("battle", press={"y": None, "rb": "pass"})
     hints = H.hints_for(H.Context(mode="battle", battle=BattleScreen("picker"), tables=tables))
-    assert sprites(hints) == ["RB", "B", "X"]
+    assert sprites(hints) == ["VIEW", "RB", "B", "X"]  # RB is Pass now, not the friends list
 
 
 def test_remapped_hold_moves_the_ring():
@@ -327,3 +327,46 @@ def test_hold_ring_fills_while_held():
     assert ring(1.6) == RING_STEPS
     drawer.press(frozenset(), 1.7)
     assert ring(1.7) == 0
+
+
+def test_no_rb_badge_when_the_friends_button_is_gone():
+    # A Cog HQ lobby's timer sits where the friends button was; the list can't open then.
+    assert "RB" in sprites(H.hints_for(H.Context()))
+    assert "RB" not in sprites(H.hints_for(H.Context(friends_button=False)))
+
+
+@pytest.mark.parametrize("kind", ["picker", "trunk", "waiting"])
+def test_speedchat_and_friends_badges_in_battle(kind):
+    battle = H.Context(mode="battle", battle=BattleScreen(kind))
+    assert {"VIEW", "RB"} <= set(sprites(H.hints_for(battle)))
+    gone = H.Context(mode="battle", battle=BattleScreen(kind), friends_button=False)
+    assert "RB" not in sprites(H.hints_for(gone)) and "VIEW" in sprites(H.hints_for(gone))
+
+
+def test_the_friends_button_is_read():
+    from test_book import replay
+    from ttcontroller import ui
+
+    def shown(name):
+        return replay(name, lambda w, h, get_pixel: ui.is_visible(ui.FRIENDS_BUTTON, w, h, get_pixel))
+    assert shown("test_1920x1009")
+    assert not shown("timer_top_right_1920x1009")
+
+
+def test_no_book_means_hold_start_for_options():
+    walking = H.hints_for(H.Context())
+    start = [h for h in walking if isinstance(h, H.Badge) and h.sprite == "START"]
+    assert len(start) == 1 and not start[0].hold
+    lobby = H.hints_for(H.Context(book_button=False))
+    start = [h for h in lobby if isinstance(h, H.Badge) and h.sprite == "START"]
+    assert len(start) == 1 and start[0].hold
+
+
+def test_the_book_is_read():
+    from test_book import replay
+    from ttcontroller import ui
+
+    def shown(name):
+        return replay(name, lambda w, h, get_pixel: ui.is_visible(ui.BOOK_BUTTON, w, h, get_pixel))
+    assert shown("gardening_hud_1_1920x1009")
+    assert not shown("no_book_options_only_1920x1009")

@@ -26,6 +26,7 @@ from .boarding import BoardingMapper, BoardingScreen, read_boarding
 from .silly import SillyMapper, SillyScreen, read_silly
 from .vp import read_pie_round
 from . import hints as hint_layout
+from . import ui
 from .ceo import read_leave
 from .elevator import read_hop_off
 from .hint_draw import Drawer, find_sheet
@@ -235,6 +236,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                 log(f"Note: no hints ({e}).")
     hints = ()  # what the hints overlay shows now
     hint_mail = hint_hop = hint_leave = None  # read for the hints only: Clarabelle's X, Hop off, a CEO leave button
+    hint_friends = True  # the friends button is showing (a timer can take its place)
+    hint_book = True  # the shticker book is showing (else just the Options gadget)
     last_buttons = frozenset()
     foreground = ForegroundWatcher()
     # The window the controller drives (two toons, M13): the TTR window in front, or the
@@ -584,6 +587,11 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                     hint_mail = read_mail(frame.width, frame.height, frame.get_pixel) if calm else None
                     hint_hop = read_hop_off(frame.width, frame.height, frame.get_pixel) if calm else None
                     hint_leave = read_leave(frame.width, frame.height, frame.get_pixel) if calm else None
+                    # Walking around and in battle (its badge shows there too).
+                    hint_friends = (hint_drawer is None or not config.hints or not in_game
+                                    or ui.is_visible(ui.FRIENDS_BUTTON, frame.width, frame.height, frame.get_pixel))
+                    hint_book = (not calm
+                                 or ui.is_visible(ui.BOOK_BUTTON, frame.width, frame.height, frame.get_pixel))
 
                 state = state or NEUTRAL
                 state, screenshot, step = bumper_combo.update(state, now)
@@ -888,6 +896,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                         dialog=stray_dialog if free and not garden_screen.is_open else None,
                         mail_close=hint_mail.close if hint_mail else None,
                         mail_icon=hint_mail.icon if hint_mail else None, hop_off=hint_hop, leave=hint_leave, hud=in_hud,
+                        friends_button=hint_friends, book_button=hint_book,
                         walking_bar=config.hints_walking_bar,
                         tables={"overworld": config.bindings, "battle": config.battle, "shop": config.shop,
                                 "npc": config.npc, "speedchat": config.speedchat, "friends": config.friends,

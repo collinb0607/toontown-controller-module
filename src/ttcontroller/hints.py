@@ -177,6 +177,8 @@ class Context:
     hop_off: UIPoint | None = None  # in an elevator or golf kart
     leave: UIPoint | None = None  # on a CEO golf ball or seltzer bottle, or a CFO crane
     hud: bool = False  # the gags/trunk/tasks HUD is up (kept up by toggle_hud)
+    friends_button: bool = True  # the friends button shows (not a timer in its place)
+    book_button: bool = True  # the shticker book shows (else only the Options gadget, opened by holding Start)
     walking_bar: bool = True  # the walking bar (its own setting)
     # The config's remappable tables: "overworld", "battle", "shop", "npc", "speedchat",
     # "friends", "book" (missing ones are the defaults).
@@ -189,6 +191,8 @@ WALK_BADGES = (
     _badge("RB", _px(1812, 98, "right", "top"), scale=0.8, act=_walk("friendsList")),  # friends
     _badge("START", _px(1838, 912, "right", "bottom"), scale=0.8, act=_walk("stickerBook")),  # the book
 )
+# No book (a Cog HQ lobby): the Options gadget in its place, opened by holding Start.
+OPTIONS_HOLD = _badge("START", _px(1838, 912, "right", "bottom"), scale=0.8, hold=True, act=_walk("options", hold=True))
 WALK_BAR = Bar((("L", "Walk"), ("A", "Jump", _walk("jump")), ("Y", "Gags", _walk("showGags")),
                 ("X", "Tasks", _walk("showTasks")), ("DU", "Map", _walk("showMap")), ("LT", "Unite", _walk("unite"))),
                _px(560, 985, "left", "bottom"), S * 0.6)
@@ -233,7 +237,8 @@ def _free(c: Context) -> list:
     if c.boarding.kind == "open" and c.boarding.leave is not None:
         return [_badge("B", c.boarding.leave, -16, -16, 0.9, hold=True),
                 Bar((("DUD", "Move"), ("A", "Select"), ("R:l", "Close")), _by(c.boarding.leave, -107, 104), S * 0.65)]
-    out: list = list(WALK_BADGES)
+    out: list = [WALK_BADGES[0]] + ([WALK_BADGES[1]] if c.friends_button else [])
+    out.append(WALK_BADGES[2] if c.book_button else OPTIONS_HOLD)
     # Clarabelle's icon and the Silly Meter's gauge share the slot left of the friends
     # icon (one moves over when both are up), so each badge goes where its reader found
     # it: RT on Clarabelle, a held RT on the gauge. Bottom-left of each icon.
@@ -259,20 +264,26 @@ _BATTLE_SELECT = ("A", "Select", _bt("select"))
 _TEAMMATES = ("LB", "Teammates", _bt("teammates"))
 
 
+def _menu_badges(c: Context) -> list:
+    """Speedchat's and the friends list's badges, which work in battle too (the user, Nov 10)."""
+    return [WALK_BADGES[0]] + ([WALK_BADGES[1]] if c.friends_button else [])
+
+
 def _battle(c: Context) -> list:
     s = c.battle
     if s.kind == "picker":
         if s.close is not None:  # planting a gag tree, not a battle
             return [_badge("B", s.close, -20, -20, act=_bt("back"))]
-        return [_PASS_Y, _RUN_B, _TRUNK_X, Bar((_BATTLE_MOVE, _BATTLE_SELECT, _TEAMMATES), _px(960, 790))]
+        return [*_menu_badges(c), _PASS_Y, _RUN_B, _TRUNK_X,
+                Bar((_BATTLE_MOVE, _BATTLE_SELECT, _TEAMMATES), _px(960, 790))]
     if s.kind == "trunk":
-        return [_PASS_Y, _TRUNK_X, _badge("LS", SOS_FILTER, -89, 1, 0.9, act=_bt("sos_filter")),
+        return [*_menu_badges(c), _PASS_Y, _TRUNK_X, _badge("LS", SOS_FILTER, -89, 1, 0.9, act=_bt("sos_filter")),
                 Bar((_BATTLE_MOVE, _BATTLE_SELECT, ("R:ud", "Scroll", _bt("sos_scroll_up", "sos_scroll_down")),
                      _TEAMMATES), _px(960, 790))]
     if s.kind == "target":
         return [_badge("B", TARGET_BACK, -37, -30, act=_bt("back"))]
     if s.kind == "waiting":
-        return [_badge("B", WAITING_BACK, -33, -26, act=_bt("back")),
+        return [*_menu_badges(c), _badge("B", WAITING_BACK, -33, -26, act=_bt("back")),
                 Bar((("DLR", "Teammates' gags", _bt("left", "right")),), _px(955, 680))]
     if s.kind == "confirm_run":
         return _covers((RUN_YES, RUN_NO), acts=(_bt("select"), _bt("back")))
@@ -337,7 +348,7 @@ def _options(c: Context) -> list:
            Badge("R:ud", _px(1404, 578), S * 0.85)]  # right of the scroll bar, centered on it
     for row in s.rows:
         if row.y == c.options_row_y and row.help is not None:
-            out.append(_badge("Y", row.help, -21, -15, 0.8))
+            out.append(_badge("Y", row.help, -42, 0, 0.8))  # left of the row's frame, clear of its line
     return out
 
 
@@ -456,6 +467,9 @@ def hints_for(c: Context) -> tuple:
     if not make:
         return ()
     tables = {**default_tables(), **(c.tables or {})}
+    # In battle, its own table owns its buttons: a walking badge on one of them (RB remapped
+    # to Pass) wouldn't do what it says.
+    taken = ({_BUTTON_SPRITE.get(b, b) for b in tables["battle"].buttons()} if c.mode == "battle" else set())
     out = []
     for hint in make(c):
         if isinstance(hint, Bar):
@@ -468,7 +482,7 @@ def hints_for(c: Context) -> tuple:
                 out.append(Bar(tuple(items), hint.at, hint.size))
         elif hint.act:
             sprite = _sprite_for(tables, hint.act, hint.sprite)
-            if sprite is not None:
+            if sprite is not None and not (hint.act[0] == "overworld" and sprite in taken):
                 out.append(Badge(sprite, hint.at, hint.size, hint.hold, hint.cover, hint.act))
         else:
             out.append(hint)

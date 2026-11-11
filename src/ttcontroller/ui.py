@@ -64,6 +64,31 @@ def is_visible(button: Button, width: int, height: int, get_pixel: Callable[[int
 _FRIENDS_X = UIPoint("right", -0.112, 0.421)
 FRIENDS_CLOSE = Button("friends list close", _FRIENDS_X, around(_FRIENDS_X, 0.009), is_red, min_hits=3)
 
+def is_friends_green(c: RGB) -> bool:
+    r, g, b = c
+    return g > 180 and g - r > 50 and g - b > 90
+
+
+# The friends button's green rim, top right: below it and on its upper left, top and upper
+# right (its toons cover the rest). Gone while a timer sits there (a Cog HQ lobby's, when
+# the friends list can't open; timer_top_right). Measured at 1920x1009.
+FRIENDS_BUTTON = Button("friends button", UIPoint("right", -0.0664, 0.0545),
+                        tuple(UIPoint("right", (x - 1920) / 1009, y / 1009)
+                              for x, y in ((1853, 97), (1823, 25), (1853, 13), (1883, 25))),
+                        is_friends_green, min_hits=3)
+
+def is_book_yellow(c: RGB) -> bool:
+    r, g, b = c
+    return r > 220 and g > 220 and b < 190
+
+
+# The shticker book's yellow cover, bottom right. Where it can't open (a Cog HQ lobby,
+# no_book_options_only) TTR's Options gadget, teal, is there instead. Measured at 1920x1009.
+BOOK_BUTTON = Button("shticker book", UIPoint("right", (1865 - 1920) / 1009, (940 - 1009) / 1009, "bottom"),
+                     tuple(UIPoint("right", (x - 1920) / 1009, (y - 1009) / 1009, "bottom")
+                           for x, y in ((1855, 950), (1872, 955), (1890, 930))),
+                     is_book_yellow, min_hits=2)
+
 # The green button in the top-left. Clicking it opens speedchat, and clicking again closes it.
 SPEEDCHAT = Button("speedchat", UIPoint("left", 0.1015, 0.035))
 
