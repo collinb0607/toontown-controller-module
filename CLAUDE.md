@@ -16,8 +16,8 @@ and sends keyboard keys and real mouse clicks (SendInput) to drive the game.
   done (decided Nov 8); then M15 release (1.0). Trolley games are in Future, not 1.0. M13: a keyboard-and-mouse toon plus a controller toon driven by posted
   window messages: paced clicks, hover by a middle-button press since TTR ignores posted
   mouse moves; findings and experiments are in plan.md and tools/background_*, two_toon_check.py and
-  flash_check.py. Never PrintWindow a TTR window: it flashes. The controller toon's window is read
-  from the screen and must be uncovered (`BoundTarget` pauses it when covered). M3 no longer
+  flash_check.py. Never PrintWindow a TTR window: it flashes. The controller toon's window must be uncovered
+  (`BoundTarget` pauses it when covered). M3 no longer
   exists (the hints overlay was M3); done milestones keep their numbers because commit
   messages use them.
 
@@ -81,7 +81,9 @@ and sends keyboard keys and real mouse clicks (SendInput) to drive the game.
 ## Architecture
 
 `app.py` is the main loop. Each frame (screens every 0.1 s) it snapshots the TTR window
-(BitBlt `Frame`) and runs readers, in order, each skipped when an earlier one matched:
+(`TTRView.snapshot`: TTR's own window picture through `window_capture` on Windows 11, so the
+overlay isn't excluded from capture and shows in recordings; else a BitBlt of the screen with
+the overlay excluded) and runs readers, in order, each skipped when an earlier one matched:
 
 0. `options.read_options`: TTR's own Options window (and its dropdowns and popups), over
    anything; nothing else is read while it's open.

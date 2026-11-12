@@ -26,7 +26,7 @@ from .boarding import BoardingMapper, BoardingScreen, read_boarding
 from .silly import SillyMapper, SillyScreen, read_silly
 from .vp import read_pie_round
 from . import hints as hint_layout
-from . import ui
+from . import overlay, ui, window_capture
 from .ceo import read_leave
 from .elevator import read_hop_off
 from .hint_draw import FAMILY_NAMES, Drawer, find_sheet, pictures_for
@@ -211,8 +211,18 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
     output = KeyboardOutput(send)
     clicker = MouseClicker()
     hider = CursorHider()
+    # TTR is read from its own window picture where Windows allows it, so the overlay
+    # doesn't need to hide from capture and shows in recordings and streams; if that stops
+    # working, the module reads the screen again and the overlay hides.
+    if window_capture.supported():
+        overlay.set_capture_exclusion(False)
+        window_capture.on_failure(lambda reason: (
+            overlay.set_capture_exclusion(True),
+            log(f"Note: TTR's window can't be captured ({reason}), so the screen is read instead "
+                "and the hints won't show in recordings or streams.")))
+        log("Reading TTR's own window picture: the hints show in recordings and streams.")
     highlighter = None if dry_run else Highlighter()
-    if highlighter is not None and not highlighter.excluded:
+    if highlighter is not None and not highlighter.excluded and not window_capture.enabled():
         # A frame the module's own screen reading could see would throw it off.
         log("Note: this version of Windows can't keep the highlight frame out of screen captures, "
             "so it's turned off (it needs Windows 10 version 2004 or later).")
@@ -1063,6 +1073,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
     except KeyboardInterrupt:
         log("Quitting.")
     finally:
+        window_capture.stop_all()
         toon_api.stop()
         keyboard_watch.stop()
         clicker.release()

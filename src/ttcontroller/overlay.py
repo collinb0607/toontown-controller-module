@@ -9,6 +9,7 @@ module's own pixel reading (screen.py) never sees it.
 import ctypes
 import math
 import time
+import weakref
 from ctypes import wintypes
 
 import numpy as np
@@ -102,7 +103,7 @@ WS_EX_TOOLWINDOW, WS_EX_NOACTIVATE = 0x00000080, 0x08000000
 SW_HIDE, SW_SHOWNOACTIVATE = 0, 4
 ULW_ALPHA = 0x2
 AC_SRC_OVER, AC_SRC_ALPHA = 0x00, 0x01
-WDA_EXCLUDEFROMCAPTURE = 0x11
+WDA_NONE, WDA_EXCLUDEFROMCAPTURE = 0x0, 0x11
 PM_REMOVE = 0x1
 HWND_TOP, HWND_TOPMOST, HWND_NOTOPMOST = 0, -1, -2
 SWP_NOMOVE, SWP_NOSIZE, SWP_NOACTIVATE = 0x2, 0x1, 0x10
@@ -219,17 +220,33 @@ def stack(windows: list, above=None) -> None:
         _user32.EndDeferWindowPos(batch)
 
 
+# Whether overlay windows hide from screen capture. They must while the module reads TTR
+# by copying the screen (it would see them); while it reads TTR's own window picture
+# (window_capture) they don't, so OBS, Discord and stream viewers see them (Nov 11, 2026).
+_exclude = True
+_windows: "weakref.WeakSet[Highlighter]" = weakref.WeakSet()
+
+
+def set_capture_exclusion(exclude: bool) -> None:
+    """Hide every overlay window, now and later, from screen capture, or show it."""
+    global _exclude
+    _exclude = exclude
+    for window in list(_windows):
+        window.set_excluded(exclude)
+
+
 class Highlighter:
     """Shows the frame around a rectangle of the screen, or hides it."""
 
-    def __init__(self, exclude_from_capture: bool = True):
+    def __init__(self, exclude_from_capture: bool | None = None):
         _register()
         self.hwnd = _user32.CreateWindowExW(
             WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
             _CLASS, None, WS_POPUP, 0, 0, 1, 1, None, None, _kernel32.GetModuleHandleW(None), None)
-        # Whether screen captures (the module's own included) leave the frame out.
-        self.excluded = bool(exclude_from_capture
-                             and _user32.SetWindowDisplayAffinity(self.hwnd, WDA_EXCLUDEFROMCAPTURE))
+        # Whether screen captures (the module's own screen copy included) leave the frame out.
+        self.excluded = False
+        self.set_excluded(_exclude if exclude_from_capture is None else exclude_from_capture)
+        _windows.add(self)
         self._shown: tuple | None = None  # (rect, unit, color) last drawn
         self._pointers: dict[int, np.ndarray] = {}  # pointer images by length
         self.visible = False
@@ -299,6 +316,15 @@ class Highlighter:
         while _user32.PeekMessageW(ctypes.byref(msg), self.hwnd, 0, 0, PM_REMOVE):
             _user32.TranslateMessage(ctypes.byref(msg))
             _user32.DispatchMessageW(ctypes.byref(msg))
+
+    def set_excluded(self, exclude: bool) -> None:
+        """Hide this window from screen capture, or show it (excluded says which took)."""
+        if not self.hwnd:
+            return
+        if _user32.SetWindowDisplayAffinity(self.hwnd, WDA_EXCLUDEFROMCAPTURE if exclude else WDA_NONE):
+            self.excluded = exclude
+        elif not exclude:
+            self.excluded = False
 
     def close(self) -> None:
         if self.hwnd:

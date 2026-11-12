@@ -12,6 +12,8 @@ dependencies = [
     "pygame-ce>=2.5",
     "numpy>=1.26",
     "PySide6-Essentials>=6.6",
+    # Reads TTR's own window picture (Windows Graphics Capture), so the overlay can show in recordings.
+    "windows-capture>=2.0",
 ]
 
 [project.optional-dependencies]

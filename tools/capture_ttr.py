@@ -16,7 +16,7 @@ from pathlib import Path
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 import pygame  # noqa: E402
 
-from ttcontroller.screen import grab  # noqa: E402
+from ttcontroller.window import TTRView  # noqa: E402
 from ttcontroller.window import ForegroundWatcher, client_rect, find_ttr_windows, make_dpi_aware  # noqa: E402
 
 user32 = ctypes.WinDLL("user32")
@@ -40,7 +40,8 @@ def main() -> None:
     hwnd = foreground if ForegroundWatcher().ttr_foreground() and foreground in windows else windows[0]
 
     left, top, width, height = client_rect(hwnd)
-    frame = grab(left, top, width, height)
+    frame = TTRView(hwnd).snapshot()  # TTR's own picture: no module overlay in it
+    width, height = frame.width, frame.height
     surface = pygame.image.frombuffer(frame._bgra, (width, height), "BGRA")
     out_dir = Path(__file__).resolve().parent.parent / "captures"
     out_dir.mkdir(exist_ok=True)

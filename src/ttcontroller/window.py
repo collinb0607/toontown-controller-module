@@ -6,7 +6,7 @@ from ctypes import wintypes
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import ui
+from . import ui, window_capture
 from .screen import Frame, grab
 
 TTR_PROCESS = "ttrengine64.exe"
@@ -260,8 +260,12 @@ class TTRView:
         self.background = background
 
     def snapshot(self) -> Frame:
-        """Copy the game area, so its pixels can be read in client coordinates."""
-        return grab(*client_rect(self.hwnd))
+        """Copy the game area, so its pixels can be read in client coordinates: the window's
+        own picture (window_capture: nothing on top of it, the overlay included, is read),
+        or the screen where that can't be used."""
+        client = client_rect(self.hwnd)
+        frame = window_capture.frame(self.hwnd, client)
+        return frame if frame is not None else grab(*client)
 
     def is_visible(self, button: ui.Button) -> bool:
         frame = self.snapshot()
