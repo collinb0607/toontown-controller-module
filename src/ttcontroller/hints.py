@@ -29,7 +29,7 @@ from . import ui
 from .bindings import Bindings
 from .battle import (PASS, RUN, RUN_NO, RUN_YES, SOS_FILTER, TARGET_BACK, TRUNK, WAITING_BACK, BattleScreen,
                      default_battle_bindings)
-from .book import (BACK_TO_PLAYGROUND, COLOR_LEFT, COLOR_RIGHT, GO_HOME, SNAPSHOT_ARROWS, SNAPSHOT_TRASH, SUIT_ICONS,
+from .book import (BACK_TO_PLAYGROUND, CODE_CARD_CLOSE, COLOR_LEFT, COLOR_RIGHT, GO_HOME, SNAPSHOT_ARROWS, SNAPSHOT_TRASH, SUIT_ICONS,
                    TELEPORT as DISTRICT_TELEPORT, BookScreen, default_book_bindings)
 from .boarding import BoardingScreen
 from .facility import CLOSE as FACILITY_CLOSE, TELEPORT as FACILITY_TELEPORT, FacilityScreen
@@ -155,6 +155,8 @@ class Context:
     options: OptionsScreen = field(default_factory=OptionsScreen)
     options_row_y: float | None = None  # TTR's Options: the hovered row
     mat: MakeAToonScreen = field(default_factory=MakeAToonScreen)
+    mat_keyboard: bool = False  # Type-A-Name's on-screen keyboard is up (it has its own hints)
+    book_keyboard: bool = False  # the Options & Codes page's code keyboard is up (the same)
     pregame: PregameScreen = field(default_factory=PregameScreen)
     toon_slot: int | None = None  # toon selection: the hovered toon
     battle: BattleScreen = field(default_factory=BattleScreen)
@@ -361,9 +363,14 @@ BOOK_NAV = (Badge("LB", _px(525, 850), S * 0.7, act=_bk("prevPage")),  # under t
 
 def _book(c: Context) -> list:
     s = c.book
+    if c.book_keyboard:
+        return []
     if s.dialog is not None:
         return _covers(s.dialog, acts=(_bk("select"), _bk("close")))
     out = list(BOOK_NAV)
+    if s.page == "options" and s.code_card:
+        # The code's card: B (and A) close it with its red X, not the book.
+        out = [h for h in out if h.sprite != "B"] + [_cover("B", CODE_CARD_CLOSE, act=_bk("close"))]
     if len(s.top_tabs) > 1:  # tabs along the top: LT/RT out past their ends
         out += [Badge("LT", _by(s.top_tabs[0], -140, 7), S, act=_bk("prevTab")),
                 Badge("RT", _by(s.top_tabs[-1], 140, 7), S, act=_bk("nextTab"))]
@@ -419,6 +426,8 @@ def _pregame(c: Context) -> list:
 
 def _mat(c: Context) -> list:
     s = c.mat
+    if s.kind == "typename" and c.mat_keyboard:
+        return []
     if s.kind in ("confirm", "submission") and len(s.buttons) >= 2:
         return _covers((s.buttons[0], s.buttons[1]))
     out = []

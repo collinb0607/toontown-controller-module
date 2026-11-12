@@ -108,7 +108,7 @@ def options(dialog=None):
 def test_options_buttons_and_exit_dialog():
     mapper = BookMapper()
     [hover] = mapper.update(frozenset(), 0.0, options())
-    assert hover.kind == "hover" and hover.point == b.SUBMIT
+    assert hover.kind == "hover" and hover.point == b.CODE_BOX
     for t in (1.0, 2.0, 3.0):
         press(mapper, "dpad_down", t, options())
     assert mapper.row == 3

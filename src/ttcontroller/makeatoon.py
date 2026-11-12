@@ -33,6 +33,9 @@ from . import ui
 from .battle import PointerCommand
 from .bindings import Bindings, ButtonActions
 from .held_scroll import HeldScroll
+from .name_keyboard import CLEAR_PRESSES, NameKeyboard
+
+TYPED_SECONDS = 0.3  # after a key is typed, TTR's box isn't trusted to read empty yet
 
 PixelReader = Callable[[int, int], ui.RGB]
 
@@ -96,7 +99,11 @@ _NAME_SHUFFLE = (748, 707)
 _TYPE_A_NAME = (748, 778)
 # Type-A-Name: its (paler) panel, the text box, Submit and Pick-A-Name.
 _TYPE_PANEL = ((470, 420), (1030, 420), (470, 600), (1030, 600))
-_TEXT_BOX = ((700, 395), (820, 395))
+_TEXT_BOX = ((700, 428), (820, 428))  # below the text (descenders reach about 400)
+# Inside the box, where its text is: empty, only the caret shows, a 1 px line at x 756
+# (y 357 to 390). The text is centered, so it shows either side of that.
+_BOX_XS = tuple(x for x in range(600, 908, 2) if abs(x - 756) > 3)
+_BOX_YS = tuple(range(356, 395, 3))
 _PILLS = ((650, 708), (850, 708))
 _SUBMIT = (751, 708)
 _PICK_A_NAME = (749, 777)
@@ -142,6 +149,7 @@ class MakeAToonScreen:
     # Name: Shuffle and Type-A-Name; typename: Submit and Pick-A-Name; confirm: Yes and
     # No; submission: Continue and Cancel Submission.
     buttons: tuple[ui.UIPoint, ...] = ()
+    box_empty: bool = True  # typename: nothing typed in TTR's name box
 
     @property
     def is_open(self) -> bool:
@@ -261,8 +269,9 @@ def read_make_a_toon(width: int, height: int, get_pixel: PixelReader) -> MakeATo
         if (all(_is_type_blue(at(anchor, x, y)) for x, y in _TYPE_PANEL)
                 and all(_is_white(at(anchor, x, y)) for x, y in _TEXT_BOX)
                 and all(_is_pill_yellow(at(anchor, x, y)) for x, y in _PILLS)):
+            empty = not any(max(at(anchor, x, y)) < 120 for y in _BOX_YS for x in _BOX_XS)
             return MakeAToonScreen("typename", back=back, next=name_next, done=done,
-                                   buttons=(_pt(anchor, *_SUBMIT), _pt(anchor, *_PICK_A_NAME)))
+                                   buttons=(_pt(anchor, *_SUBMIT), _pt(anchor, *_PICK_A_NAME)), box_empty=empty)
 
     # Steps 2 to 4: the rows, from the middle or the right.
     for anchor in ("c", "r"):
@@ -358,12 +367,14 @@ def default_make_a_toon_bindings() -> Bindings:
 
 MAKE_A_TOON_ACTIONS = {
     "select": "pick the style hovered; Shuffle when it's hovered; on the Name step, tick or untick the "
-              "list's checkbox; Submit; Yes, Continue Submission or Enter Toontorial in a dialog",
-    "back": "the back arrow (the X on the first step: leave Make-a-Toon); Pick-A-Name while typing a "
-            "name; No, Cancel Submission or Skip Toontorial in a dialog",
-    "shuffle": "Shuffle",
-    "typeName": "on the Name step: Type-A-Name (type with the keyboard), and again: Pick-A-Name",
-    "next": "the next arrow, or the check mark on the Name step",
+              "list's checkbox; on the name keyboard, type the letter hovered; Submit; Yes, Continue Submission or Enter Toontorial in a dialog",
+    "back": "the back arrow (the X on the first step: leave Make-a-Toon); on the name keyboard, clear the name "
+            "and Pick-A-Name; Pick-A-Name while typing a name; No, Cancel Submission or Skip Toontorial in a dialog",
+    "shuffle": "Shuffle; on the name keyboard, delete a letter",
+    "typeName": "on the Name step: Type-A-Name (the name keyboard opens), and again: Pick-A-Name; "
+                "on the name keyboard, a space",
+    "next": "the next arrow, or the check mark on the Name step; on the name keyboard, "
+            "close it and Submit",
     "noName": "on the Name step: the arrow above the check mark (submit the toon without picking a name yet)",
     "prevStep": "the back arrow", "nextStep": "the next arrow",
     "rotateLeft": "hold: turn the toon left", "rotateRight": "hold: turn the toon right",
@@ -396,6 +407,11 @@ class MakeAToonMapper:
         self._rotating: int | None = None  # which turn arrow is held down
         self._hovered: tuple | None = None  # the row hovered as last drawn (it can grow: Shuffle's arrows)
         self._settle_until = 0.0
+        # Type-A-Name's on-screen keyboard (M14): open whenever Type-A-Name shows, until B
+        # or Start closes it; a direction opens it again.
+        self.keyboard = NameKeyboard()
+        self.keyboard_open = False
+        self._typed_until = 0.0
 
     @property
     def buttons(self) -> frozenset[str]:
@@ -407,6 +423,9 @@ class MakeAToonMapper:
         self._kind = None
         self._rotating = None
         self.row = self.style = self.column = None
+
+    def showing_keyboard(self, screen: MakeAToonScreen) -> bool:
+        return screen.kind == "typename" and self._kind == "typename" and self.keyboard_open and bool(screen.buttons)
 
     def hovering(self, screen: MakeAToonScreen) -> bool:
         return ((screen.kind in ("type", "color", "clothes") and self.row is not None)
@@ -432,6 +451,9 @@ class MakeAToonMapper:
             return commands
         if screen.kind != self._kind:
             commands += self._arrive(screen)
+        elif (screen.kind == "typename" and screen.box_empty and not self.keyboard.empty
+              and now >= self._typed_until):
+            self.keyboard.clear()  # emptied some other way (the real keyboard): a capital next
         elif (screen.kind in ("type", "color", "clothes") and self.row is not None and self.row < len(screen.rows)
               and self._rotating is None and (screen.rows[self.row].point, screen.rows[self.row].size) != self._hovered):
             # The row hovered changed shape (Shuffle gets its arrows once shuffled): the pointer
@@ -450,8 +472,19 @@ class MakeAToonMapper:
             if before not in _NAME_KINDS or self.column is None:
                 self.column = FIRST_LIST
             return [self._hover_list(screen)]
+        if screen.kind == "typename":
+            # TTR's box is read, not remembered: empty starts a new name; with text, it's
+            # kept and taken as mid-word. Back from a dialog (No, Cancel Submission), the
+            # name typed here is still known.
+            self.keyboard_open = True
+            keyboard = self.keyboard
+            if screen.box_empty:
+                keyboard.clear()
+            elif not (before in ("confirm", "submission") and keyboard.text):
+                keyboard.text, keyboard.prefix = "", True
+            return []
         if screen.kind in _NAME_KINDS:
-            return []  # Type-A-Name and the dialogs: the column is kept for coming back
+            return []  # the dialogs: the column is kept for coming back
         self.row = self.style = self.column = None
         if screen.kind == "style" and screen.style:
             self.style = 0
@@ -509,8 +542,39 @@ class MakeAToonMapper:
             return []
         return self._click(point, name, now)
 
+    @staticmethod
+    def _type(text: str) -> PointerCommand:
+        """Keys typed into TTR's name box (the text is the command's name): letters
+        (capitals with Shift), " " and "\\b" (backspace). The point isn't used."""
+        return PointerCommand("type", _pt("c", *_SUBMIT), text)
+
+    def _run_keyboard(self, action: str, screen: MakeAToonScreen, now: float) -> list[PointerCommand]:
+        keyboard = self.keyboard
+        if action in _DIRECTIONS:
+            keyboard.move(action)
+            return []
+        if action in ("select", "typeName", "shuffle"):
+            self._typed_until = now + TYPED_SECONDS
+        if action == "select":
+            return [self._type(keyboard.type_letter())]
+        if action == "typeName":
+            return [self._type(" ")] if keyboard.space() else []
+        if action == "shuffle":
+            return [self._type("\b")] if keyboard.delete() else []
+        if action == "next":
+            self.keyboard_open = False
+            return self._click(screen.buttons[0], "submit", now)
+        if action == "back":
+            # Empty TTR's box all at once, then back to the lists (Pick-A-Name).
+            self.keyboard_open = False
+            self.keyboard.clear()
+            return [self._type("\b" * CLEAR_PRESSES)] + self._click(screen.buttons[1], "pick-a-name", now)
+        return []  # nothing else while typing
+
     def _run(self, action: str, screen: MakeAToonScreen, now: float) -> list[PointerCommand]:
         kind = screen.kind
+        if kind == "typename" and self.keyboard_open:
+            return self._run_keyboard(action, screen, now)
         if kind in ("confirm", "submission"):
             if action == "select":
                 return self._click(screen.buttons[0], "yes", now)
@@ -524,6 +588,8 @@ class MakeAToonMapper:
                 return self._click(screen.buttons[0], "submit", now)
             if action in ("back", "typeName"):  # Y toggles back, as well as B
                 return self._click(screen.buttons[1], "pick-a-name", now)
+            if action in _DIRECTIONS:  # the keyboard again
+                self.keyboard_open = True
             return []
         if action in ("prevStep", "back"):
             if kind == "style":

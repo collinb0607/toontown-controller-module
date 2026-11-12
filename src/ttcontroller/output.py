@@ -250,6 +250,36 @@ class MouseClicker:
         self._next_at = now + self._steps[min(self._step - 1, 2)]
 
 
+# Symbols typed with Shift on a US keyboard, and the key each is on.
+_SHIFTED = {"!": "1", "@": "2", "#": "3", "$": "4", "%": "5", "^": "6", "&": "7", "*": "8", "(": "9",
+            ")": "0", "_": "-", "+": "=", ":": ";", '"': "'", "?": "/", "<": ",", ">": ".", "~": "`",
+            "{": "[", "}": "]", "|": "\\"}
+
+
+def char_key(ch: str) -> tuple[str, bool]:
+    """The key that types a character, and whether Shift is held for it."""
+    if ch == "\b":
+        return "backspace", False
+    if ch == " ":
+        return "space", False
+    if ch in _SHIFTED:
+        return _SHIFTED[ch], True
+    return ch.lower(), ch.isupper()
+
+
+def type_text(send: Callable[[str, bool], None], text: str) -> None:
+    """Types text a key at a time: capitals and symbols like ! with Shift held, " " as
+    Space, "\b" as Backspace (the on-screen keyboards; "delete" on toon selection)."""
+    for ch in text:
+        name, shift = char_key(ch)
+        if shift:
+            send("shift", True)
+        send(name, True)
+        send(name, False)
+        if shift:
+            send("shift", False)
+
+
 class KeyboardOutput:
     """Keeps the set of held keys in sync with what the mapper wants held."""
 
@@ -276,7 +306,7 @@ class KeyboardOutput:
 # a middle-button press and release moves its pointer instead, without clicking anything
 # (M13 phase 0, Nov 8). TTR doesn't draw its pointer in a window that isn't in front.
 
-WM_KEYDOWN, WM_KEYUP = 0x0100, 0x0101
+WM_KEYDOWN, WM_KEYUP, WM_CHAR = 0x0100, 0x0101, 0x0102
 WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEWHEEL = 0x0201, 0x0202, 0x0207, 0x0208, 0x020A
 MK_LBUTTON, MK_MBUTTON = 0x0001, 0x0010
 POSTED_STEPS = (0.05, 0.08, 0.03)  # after the move, after the press, after the rest
@@ -301,13 +331,26 @@ def _xy(x: int, y: int) -> int:
     return ((y & 0xFFFF) << 16) | (x & 0xFFFF)
 
 
+# The character each key types with Shift held (letters and the symbols above).
+_SHIFTED_CHAR = {**{c: c.upper() for c in "abcdefghijklmnopqrstuvwxyz"}, **{k: c for c, k in _SHIFTED.items()}}
+
+
 class PostedKeys:
     """Keys for one window, posted: called like send_key(name, down)."""
 
     def __init__(self, hwnd, post=_post, lparam=key_lparam):
         self.hwnd, self._post, self._lparam = hwnd, post, lparam
+        self._shift = False
 
     def __call__(self, name: str, down: bool) -> None:
+        if name == "shift":
+            self._shift = down
+        elif self._shift and name in _SHIFTED_CHAR:
+            # A posted Shift doesn't change the window's keyboard state, so a posted key
+            # would still come out unshifted: the capital or symbol goes as a character.
+            if down:
+                self._post(self.hwnd, WM_CHAR, ord(_SHIFTED_CHAR[name]), self._lparam(name, True))
+            return
         self._post(self.hwnd, WM_KEYDOWN if down else WM_KEYUP, keys.vk_code(name), self._lparam(name, down))
 
 

@@ -13,7 +13,7 @@ from .combo import ButtonCombo
 from .controller import NEUTRAL, ControllerReader
 from .dialog import DialogMapper, find_cancel_alone, find_ok_cancel
 from .cursor import MOVE_TOLERANCE, CursorHider
-from .book import BookMapper, BookScreen, read_book
+from .book import CODE_PANEL_SIZE, CODE_PANEL_TOP, BookMapper, BookScreen, read_book
 from .friends import FriendsMapper, FriendsScreen, read_friends
 from .garden import GardenMapper, GardenScreen, read_garden
 from .garden_intro import GardenIntro, GardenIntroMapper, read_garden_intro
@@ -33,11 +33,12 @@ from .hint_draw import Drawer, find_sheet
 from .mail import read_mail
 from .mapper import OverworldMapper, controller_buttons
 from .overlay import Highlighter, stack
-from .output import KeyboardOutput, MouseClicker, cursor_pos, mouse_button_down, posted_output, send_key
+from .output import KeyboardOutput, MouseClicker, cursor_pos, mouse_button_down, posted_output, send_key, type_text
 from .npc import NpcMapper, NpcScreen, read_npc
 from .options import OptionsMapper, OptionsScreen, read_options
 from .pregame import PregameMapper, PregameScreen, read_pregame
 from .makeatoon import MakeAToonMapper, MakeAToonScreen, read_make_a_toon
+from . import name_keyboard
 from .shop import ShopMapper, ShopScreen, read_shop
 from .speedchat import SpeedchatMapper, SpeedchatScreen, read_speedchat
 from .window import (BoundTarget, ForegroundTarget, ForegroundWatcher, TargetChoice, TTRView,  # noqa: F401
@@ -234,6 +235,19 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                 hint_drawer = Drawer(sheet)
             except Exception as e:  # a broken sheet shouldn't stop the controller
                 log(f"Note: no hints ({e}).")
+    # Make-a-Toon's name keyboard (M14), in a window of its own. The art is
+    # input_sprites/all_input.png; without it, Type-A-Name takes the real keyboard only.
+    osk_drawer = osk_window = osk_key = osk_image = None
+    if highlighter is not None:
+        osk_sheet = name_keyboard.find_sheet(module_config.CONFIG_DIR)
+        if osk_sheet is None:
+            log("Note: no on-screen keyboard for names (input_sprites/all_input.png wasn't found).")
+        else:
+            try:
+                osk_drawer = name_keyboard.KeyboardDrawer(osk_sheet, find_sheet(module_config.CONFIG_DIR))
+                osk_window = Highlighter()
+            except Exception as e:  # broken art shouldn't stop the controller
+                log(f"Note: no on-screen keyboard for names ({e}).")
     hints = ()  # what the hints overlay shows now
     hint_mail = hint_hop = hint_leave = None  # read for the hints only: Clarabelle's X, Hop off, a CEO leave button
     hint_friends = True  # the friends button is showing (a timer can take its place)
@@ -278,9 +292,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
             clicker.scroll(x, y, notches)
         elif kind == "type":
             # Typed straight away, letter by letter (a click after it waits its delay).
-            for letter in name:
-                send(letter, True)
-                send(letter, False)
+            type_text(send, name)
         else:
             clicker.click(x, y, restore=restore, delay=delay)
 
@@ -342,7 +354,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                     else:
                         output, clicker, send = posted_output(hwnd, logged if dry_run or debug else None)
                     log("Two toons: the controller drives the chosen TTR window, in front or not.")
-                for window in (highlighter, aimer, *hint_windows):
+                for window in (highlighter, aimer, osk_window, *hint_windows):
                     if window is not None:
                         window.attach(hwnd)
                 ttr_focused = None
@@ -884,6 +896,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                             else "golf" if in_golf else "fishing" if in_fishing else "free")
                     hints = hint_layout.hints_for(hint_layout.Context(
                         mode=mode, options=options_screen, options_row_y=options_mapper.row_y, mat=mat_screen,
+                        mat_keyboard=mat_mapper.showing_keyboard(mat_screen),
+                        book_keyboard=book_mapper.showing_keyboard(book_screen),
                         pregame=pregame_screen, toon_slot=pregame_mapper.slot, battle=battle_screen,
                         shop=shop_screen, friends=friends_screen, npc=npc_screen, book=book_screen,
                         book_task=book_mapper.hovered_task, fishing=fishing_screen,
@@ -956,6 +970,30 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                 # Every frame, so they stay above TTR: all at once in a fixed order (later
                 # hints on top), so overlapping ones don't flicker.
                 stack(hint_windows[:len(pieces)][::-1], above=above)
+            if osk_window is not None:
+                view = overlay_view
+                shown = None  # (keyboard, its top middle, its size)
+                if mat_mapper.showing_keyboard(mat_screen):
+                    submit = mat_screen.buttons[0]
+                    shown = (mat_mapper.keyboard,
+                             ui.UIPoint(submit.anchor, submit.x + name_keyboard.PANEL_DX,
+                                        submit.y + name_keyboard.PANEL_TOP_DY, submit.v_anchor),
+                             name_keyboard.PANEL_SIZE)
+                elif book_mapper.showing_keyboard(book_screen):
+                    shown = (book_mapper.code_keyboard, CODE_PANEL_TOP, CODE_PANEL_SIZE)
+                if view is not None and presenting and shown is not None:
+                    keyboard, top, size = shown
+                    unit = min(client_rect(view.hwnd)[2:])
+                    x, y = view.to_screen(top)
+                    key = (keyboard.keys, keyboard.row, keyboard.col, keyboard.hints, size, unit, x, y,
+                           osk_drawer.buttons_family)
+                    if key != osk_key:
+                        osk_key = key
+                        osk_image = osk_drawer.image(keyboard, unit, size)
+                    osk_window.show_image(x - osk_image.shape[1] // 2, y, osk_image, key)
+                else:
+                    osk_window.hide()
+                osk_window.pump()
             if aimer is not None:
                 view = overlay_view
                 if golf_aim is not None and view is not None and presenting:
@@ -978,6 +1016,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
             highlighter.close()
         if aimer is not None:
             aimer.close()
+        if osk_window is not None:
+            osk_window.close()
         for window in hint_windows:
             window.close()
         output.release_all()

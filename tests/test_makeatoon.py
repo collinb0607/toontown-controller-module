@@ -201,13 +201,15 @@ def test_type_a_name_and_back_to_the_same_list():
     m.update(frozenset(), 0.0, name)
     press(m, name, "dpad_right", at=1.0)
     assert names(press(m, name, "y", at=2.0)) == [("click", "type-a-name")]
-    assert m.update(frozenset(), 3.0, typing) == []
+    assert m.update(frozenset(), 3.0, typing) == [] and m.showing_keyboard(typing)
+    press(m, typing, "b", at=3.5)  # closes it (test_name_keyboard has the rest)
     assert names(press(m, typing, "a", at=4.0)) == [("click", "submit")]
     assert names(press(m, typing, "b", at=5.0)) == [("click", "pick-a-name")]
     assert names(m.update(frozenset(), 6.0, name)) == [("hover", "name list 3")]
     # Y toggles: Type-A-Name, then Y again is Pick-A-Name.
     assert names(press(m, name, "y", at=7.0)) == [("click", "type-a-name")]
     m.update(frozenset(), 8.0, typing)
+    press(m, typing, "b", at=8.5)
     assert names(press(m, typing, "y", at=9.0)) == [("click", "pick-a-name")]
 
 

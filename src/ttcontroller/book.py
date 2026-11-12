@@ -15,9 +15,10 @@ An OK/Cancel dialog over the book (Exit Toontown?) dims everything behind it,
 backdrop included, so the book is known by the dimmed backdrop then.
 
 Pages with controls of their own:
-- Options & Codes: Submit, the SpeedChat color (hovering its box previews it, with
-  arrows either side to change it), Open Options and Exit Toontown. The code box
-  is skipped, since there's no way to type.
+- Options & Codes: the code box, the SpeedChat color (hovering its box previews it,
+  with arrows either side to change it), Open Options and Exit Toontown. A on the code
+  box opens the on-screen keyboard (name_keyboard.CodeKeyboard) over the page; Start
+  submits the code (Submit itself isn't hovered any more) and B clears it.
 - Districts: a list of districts, each with a colored dot on its right. It opens
   with your current district (green name) chosen; clicking another chooses it
   (orange name) and lights up Teleport Here!. A SpeedChat-only district asks to
@@ -79,6 +80,7 @@ from .battle import trunk_size as _battle_trunk_size
 from .bindings import Bindings, ButtonActions
 from .dialog import find_ok_cancel
 from .held_scroll import HeldScroll
+from .name_keyboard import CLEAR_PRESSES, CodeKeyboard
 
 RGB = tuple[int, int, int]
 PixelReader = Callable[[int, int], RGB]
@@ -521,12 +523,41 @@ def _is_face(c: RGB) -> bool:
 
 # Options & Codes, measured at 1920x1009.
 SUBMIT = _center(0.2270, -0.1001)
+CODE_BOX = _center(0.2200, -0.2324)  # the green-framed box a code is typed in
+CODE_BOX_SIZE = (402 / 1009, 112 / 1009)  # the gold frame round its green frame (x 987-1376, y 221-321)
+# The code keyboard: its top middle and size. Under the code box and above "SpeedChat
+# Color" (y 328 to 502, over Submit), across the right page only: clear of the seam in the
+# middle (by x 960) and the page tabs (from x 1404).
+CODE_PANEL_TOP = _center(0.2210, -0.1749)
+CODE_PANEL_SIZE = (422 / 1009, 174 / 1009)
+# The card a submitted code shows over the gift ("You've entered an invalid code..."): a
+# cream card in a green frame, and its red X (bottom right) closes it.
+CODE_CARD_CLOSE = _center(-0.0624, 0.1690)
+_CODE_CARD_FRAME = (_center(-0.3717, -0.0768), _center(-0.0496, -0.0768))
+_CODE_CARD_CREAM = (_center(-0.3449, -0.0738), _center(-0.0793, -0.0738), _center(-0.2131, -0.2800))
+_CODE_CARD_RED = _center(-0.0743, 0.1690)
+
+
+def _read_code_card(width: int, height: int, get_pixel: PixelReader) -> bool:
+    def at(p: ui.UIPoint) -> RGB:
+        return get_pixel(*p.to_client(width, height))
+
+    def green(c: RGB) -> bool:
+        return c[1] > 120 and c[0] < 90 and c[2] < 90
+
+    def cream(c: RGB) -> bool:
+        return c[0] > 230 and c[1] > 235 and 160 < c[2] < 225
+
+    if not (all(green(at(p)) for p in _CODE_CARD_FRAME) and all(cream(at(p)) for p in _CODE_CARD_CREAM)):
+        return False
+    red = at(_CODE_CARD_RED)
+    return red[0] > 170 and red[1] < 110 and red[2] < 110
 SPEEDCHAT_COLOR = _center(0.2200, 0.0649)  # hovering it previews the color
 COLOR_LEFT = _center(0.1234, 0.0639)
 COLOR_RIGHT = _center(0.3256, 0.0639)
 OPEN_OPTIONS = _center(0.2270, 0.1705)
 EXIT_TOONTOWN = _center(0.2270, 0.2448)
-OPTIONS_ROWS = ((SUBMIT, "submit"), (SPEEDCHAT_COLOR, "speedchat color"), (OPEN_OPTIONS, "open options"),
+OPTIONS_ROWS = ((CODE_BOX, "code box"), (SPEEDCHAT_COLOR, "speedchat color"), (OPEN_OPTIONS, "open options"),
                 (EXIT_TOONTOWN, "exit toontown"))
 
 # Districts, measured at 1920x1009. The list doesn't scroll with today's district count.
@@ -723,6 +754,7 @@ class BookScreen:
     suit_arrows: tuple[str, ...] = ()  # and its blue arrows showing ("left", "right")
     summons_open: bool = False  # Issue a Cog Summons is open
     summons: tuple[ui.UIPoint, ...] = ()  # its available buttons, top to bottom (none for a message)
+    code_card: bool = False  # on Options & Codes: the card a submitted code shows (its red X: CODE_CARD_CLOSE)
 
     @property
     def is_open(self) -> bool:
@@ -918,13 +950,15 @@ def read_book(width: int, height: int, get_pixel: PixelReader) -> BookScreen:
     snapshot_arrows = tuple(side for side, p in SNAPSHOT_ARROWS.items()
                             if page == "snapshots" and _is_arrow_blue(get_pixel(*p.to_client(width, height))))
     snapshot_trash = page == "snapshots" and min(get_pixel(*SNAPSHOT_TRASH.to_client(width, height))) < 200
+    code_card = page == "options" and _read_code_card(width, height, get_pixel)
     calendar = (_read_calendar(width, height, get_pixel) if page == "events" and top_current == CALENDAR_TAB
                 else None)
     return BookScreen(tabs, current, page, top_tabs, top_current, districts=districts, district_chosen=chosen,
                       district_current=current_district, places=places, go_home=go_home,
                       back_to_playground=playground, gags=gags, trunk=trunk, tasks=tasks, summon_cogs=summon_cogs,
                       fish=fish, flowers=flowers, trophies=trophies, suit_current=suit_current, suit_arrows=suit_arrows,
-                      snapshot_arrows=snapshot_arrows, snapshot_trash=snapshot_trash, calendar=calendar)
+                      snapshot_arrows=snapshot_arrows, snapshot_trash=snapshot_trash, calendar=calendar,
+                      code_card=code_card)
 
 
 def read_pages(width: int, height: int, get_pixel: PixelReader) -> list[str | None]:
@@ -941,16 +975,19 @@ BOOK_ACTIONS = {
     "nextPage": "the page below in the tabs down the right (taps TTR's turn right key)",
     "prevTab": "the tab to the left along the page's top",
     "nextTab": "the tab to the right along the page's top",
-    "close": "close the book, or cancel a dialog over it",
-    "select": "press the highlighted button (Teleport Here! on Districts, OK in a dialog)",
+    "close": "close the book, or cancel a dialog over it; on the code keyboard, clear the code and close it",
+    "select": "press the highlighted button (Teleport Here! on Districts, OK in a dialog); on Options & Codes, "
+              "open the code keyboard from the code box, and type the key hovered on it",
     "up": "move up a page's buttons (or choose the district above)",
     "down": "move down a page's buttons (or choose the district below)",
     "left": "change a setting (the SpeedChat color), the next place left on the map, or the snapshot before",
     "right": "change a setting (the SpeedChat color), the next place right on the map, or the next snapshot",
-    "goHome": "the map's Go Home button",
+    "goHome": "the map's Go Home button; on the code keyboard, a space",
     "pageAction": "the map's Back to Playground button, delete the highlighted ToonTask (one with a trash can), "
-                  "release the fish (or flower) picked, or delete the snapshot shown",
-    "filter": "press the left stick: the Events Calendar's next filter (back to the first after the last)",
+                  "release the fish (or flower) picked, or delete the snapshot shown; on the code keyboard, "
+                  "delete a character",
+    "filter": "press the left stick: the Events Calendar's next filter (back to the first after the last); "
+              "on the code keyboard, lowercase, then capitals, then symbols",
     "stickUp": "right stick up: scroll the Trunk's SOS cards up, or the Cog Gallery's tie (Bossbot)",
     "stickDown": "right stick down: scroll the Trunk's SOS cards down, or the Cog Gallery's bar graph (Sellbot)",
     "stickLeft": "right stick left: the Cog Gallery's gavel (Lawbot), turn the kart on Racing's Customize tab, "
@@ -1018,6 +1055,18 @@ _LEAVES_PAGE = frozenset({"lb", "rb", "lt", "rt", "b", "start"})
 
 # Actions that are just a tap of a TTR control.
 _TAPS = {"prevPage": "left", "nextPage": "right", "close": "stickerBook"}
+_CLEAR_AFTER_CLICK = 0.35  # s: the click on the code box is done by then (the clicker takes a few steps)
+
+
+def _row_hover(point: ui.UIPoint, name: str) -> PointerCommand:
+    """A page row's hover; the code box gets the gold frame (the user asked, Nov 11)."""
+    return PointerCommand("hover", point, name, size=CODE_BOX_SIZE if point == CODE_BOX else None)
+# The book's actions the code keyboard takes while it's up (the rest still work).
+_CODE_ACTIONS = frozenset({"up", "down", "left", "right", "select", "pageAction", "goHome", "filter", "close",
+                           "stickUp", "stickDown", "stickLeft", "stickRight"})
+_CODE_HINTS = (("select", "Select"), ("pageAction", "Delete"), ("goHome", "Space"), ("filter", None))
+_SPRITE_NAMES = {"a": "A", "b": "B", "x": "X", "y": "Y", "lb": "LB", "rb": "RB", "lt": "LT", "rt": "RT",
+                 "ls": "LS", "rs": "RS", "view": "VIEW", "start": "START"}
 
 
 @dataclass
@@ -1057,19 +1106,44 @@ class BookMapper:
         self._releasing = False  # the release confirm is up (or about to be)
         # The Trunk tab works like the battle trunk, so it's run by a battle mapper.
         self._trunk = BattleMapper(_trunk_bindings())
+        # The Options & Codes page's on-screen keyboard (M14): open from A on the code box.
+        self.code_keyboard = CodeKeyboard()
+        self.typing = False
+        self._code_retry = False  # the code's card is being closed: back to typing after
+        self._start_used = False  # Start submitted a code and is still held
+        self._clear_at: float | None = None  # when to empty the box (once the click has given it focus)
+        self._set_code_hints()
 
     def set_bindings(self, bindings: Bindings) -> None:
         self.bindings = bindings
         self._actions = ButtonActions(bindings, 0.5, is_oneshot=lambda action: True,
                                       repeats=lambda action: action in ("prevPage", "nextPage", "up", "down", "stickUp", "stickDown"))
+        if hasattr(self, "code_keyboard"):
+            self._set_code_hints()
+
+    def _set_code_hints(self) -> None:
+        """The code keyboard's hint bar shows the book's buttons for its actions (the book's
+        table can be remapped); Start isn't in the table."""
+        def button(action: str) -> str:
+            found = next((b for b, a in self.bindings.press.items() if a == action), None)
+            return _SPRITE_NAMES.get(found, (found or "?").upper())
+        self.code_keyboard.hint_buttons = tuple(
+            (button(action), words) for action, words in _CODE_HINTS) + (("START", "Submit"), (button("close"), "Clear"))
 
     @property
     def buttons(self) -> set[str]:
         # The Trunk tab's too (LS cycles the SOS filter), so they don't also do their
         # overworld action (LS is sprint).
-        return self.bindings.buttons() | self._trunk.buttons
+        # Start submits on the code keyboard, and stays the book's until it's let go: let go
+        # of while still held, the overworld would take it as a press (and close the book).
+        start = self.typing or self._start_used
+        return self.bindings.buttons() | self._trunk.buttons | ({"start"} if start else set())
+
+    def showing_keyboard(self, screen: BookScreen) -> bool:
+        return self.typing and screen.is_open and screen.page == "options" and screen.dialog is None
 
     def reset_buttons(self) -> None:
+        self.typing = False  # paused (the mouse or keyboard): A on the code box opens it again
         self._actions.reset(ignore_held=True)
         self._held_scroll.stop(finish=False)
         self._shown = None
@@ -1091,7 +1165,7 @@ class BookMapper:
     def hovering(self, screen: BookScreen) -> bool:
         """Whether something on the book is hovered (so the cursor isn't parked)."""
         screen = self._known(screen)
-        return (screen.hovers or (screen.gags is not None and self._gag is not None)
+        return (screen.hovers or self.showing_keyboard(screen) or (screen.gags is not None and self._gag is not None)
                 or (screen.tasks and self._task is not None)
                 or (screen.page == "cog gallery" and self._cog is not None)
                 or self._accessory is not None or self._trophy is not None
@@ -1112,7 +1186,10 @@ class BookMapper:
     def update(self, buttons: frozenset[str], now: float, screen: BookScreen) -> list[PointerCommand]:
         _, fired = self._actions.update(buttons, now)
         screen = self._known(screen)
-        if (buttons - self._held) & _LEAVES_PAGE:
+        pressed = buttons - self._held
+        if self.typing and not self.showing_keyboard(screen):
+            self.typing = False  # another page, the book closed, or a dialog
+        if (buttons - self._held) & _LEAVES_PAGE and not self.typing:
             self._left_page = True
         self._held = buttons
         commands: list[PointerCommand] = []
@@ -1173,19 +1250,74 @@ class BookMapper:
                     self._district = None
                     self._place = None
                 commands += self._hover(screen)
+        if "start" not in buttons:
+            self._start_used = False
+        if self.typing and "start" in pressed:
+            # Submit, and the keyboard goes; back on the code box once the page settles.
+            self.typing = False
+            self._start_used = True
+            commands += self._click(SUBMIT, "submit", now)
+        if self._code_retry and not screen.code_card and screen.page == "options" and now >= self._settle_until:
+            # The code's card closed: back to typing, in the box emptied once it has TTR's focus.
+            self._code_retry = False
+            self.typing = True
+            self.code_keyboard.row = self.code_keyboard.col = 0
+            self._clear_at = now + _CLEAR_AFTER_CLICK
+            commands.append(PointerCommand("click", CODE_BOX, "code box"))
+        if self._clear_at is not None and now >= self._clear_at:
+            self._clear_at = None
+            if self.typing:
+                commands.append(PointerCommand("type", CODE_BOX, "\b" * CLEAR_PRESSES))
         for action in fired:
             held = self._held_scroll.repeat(action)
-            if held is not None:
+            if screen.code_card and action in ("select", "close"):
+                # A or B: its red X, then back to typing (above).
+                self._code_retry = True
+                commands += self._click(CODE_CARD_CLOSE, "close code card", now)
+            elif self.typing and action in _CODE_ACTIONS:
+                commands += self._run_code(action, now)
+            elif held is not None:
                 commands += held  # still held on a scroll triangle: hold it down instead
             elif screen.dialog is not None:
                 commands += self._run_dialog(action, screen, now)
             elif screen.summons_open:
                 commands += self._run_summons(action, screen, now)
+            elif (action in ("prevPage", "nextPage") and screen.page == "options" and screen.current is not None
+                  and screen.tabs):
+                # The code box may have TTR's focus, which would take the page key as typing
+                # (RB typed a "d"): the page's tab is clicked instead.
+                self.typing = False
+                i = screen.current + (-1 if action == "prevPage" else 1)
+                if 0 <= i < len(screen.tabs):
+                    commands += self._click(screen.tabs[i], f"page tab {i + 1}", now)
             elif action in _TAPS:
                 self._taps.append(_TAPS[action])
             elif now >= self._settle_until:
                 commands += self._run(action, screen, now)
         return commands
+
+    def _run_code(self, action: str, now: float) -> list[PointerCommand]:
+        """The code keyboard: only its own actions; the page and tab buttons still work
+        (and leave the page, which closes it)."""
+        keyboard = self.code_keyboard
+        if action in ("up", "down", "left", "right"):
+            keyboard.move(action)
+            return []
+        if action == "select":
+            return [PointerCommand("type", CODE_BOX, keyboard.letter)]
+        if action == "pageAction":
+            return [PointerCommand("type", CODE_BOX, "\b")]
+        if action == "goHome":
+            return [PointerCommand("type", CODE_BOX, " ")]
+        if action == "filter":
+            keyboard.switch()
+            return []
+        if action == "close":
+            # Empty the box all at once, and back to hovering it (TTR keeps it focused: the
+            # page buttons click tabs here, so their keys don't type into it).
+            self.typing = False
+            return [PointerCommand("type", CODE_BOX, "\b" * CLEAR_PRESSES), _row_hover(CODE_BOX, "code box")]
+        return []  # the right stick: nothing while typing
 
     def _run_districts(self, action: str, screen: BookScreen) -> list[PointerCommand]:
         if action in ("up", "down") and screen.districts:
@@ -1499,7 +1631,7 @@ class BookMapper:
         if not rows:
             return []
         point, name = rows[self.row]
-        return [PointerCommand("hover", point, name)]
+        return [_row_hover(point, name)]
 
     def _run_dialog(self, action: str, screen: BookScreen, now: float) -> list[PointerCommand]:
         ok, cancel = screen.dialog
@@ -1581,6 +1713,11 @@ class BookMapper:
             point, name = rows[self.row]
             if point in _ARROWS:
                 return []
+            if point == CODE_BOX:
+                # Click it so TTR types into it, and the keyboard opens on its first key.
+                self.typing = True
+                self.code_keyboard.row = self.code_keyboard.col = 0
+                return [PointerCommand("click", CODE_BOX, "code box")]
             return self._click(point, name, now)
         if action in ("prevTab", "nextTab") and screen.top_tabs and screen.top_current is not None:
             i = screen.top_current + (-1 if action == "prevTab" else 1)
