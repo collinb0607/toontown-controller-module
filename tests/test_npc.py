@@ -148,3 +148,26 @@ def test_a_new_panel_after_the_old_one_went_starts_at_the_top():
     m.forget()  # the panel timed out
     assert not m.choosing
     assert [c.point for c in m.update(frozenset(), 5.0, screen)] == [screen.choices[0]]
+
+
+def _bubble_image(outline: bool, bar: bool = False):
+    import numpy as np
+    rgb = np.full((1009, 1920, 3), (90, 140, 90), np.uint8)  # grass
+    rgb[150:262, 1100:1372] = 255  # a white bubble
+    if outline:
+        rgb[262:266, 1100:1376] = 0  # its bottom outline
+        rgb[150:266, 1372:1376] = 0  # and right side
+    else:
+        rgb[262:266, 1340:1350] = 0  # just a dark speck below and right
+        rgb[248:256, 1372:1376] = 0
+    rgb[248:258, 1340:1352] = (20, 140, 230)  # the blue arrow
+    if bar:
+        rgb[200:300, 1340:1352] = (20, 140, 230)  # a long blue bar, not a button
+    return rgb
+
+
+def test_bubble_needs_its_outline_and_a_small_button():
+    from ttcontroller.npc import find_bubble_button
+    assert find_bubble_button(_bubble_image(outline=True)) is not None
+    assert find_bubble_button(_bubble_image(outline=False)) is None  # Nov 11: A showed on stray things
+    assert find_bubble_button(_bubble_image(outline=True, bar=True)) is None

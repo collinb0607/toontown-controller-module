@@ -107,9 +107,32 @@ def _is_bubble_corner(rgb: np.ndarray, x: int, y: int, unit: int) -> bool:
         return 0 <= px < width and 0 <= py < height and bool((rgb[py, px] > 240).all())
 
     left = [white(x - round(f * unit), y) for f in (0.02, 0.03, 0.04, 0.05)]
-    right = any(dark(x + i, y) for i in range(round(0.012 * unit), round(0.04 * unit)))
-    below = any(dark(x, y + i) for i in range(round(0.008 * unit), round(0.03 * unit)))
-    return sum(left) >= 3 and right and below
+    if sum(left) < 3:
+        return False
+    xr = next((x + i for i in range(round(0.012 * unit), round(0.04 * unit)) if dark(x + i, y)), None)
+    yb = next((y + i for i in range(round(0.008 * unit), round(0.03 * unit)) if dark(x, y + i)), None)
+    if xr is None or yb is None:
+        return False
+    # Stricter (the user, Nov 11: A kept showing on things that weren't NPCs): the bubble's
+    # outline runs on unbroken, left along its bottom and up its right side, where a dark
+    # speck or a letter beside some blue or red doesn't (start-up, a caught fish, gardening).
+    near = max(1, round(0.003 * unit))
+
+    def dark_near(px: int, py: int) -> bool:
+        return any(dark(px + d, py) for d in range(-near, near + 1)) or any(dark(px, py + d) for d in (-near, near))
+
+    step = max(1, round(0.004 * unit))
+    bottom = [dark_near(x - i, yb) for i in range(0, round(0.09 * unit), step)]
+    side = [dark_near(xr, y - i) for i in range(0, round(0.025 * unit), step)]
+    return sum(bottom) >= 0.9 * len(bottom) and sum(side) >= 0.9 * len(side)
+
+
+def _button_color(c, is_close: bool) -> bool:
+    """One pixel of the arrow's blue (cyan while hovered), or the close circle's red (gold)."""
+    r, g, b = (int(v) for v in c[:3])
+    if is_close:
+        return (r > 190 and g < 110 and b < 110 and r - g > 100) or (r > 220 and g > 170 and b < 100)
+    return (b > 200 and r < 90 and 110 < g < 180) or (b > 220 and g > 190 and r < 110)
 
 
 def find_bubble_button(rgb: np.ndarray) -> tuple[bool, float, float] | None:
@@ -130,6 +153,17 @@ def find_bubble_button(rgb: np.ndarray) -> tuple[bool, float, float] | None:
     arrow = ((b > 200) & (r < 90) & (g > 110) & (g < 180)) | ((b > 220) & (g > 190) & (r < 110))
     # Red, or gold while hovered.
     close = ((r > 190) & (g < 110) & (b < 110) & (r - g > 100)) | ((r > 220) & (g > 170) & (b < 100))
+    def isolated(is_close: bool, cx: float, cy: float) -> bool:
+        # The button is small (about 0.02 across): its color stops short of 0.02 away all
+        # round, where a red panel (a popup) or a blue bar (trunk_hud) carries on.
+        for f in (0.022, 0.032):
+            o = round(f * unit)
+            for dx, dy in ((o, 0), (-o, 0), (0, o), (0, -o)):
+                px, py = round(cx) + dx, round(cy) + dy
+                if 0 <= px < width and 0 <= py < height and _button_color(rgb[py, px], is_close):
+                    return False
+        return True
+
     for is_close, mask in ((False, arrow), (True, close)):
         ys, xs = np.nonzero(mask & around)
         if len(ys) == 0:
@@ -144,7 +178,7 @@ def find_bubble_button(rgb: np.ndarray) -> tuple[bool, float, float] | None:
                 continue
             cx = float(xs[members].mean()) * stride
             cy = float(ys[members].mean()) * stride
-            if _is_bubble_corner(rgb, round(cx), round(cy), unit):
+            if isolated(is_close, cx, cy) and _is_bubble_corner(rgb, round(cx), round(cy), unit):
                 return is_close, cx, cy
     return None
 
