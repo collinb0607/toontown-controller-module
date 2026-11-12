@@ -178,7 +178,10 @@ def _is_arrow_orange(c: RGB) -> bool:
 
 
 def _is_arrow_blue(c: RGB) -> bool:
-    return c[2] > 200 and c[0] < 100 and c[1] < 130
+    # (76,109,240), lighter while hovered (122,158,253): the hovered arrow once dropped out
+    # of the read, and a cog first read while hovered was never offered (the user, Nov 12).
+    r, g, b = c
+    return b > 200 and r < 140 and g < 180 and b - r > 100
 
 
 # Screen detectors. The probes avoid text and icons.

@@ -59,6 +59,14 @@ def test_two_cog_targets(name):
     assert [round(t.x, 2) for t in screen.targets] == [-0.11, 0.11]
 
 
+def test_a_hovered_target_arrow_is_still_read():
+    # The right arrow is hovered (a lighter blue); it once dropped out of the read, and a
+    # cog read while hovered on arriving was never offered (the user, Nov 12).
+    screen = replay("battle_target_three_cogs_1920x1009")
+    assert screen.kind == "target"
+    assert [round(t.x, 1) for t in screen.targets] == [-0.2, 0.0, 0.2]
+
+
 @pytest.mark.parametrize("name", ["battle_waiting_1920x1009", "battle_waiting_1082x464", "battle_waiting_316x652"])
 def test_waiting(name):
     assert replay(name).kind == "waiting"
