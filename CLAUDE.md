@@ -147,7 +147,8 @@ the capture (`pygame.image.load(...).get_at`), then convert to units.
   for blank ones (`cursor.CursorHider`), and the cursor parks on the title bar when nothing
   is hovered (the mapper's `hovering(screen)` decides).
 - `hide_cursor` in the module config writes TTR's settings.json `video.enable-cursor`.
-- Using the real mouse pauses the controller. Any controller input resumes it, and held
+- Using the real mouse, or the real keyboard (one toon only; `keyboard_watch.py` tells real keys from the
+  module's own by raw input's device handle, NULL for injected), pauses the controller. Any controller input resumes it, and held
   buttons are ignored until released (`reset(ignore_held=True)`).
 - Holds (kart turning, scroll triangles) are let go by their own mapper. The app forces a
   release only when neither the book nor the friends list is open, or when switching

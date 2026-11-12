@@ -30,6 +30,7 @@ from . import ui
 from .ceo import read_leave
 from .elevator import read_hop_off
 from .hint_draw import FAMILY_NAMES, Drawer, find_sheet, pictures_for
+from .keyboard_watch import KeyboardWatcher
 from .mail import read_mail
 from .mapper import OverworldMapper, controller_buttons
 from .overlay import Highlighter, stack
@@ -324,6 +325,12 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
     toon_api = ToonWatcher(module_config.CONFIG_DIR / TOKEN_FILE, log=log,
                            places=module_config.CONFIG_DIR / "places.log")  # M14: what the location reads where
     toon_api.start()
+    # The real keyboard pauses the controller like the mouse (one toon only).
+    keyboard_watch = KeyboardWatcher()
+    if not dry_run:
+        keyboard_watch.start()
+        if not keyboard_watch.working:
+            log("Note: the keyboard can't be watched, so typing won't pause the controller.")
     toon = toon_api.info
 
     try:
@@ -959,6 +966,9 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                     hint_drawer.press(controller_buttons(state, config.timing.stick_button_threshold), now)
             # Runs even when unfocused, so a click in progress always puts the cursor back.
             clicker.update(now)
+            # Taken every frame, so a key pressed while paused or in two-toon mode doesn't
+            # pause the controller later.
+            key_pressed = keyboard_watch.take()
             if not dry_run and not target.background:
                 # The real cursor and mouse are the other toon's in two-toon mode.
                 was_hidden = hider.hidden
@@ -972,6 +982,9 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                     mouse_paused = True
                     log("Mouse in use: controller paused. Press any controller button to resume."
                         + (f" ({'moved' if mouse_moved else 'button'})" if debug else ""))
+                elif active and key_pressed:
+                    mouse_paused = True
+                    log("Keyboard in use: controller paused. Press any controller button to resume.")
             overlay_view = TTRView(target.hwnd, target.background) if active and target.hwnd else None
             above = target.hwnd if target.background else None
             if highlighter is not None:
@@ -1051,6 +1064,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
         log("Quitting.")
     finally:
         toon_api.stop()
+        keyboard_watch.stop()
         clicker.release()
         hider.show()
         if highlighter is not None:

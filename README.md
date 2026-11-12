@@ -26,7 +26,7 @@ Working now:
 - **Hidden cursor:** the cursor disappears while you use the controller and comes back as soon as you move the mouse. When nothing needs hovering it waits on the window's title bar, out of the way. TTR's custom cursor can't be hidden and has no switch in TTR's Options, so set `"hide_cursor": true` in the config and the module turns it off in TTR's settings.json for you (it takes effect the next time TTR starts).
 - **Switching windows:** with several TTR windows open (not in two-toon mode), hold LB + RB and press D-pad left or right to bring the TTR window on that side to the front, in screen order, wrapping around. Works anywhere, battles included; it has no hint.
 - **Two toons:** play one toon with keyboard and mouse and a second, in its own TTR window, with the controller at the same time. Turn on **Two toons** in the module's window and pick which window is the controller's (see [Two toons](#two-toons)).
-- **Mouse pauses the controller:** move or click the mouse in TTR and the controller pauses, like switching away from TTR. Press any controller button to resume (that press only resumes; it isn't sent).
+- **Mouse and keyboard pause the controller:** move or click the mouse, or press a key, in TTR and the controller pauses (the keyboard only with one toon: in two-toon mode it's the other toon's), like switching away from TTR. Press any controller button to resume (that press only resumes; it isn't sent).
 - Uses your TTR keybinds automatically, works at any window size, and never blocks your keyboard or mouse.
 
 Planned:
