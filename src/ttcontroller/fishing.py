@@ -88,7 +88,9 @@ def is_cast_green(c: RGB) -> bool:
 
 def is_exit_red(c: RGB) -> bool:
     r, g, b = c  # (133,38,15) in the middle
-    return 100 < r < 210 and r - g > 60 and r - b > 80
+    # A deep red: Minnie's Melodyland's pink pavement (206,136,110) passed a looser test,
+    # and the street read as the dock (no walking, only a B hint; the user, Nov 12).
+    return 100 < r < 210 and g < 80 and b < 60 and r - g > 60 and r - b > 80
 
 
 def is_ring_gold(c: RGB) -> bool:

@@ -45,7 +45,9 @@ def test_the_popups_are_one_button_dialogs(name):
 
 
 def test_other_screens_are_not_fishing():
-    for name in ("gardening_hud_1_1920x1009", "shop_1920x1009", "shop_empty_throw_slots_1920x1009"):
+    # Minnie's Melodyland's pink pavement once read as the dock's red X (the user, Nov 12).
+    for name in ("gardening_hud_1_1920x1009", "shop_1920x1009", "shop_empty_throw_slots_1920x1009",
+                 "street_melodyland_pink_1920x1009"):
         w, h, get_pixel = pixels(name)
         assert read_fishing(w, h, get_pixel).kind is None
 
