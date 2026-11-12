@@ -1,8 +1,12 @@
 """Draws the M11 hints (hints.py) as one premultiplied BGRA image for the overlay window.
 
-The button art is cut from the Xbox spritesheet (input_sprites/xbox-spritesheet.png,
-published with the code). The D-pad sprites with a lit direction and the sticks
-with arrows are built from it, as in the hints sample kit.
+The button art is cut from a controller spritesheet (input_sprites/<family>-spritesheet.png,
+published with the code): Xbox, PlayStation, Switch or Steam, the user's art. The sheets
+share one grid, and a sprite is named by the Xbox button SDL reports for it ("A" is the
+bottom face button: Cross on a PlayStation pad; Nintendo pads go by label, so on a Switch
+"A" is its A, on the right).
+The D-pad sprites with a lit direction and the sticks with arrows are built from it, as
+in the hints sample kit. tools/measure_sprites.py measures a sheet's boxes.
 
 Pressing a button bounces its badges: they shrink, overshoot a little and settle.
 """
@@ -15,9 +19,13 @@ import pygame
 
 from .hints import Badge, Bar, sprite_buttons
 
-# Where the sheet is looked for: beside the code (the repo's input_sprites folder),
-# then the module's config folder.
-SHEET_NAME = "xbox-spritesheet.png"
+# The controller families with their own button art (controller.family_of says which a
+# controller is). Where a sheet is looked for: the module's config folder, beside the
+# code (the repo's input_sprites folder), then the package (the packaged exe).
+FAMILIES = ("xbox", "playstation", "switch", "steam")
+FAMILY_NAMES = {"xbox": "Xbox", "playstation": "PlayStation", "switch": "Switch", "steam": "Steam"}
+SHEET_NAMES = {f: f"{f}-spritesheet.png" for f in FAMILIES}
+SHEET_NAME = SHEET_NAMES["xbox"]
 FONT_PATHS = ("C:/Windows/Fonts/ARLRDBD.TTF", "C:/Windows/Fonts/arialbd.ttf")
 
 RECTS = {
@@ -30,10 +38,60 @@ RECTS = {
     "VIEW": (728, 890, 200, 204), "START": (1022, 890, 202, 204),
 }
 _DPAD_CENTERS = {"up": (247, 136), "right": (543, 136), "down": (832, 136), "left": (1125, 136)}
+# The other sheets, measured with tools/measure_sprites.py (each box is where the art's
+# alpha is above 40; the glow past it is left out) and checked by eye.
+FAMILY_RECTS = {
+    "xbox": RECTS,
+    "playstation": {
+        "L": (138, 261, 213, 232), "R": (430, 261, 211, 232),
+        "LT": (731, 268, 200, 201), "RT": (1026, 268, 200, 199),  # L2, R2
+        "LB": (130, 493, 226, 117), "RB": (427, 493, 231, 117),  # L1, R1
+        "A": (142, 625, 209, 213), "B": (436, 625, 206, 212),  # Cross, Circle
+        "X": (726, 624, 210, 215), "Y": (1016, 624, 210, 215),  # Square, Triangle
+        "LS": (141, 847, 200, 259), "RS": (439, 847, 200, 259),  # L3, R3
+        "VIEW": (783, 893, 90, 202), "START": (1078, 886, 90, 209),  # Share/Create, Options
+    },
+    "switch": {
+        "L": (138, 261, 213, 230), "R": (430, 261, 211, 230),
+        "LT": (735, 286, 192, 160), "RT": (1030, 286, 192, 160),  # ZL, ZR
+        "LB": (130, 491, 226, 134), "RB": (427, 491, 231, 134),  # L, R
+        # By label (SDL reports Nintendo pads that way): the sheet is laid out by position
+        # (B bottom, A right, Y left, X top), so A and B swap, and X and Y.
+        "A": (432, 638, 205, 199), "B": (138, 638, 205, 199),
+        "X": (1026, 639, 205, 199), "Y": (728, 639, 205, 199),
+        "LS": (141, 847, 200, 259), "RS": (439, 847, 200, 259),
+        "VIEW": (726, 888, 205, 199), "START": (1020, 888, 205, 199),  # minus, plus
+    },
+    "steam": {
+        "L": (138, 261, 213, 230), "R": (438, 268, 214, 223),  # R: the right trackpad
+        "LT": (755, 264, 152, 194), "RT": (1050, 264, 152, 194),
+        "LB": (130, 491, 226, 134), "RB": (427, 491, 231, 134),
+        "A": (138, 638, 205, 199), "B": (432, 638, 205, 199),
+        "X": (728, 639, 205, 199), "Y": (1026, 639, 205, 199),
+        "LS": (141, 847, 200, 259), "RS": (442, 847, 188, 245),
+        "VIEW": (731, 937, 194, 110), "START": (1026, 937, 194, 110),  # the back and forward arrows
+    },
+}
+# Each sheet's four D-pads (one lit direction each): their centers and the crop around them.
+DPADS = {
+    "xbox": (_DPAD_CENTERS, (232, 224)),
+    "playstation": ({"up": (248, 137), "right": (544, 137), "down": (833, 137), "left": (1126, 137)}, (229, 229)),
+    "switch": ({"up": (247, 134), "right": (543, 134), "down": (832, 134), "left": (1125, 134)}, (235, 232)),
+    "steam": ({"up": (247, 131), "right": (543, 131), "down": (832, 131), "left": (1125, 131)}, (237, 230)),
+}
 # Sprite shapes differ (bumpers are wide, sticks have a base), so each is scaled to look
 # the same size as the face buttons.
 NORM = {"L": 1.4, "R": 1.4, "LS": 1.35, "RS": 1.35, "LB": 0.85, "RB": 0.85,
         "LT": 1.1, "RT": 1.1, "VIEW": 1.05, "START": 1.05}
+FAMILY_NORM = {
+    "xbox": NORM,
+    "playstation": {**NORM, "LT": 1.05, "RT": 1.05, "VIEW": 1.3, "START": 1.3},
+    "switch": {**NORM, "LT": 0.95, "RT": 0.95, "VIEW": 1.0, "START": 1.0},
+    "steam": {**NORM, "R": 1.15, "RS": 1.3, "VIEW": 0.7, "START": 0.7},
+}
+# How far down a stick sprite its cap's middle is (the arrows go round it): a stick has a
+# base under its cap; Steam's right trackpad is just the round pad.
+STICK_CAP = {"steam": {"R": 0.5}}
 _LIT = {"DU": "u", "DD": "d", "DL": "l", "DR": "r", "DUD": "ud", "DLR": "lr", "D4": "udlr"}
 
 BOUNCE_SECONDS = 0.28
@@ -55,24 +113,35 @@ def bounce(t: float) -> float:
     return 0.8 + 0.2 * u + 0.3 * math.sin(math.pi * u) * (1 - u) ** 0.5
 
 
-def find_sheet(extra: Path | None = None) -> Path | None:
+def pictures_for(choice: str, detected: str | None) -> str | None:
+    """The family to draw: the config's button_pictures, or with "auto" the controller's
+    (None with no controller: keep what's drawn)."""
+    return choice if choice in FAMILIES else detected
+
+
+def find_sheet(extra: Path | None = None, family: str = "xbox") -> Path | None:
+    """The family's sheet, or None when it isn't found."""
+    name = SHEET_NAMES.get(family, SHEET_NAME)
     here = Path(__file__).resolve()
-    for p in ([extra / SHEET_NAME] if extra else []) + [here.parents[2] / "input_sprites" / SHEET_NAME,
-                                                        here.parent / SHEET_NAME]:
+    for p in ([extra / name] if extra else []) + [here.parents[2] / "input_sprites" / name, here.parent / name]:
         if p.exists():
             return p
     return None
 
 
 class Sprites:
-    def __init__(self, sheet_path: Path):
+    def __init__(self, sheet_path: Path, family: str = "xbox"):
+        self.family = family if family in FAMILY_RECTS else "xbox"
         sheet = pygame.image.load(str(sheet_path))
-        self._base = {k: sheet.subsurface(pygame.Rect(r)).copy() for k, r in RECTS.items()}
-        dpad = {d: sheet.subsurface(pygame.Rect(x - 116, y - 112, 232, 224)).copy()
-                for d, (x, y) in _DPAD_CENTERS.items()}
+        self._base = {k: sheet.subsurface(pygame.Rect(r)).copy() for k, r in FAMILY_RECTS[self.family].items()}
+        centers, (cw, ch) = DPADS[self.family]
+        dpad = {d: sheet.subsurface(pygame.Rect(x - cw // 2, y - ch // 2, cw, ch)).copy()
+                for d, (x, y) in centers.items()}
         blank = _wedges(dpad)
         for name, arms in _LIT.items():
             self._base[name] = _lit(blank, arms)
+        self._norm = FAMILY_NORM[self.family]
+        self._cap = STICK_CAP.get(self.family, {})
         self._scaled: dict = {}
         self._shadows: dict = {}
 
@@ -82,11 +151,11 @@ class Sprites:
         if img is None:
             base, _, arrows = name.partition(":")
             src = self._base[base]
-            hh = max(4.0, h * NORM.get(base, 1.0))
+            hh = max(4.0, h * self._norm.get(base, 1.0))
             w = max(1, round(src.get_width() * hh / src.get_height()))
             img = pygame.transform.smoothscale(src, (w, max(1, round(hh))))
             if arrows:
-                img = _stick_arrows(img, arrows)
+                img = _stick_arrows(img, arrows, self._cap.get(base, 0.36))
             if len(self._scaled) > 600:
                 self._scaled.clear()
             self._scaled[key] = img
@@ -147,12 +216,12 @@ def _tri(surf, cx, cy, size, ang):
     pygame.draw.polygon(surf, (255, 255, 255), [(cx + (x - cx) * 0.62, cy + (y - cy) * 0.62) for x, y in pts])
 
 
-def _stick_arrows(img: pygame.Surface, arrows: str) -> pygame.Surface:
+def _stick_arrows(img: pygame.Surface, arrows: str, cap: float = 0.36) -> pygame.Surface:
     w, h = img.get_size()
     pad = round(h * 0.28)
     out = pygame.Surface((w + 2 * pad, h + 2 * pad), pygame.SRCALPHA)
     out.blit(img, (pad, pad))
-    cx, cy = out.get_width() / 2, pad + h * 0.36  # round the stick's cap, not its base
+    cx, cy = out.get_width() / 2, pad + h * cap  # round the stick's cap, not its base
     r, size = h * 0.5 + pad * 0.35, pad * 0.75
     angles = {"u": -math.pi / 2, "d": math.pi / 2, "l": math.pi, "r": 0.0}
     for c in {"ud": "ud", "lr": "lr", "4": "udlr"}.get(arrows, arrows):
@@ -174,10 +243,10 @@ def _shadow(img: pygame.Surface, amount: int = 150) -> tuple[pygame.Surface, int
 class Drawer:
     """Lays out and draws hints for a window, and remembers button presses for bounces."""
 
-    def __init__(self, sheet_path: Path):
+    def __init__(self, sheet_path: Path, family: str = "xbox"):
         if not pygame.font.get_init():
             pygame.font.init()
-        self.sprites = Sprites(sheet_path)
+        self.sprites = Sprites(sheet_path, family)
         self._fonts: dict[int, pygame.font.Font] = {}
         self._labels: dict = {}
         self._pressed_at: dict[str, float] = {}
@@ -185,6 +254,25 @@ class Drawer:
         self._pieces: dict = {}
         # How long a hold takes (the config's timing.hold_seconds): a hold ring fills in this.
         self.hold_seconds = 0.5
+
+    @property
+    def family(self) -> str:
+        return self.sprites.family
+
+    def use(self, family: str, extra: Path | None = None) -> bool:
+        """Draw `family`'s buttons from now on. If its sheet is missing or broken, the art
+        stays as it is. True if the art changed."""
+        if family == self.family:
+            return False
+        sheet = find_sheet(extra, family)
+        if sheet is None:
+            return False
+        try:
+            self.sprites = Sprites(sheet, family)
+        except (pygame.error, ValueError, OSError):
+            return False
+        self._pieces.clear()
+        return True
 
     # ---- presses --------------------------------------------------------------------
     def press(self, buttons: frozenset[str], now: float) -> None:
@@ -253,7 +341,7 @@ class Drawer:
         for hint in hints:
             step = self._bounce_step(hint.sprite, now) if isinstance(hint, Badge) else 0
             ring = self._ring_step(hint.sprite, now) if isinstance(hint, Badge) and hint.hold else 0
-            key = (hint, width, height, scale, step, ring)
+            key = (hint, width, height, scale, self.family, step, ring)
             found = self._pieces.get(key)
             if found is None:
                 found = self._draw_one(hint, width, height, scale, step, ring)

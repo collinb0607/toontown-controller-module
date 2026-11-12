@@ -21,7 +21,7 @@ Working now:
 - **Shticker book:** LB/RB flip through the pages and LT/RT switch a page's tabs (like Gags and Trunk). Each page's own controls are next.
 - **Trunk:** SOS cards (scrolling the list as you go, and filtering them from the dropdown or with LS), pink slips, remotes and doodle tricks, all with the D-pad or stick.
 - **Remapping:** a config file lets you rebind any button.
-- **Hints:** while you use the controller, small Xbox button pictures sit on TTR's buttons to show which controller button presses them, and popup buttons (OK, Cancel, Yes, No...) are covered by theirs. A few screens get a small bar for things that have no button of their own, and pressing a button gives its picture a little bounce. If you remap a button in the config, its hint shows your button. Turn them off with `"hints": false`. The button pictures come from `input_sprites/xbox-spritesheet.png`, published with the code.
+- **Hints:** while you use the controller, small button pictures of your controller sit on TTR's buttons to show which controller button presses them, and popup buttons (OK, Cancel, Yes, No...) are covered by theirs. A few screens get a small bar for things that have no button of their own, and pressing a button gives its picture a little bounce. If you remap a button in the config, its hint shows your button. Turn them off with `"hints": false`. The pictures match the controller plugged in (Xbox, PlayStation, Switch or Steam), or pick one under **Button pictures** in Settings. They come from the sheets in `input_sprites/`, published with the code.
 - **Highlight frame:** where it's hard to tell what's hovered with the cursor hidden (battle gags, the trunk and the which cog/toon arrows, the gag shop, and the shticker book's Gags and Trunk tabs), a glowing frame is drawn around it, like a console game.
 - **Hidden cursor:** the cursor disappears while you use the controller and comes back as soon as you move the mouse. When nothing needs hovering it waits on the window's title bar, out of the way. TTR's custom cursor can't be hidden and has no switch in TTR's Options, so set `"hide_cursor": true` in the config and the module turns it off in TTR's settings.json for you (it takes effect the next time TTR starts).
 - **Switching windows:** with several TTR windows open (not in two-toon mode), hold LB + RB and press D-pad left or right to bring the TTR window on that side to the front, in screen order, wrapping around. Works anywhere, battles included; it has no hint.
@@ -144,10 +144,29 @@ Good to know:
 - `hide_cursor` changes TTR's settings, which both toons share.
 - The console version (`ttcontroller`) always plays the TTR window in front; two toons is in the module's window. It's also a switch in the settings window (General).
 
+## Other controllers
+
+The controls are written with Xbox names. A PlayStation or Steam controller uses the button in the same place (Cross jumps, like A on an Xbox pad). A Switch controller goes by the letters instead: its A does what A does on an Xbox pad, though it sits on the right, and the same for B, X and Y. The hints and the settings window show your controller's own buttons and names.
+
+| Xbox | PlayStation | Switch | Steam Controller |
+|---|---|---|---|
+| A (bottom) | Cross | A (right) | A |
+| B (right) | Circle | B (bottom) | B |
+| X (left) | Square | X (top) | X |
+| Y (top) | Triangle | Y (left) | Y |
+| LB / RB | L1 / R1 | L / R | LB / RB |
+| LT / RT | L2 / R2 | ZL / ZR | LT / RT |
+| View / Start | Share (Create) / Options | Minus / Plus | Back / Forward |
+| LS / RS (stick clicks) | L3 / R3 | Stick clicks | Left stick click / right trackpad click |
+| Right stick | Right stick | Right stick | Right trackpad |
+
+- **Button pictures** (Settings > General) picks which pictures show: **Match the controller** (the default), or always Xbox, PlayStation, Switch or Steam, for a controller that's recognized wrong.
+- **Steam Controller:** the module reads it directly, so Steam doesn't need to be running. If Steam *is* running, its desktop controls turn the controller into a mouse, and that pauses the module like the real mouse does. Either quit Steam, or add the module to Steam as a non-Steam game and play through Steam Input. Its grip buttons and the Switch's SL/SR don't do anything yet.
+
 ## Requirements
 
 - Windows 10 or 11
-- An Xbox controller (more controllers planned)
+- A controller: Xbox, PlayStation (DualShock 4, DualSense), Switch Pro (or a pair of Joy-Cons) or Steam Controller, or anything Windows sees as one of them (see [Other controllers](#other-controllers))
 - Toontown Rewritten running in **windowed** mode
 - TTR's built-in controller support turned **off** (Options > Controls), or each button will act twice
 
@@ -202,7 +221,7 @@ If something in the file is wrong, the console prints `Config problem: ...` and 
 12. A full play-test
 13. First release
 
-**After 1.0:** a controller each for two toons, trolley games, Toontown Corporate Clash, PlayStation/Switch controllers, Mac, borderless fullscreen.
+**After 1.0:** a controller each for two toons, trolley games, Toontown Corporate Clash, Mac, borderless fullscreen.
 
 ## Development
 

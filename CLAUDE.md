@@ -1,6 +1,6 @@
 # Toontown Controller Module
 
-Xbox controller support for Toontown Rewritten (TTR) on Windows, in Python. It reads the
+Controller support (Xbox, PlayStation, Switch, Steam) for Toontown Rewritten (TTR) on Windows, in Python. It reads the
 controller with pygame-ce, reads the TTR window's pixels to tell which screen is showing,
 and sends keyboard keys and real mouse clicks (SendInput) to drive the game.
 
@@ -113,6 +113,14 @@ badge). Style rules are in plan.md's M11 entry. Positions are mockup pixels at 1
 kept relative to the button's own UIPoint (`_by(point, dx, dy)`). Hints on the seven
 remappable screens carry `act=(table, actions, hold)` (`_walk`, `_bt`, `_sh`, `_fr`, `_np`,
 `_bk`) and `hints_for` swaps in the config's button; give every new hint there an act.
+
+Controller families: SDL reports every pad in the Xbox layout, so buttons and sprites are
+always named the Xbox way ("a" / "A" is the bottom face button; Nintendo pads go by label, the
+user's choice: a Switch's A is "a", so its sheet's A/B and X/Y boxes are swapped). Only the art and
+names differ: `controller.family_of` picks xbox/playstation/switch/steam, `hint_draw.FAMILY_RECTS`
+etc. cut that family's sheet (measure a new or edited sheet with `tools/measure_sprites.py`),
+`settings_model.FAMILY_LABELS` names the buttons, and config `button_pictures` ("auto") can
+force one. Show button names to the player through those labels, never hard-coded Xbox names.
 
 Settings window (M12): `settings_window.py` (PySide6, Windows-style, follows the dark/light
 theme) over `settings_model.py` (no Qt: tables, labels, move/swap, `SettingsStore` writing only

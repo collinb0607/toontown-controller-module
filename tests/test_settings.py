@@ -128,6 +128,8 @@ def test_window_builds_and_saves(tmp_path):
     from ttcontroller import settings_window as sw
 
     class FakeReader:
+        family = None
+
         def set_preferred(self, name):
             self.preferred = name
 
@@ -157,4 +159,16 @@ def test_window_builds_and_saves(tmp_path):
     data = json.loads(path.read_text(encoding="utf-8"))
     assert data["bindings"]["press"] == {"lb": "cameraPrev"} and data["hints_scale"] == 1.5
     window.pad.buttons_changed.emit(frozenset({"a"}))  # lights the Test row
+    if window.art.drawer is not None:
+        # A PlayStation pad plugged in: its pictures and names (Auto), then Switch chosen.
+        window.pad.reader.family = "playstation"
+        window.pad.name = "DualSense Wireless Controller"
+        window.pad.name_changed.emit(window.pad.name)
+        assert window.art.family == "playstation" and window.labels["a"] == "Cross"
+        assert "PlayStation buttons" in window.pad_card.desc.text()
+        window.save("button_pictures", "switch")
+        assert window.art.family == "switch" and window.labels["a"] == "A" and window.labels["lt"] == "ZL"
+        assert json.loads(path.read_text(encoding="utf-8"))["button_pictures"] == "switch"
+        window.save("button_pictures", "auto")
+        assert window.art.family == "playstation"
     window.close()

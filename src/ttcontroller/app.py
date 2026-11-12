@@ -29,7 +29,7 @@ from . import hints as hint_layout
 from . import ui
 from .ceo import read_leave
 from .elevator import read_hop_off
-from .hint_draw import Drawer, find_sheet
+from .hint_draw import FAMILY_NAMES, Drawer, find_sheet, pictures_for
 from .mail import read_mail
 from .mapper import OverworldMapper, controller_buttons
 from .overlay import Highlighter, stack
@@ -248,6 +248,9 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                 osk_window = Highlighter()
             except Exception as e:  # broken art shouldn't stop the controller
                 log(f"Note: no on-screen keyboard for names ({e}).")
+    # Whose button pictures the hints and the name keyboard show (the config's button_pictures,
+    # or the controller in use); the last one tried, so a missing sheet is looked for once.
+    pictures_tried: str | None = None
     hints = ()  # what the hints overlay shows now
     hint_mail = hint_hop = hint_leave = None  # read for the hints only: Clarabelle's X, Hop off, a CEO leave button
     hint_friends = True  # the friends button is showing (a timer can take its place)
@@ -323,8 +326,19 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
             state = reader.poll()
             if reader.name != controller_name:
                 controller_name = reader.name
-                log(f"Controller connected: {controller_name}" if controller_name else
-                    "No controller connected. Waiting for one (press the Xbox button to wake it).")
+                log(f"Controller connected: {controller_name} ({FAMILY_NAMES.get(reader.family, 'Xbox')} buttons)"
+                    if controller_name else
+                    "No controller connected. Waiting for one (press its Xbox, PS or Home button to wake it).")
+            pictures = pictures_for(config.button_pictures, reader.family)
+            if hint_drawer is not None and pictures is not None and pictures != pictures_tried:
+                pictures_tried = pictures
+                if hint_drawer.use(pictures, module_config.CONFIG_DIR):
+                    log(f"Button pictures: {FAMILY_NAMES[pictures]}.")
+                elif hint_drawer.family != pictures:
+                    log(f"Note: no {FAMILY_NAMES.get(pictures, pictures)} button pictures "
+                        f"({pictures}-spritesheet.png wasn't found); showing {FAMILY_NAMES[hint_drawer.family]}.")
+                if osk_drawer is not None:
+                    osk_drawer.use_buttons(hint_drawer.sprites)
 
             if debug and state is not None and state.buttons != last_buttons:
                 last_buttons = state.buttons

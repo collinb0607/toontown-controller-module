@@ -71,7 +71,10 @@ def build() -> None:
         "--specpath", str(ROOT / "build"),
         # Beside the package's modules, where app_icon and hint_draw look when packaged.
         "--add-data", f"{ICON_PNG}{sep}ttcontroller",
-        "--add-data", f"{SPRITES / 'xbox-spritesheet.png'}{sep}ttcontroller",
+        # Each controller's button pictures (hint_draw.SHEET_NAMES).
+        *[arg for family in ("xbox", "playstation", "switch", "steam")
+          for arg in ("--add-data", f"{SPRITES / f'{family}-spritesheet.png'}{sep}ttcontroller")],
+        "--add-data", f"{SPRITES / 'all_input.png'}{sep}ttcontroller",  # the name keyboard's keys
         "--collect-submodules", "ttcontroller",
     ]
     subprocess.run(command, check=True, cwd=ROOT)

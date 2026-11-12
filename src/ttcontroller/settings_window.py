@@ -19,10 +19,10 @@ import numpy as np
 from .app_icon import app_pixmap, use_app_icon
 from .config import CONFIG_DIR, CONFIG_FILE, Config
 from .controller import ControllerReader, connected_names
-from .hint_draw import RING_STEPS, Drawer, find_sheet
+from .hint_draw import FAMILIES, FAMILY_NAMES, RING_STEPS, Drawer, find_sheet, pictures_for
 from .hints import BADGE, COVER, Badge, Bar
 from .mapper import controller_buttons
-from .settings_model import (ACTION_HELP, BUTTON_LABELS, BUTTON_SPRITES, TABLES, SettingsStore, Table,
+from .settings_model import (ACTION_HELP, BUTTON_SPRITES, TABLES, SettingsStore, Table, button_labels,
                              action_choices, action_label, bindings_of, clear, move, with_action)
 from .ui import UIPoint
 
@@ -102,7 +102,8 @@ def _version() -> str:
 
 # ---- art --------------------------------------------------------------------------------
 class Art:
-    """Button sprites from the Xbox sheet as QPixmaps, and hint pieces from the real drawer."""
+    """Button sprites from a controller's sheet as QPixmaps, and hint pieces from the real
+    drawer. `use` switches to another controller's art."""
 
     def __init__(self):
         import pygame
@@ -110,6 +111,17 @@ class Art:
         sheet = find_sheet(CONFIG_DIR)
         self.drawer = Drawer(sheet) if sheet else None
         self._cache: dict = {}
+
+    @property
+    def family(self) -> str:
+        return self.drawer.family if self.drawer is not None else "xbox"
+
+    def use(self, family: str) -> bool:
+        """Draw this family's buttons (its sheet missing keeps the art there is)."""
+        if self.drawer is None or not self.drawer.use(family, CONFIG_DIR):
+            return False
+        self._cache.clear()
+        return True
 
     def pixmap(self, sprite: str, height: float, dim: bool = False) -> QPixmap:
         ratio = QGuiApplication.primaryScreen().devicePixelRatio() if QGuiApplication.primaryScreen() else 1.0
@@ -394,7 +406,7 @@ class MoveDialog(QDialog):
         body = QVBoxLayout()
         body.setContentsMargins(24, 22, 24, 20)
         body.setSpacing(12)
-        title = label(f"Move {BUTTON_LABELS.get(source, source)}")
+        title = label(f"Move {window.labels.get(source, source)}")
         title.setStyleSheet("font-size: 15pt; font-weight: 600;")
         body.addWidget(title)
         body.addWidget(label(f"Press the button that should do {what}. For a stick, push it the way you want.",
@@ -413,7 +425,7 @@ class MoveDialog(QDialog):
         icon = QLabel()
         icon.setPixmap(window.art.pixmap(BUTTON_SPRITES.get(source, "A"), 18))
         now.addWidget(icon)
-        now.addWidget(label(BUTTON_LABELS.get(source, source), sub=True))
+        now.addWidget(label(window.labels.get(source, source), sub=True))
         now.addStretch(1)
         texts.addLayout(now)
         wl.addLayout(texts, 1)
@@ -478,6 +490,8 @@ class SettingsWindow(QMainWindow):
         self.setMinimumSize(860, 560)
         self._refreshers = []
         self._table = TABLES[0]
+        # Whose buttons the pictures and names are (button_pictures, or the controller in use).
+        self.labels = button_labels(self.art.family)
 
         root = QWidget()
         root.setObjectName("root")
@@ -522,7 +536,7 @@ class SettingsWindow(QMainWindow):
         self.nav.setCurrentRow(0)
 
         self.pad.buttons_changed.connect(self._light_test)
-        self.pad.name_changed.connect(lambda _: self._refresh_pads())
+        self.pad.name_changed.connect(lambda _: (self._refresh_pads(), self._sync_family()))
         self._mtime = self._stat()
         watch = QTimer(self)
         watch.timeout.connect(self._watch_file)
@@ -570,7 +584,18 @@ class SettingsWindow(QMainWindow):
             self.pad.reader.set_preferred(value)
         self.saved()
 
+    def _sync_family(self, refresh: bool = True) -> None:
+        """Show the buttons of the controller the module will draw: the button_pictures
+        choice, or with "auto" the one plugged in (none plugged in: as they are)."""
+        family = pictures_for(self.store.config.button_pictures, self.pad.reader.family)
+        if family is None or family == self.art.family or not self.art.use(family):
+            return
+        self.labels = button_labels(self.art.family)
+        if refresh:
+            self.refresh()
+
     def refresh(self) -> None:
+        self._sync_family(refresh=False)
         self.banner.setVisible(not self.store.writable)
         self.banner.setText(self.store.error or "")
         for f in self._refreshers:
@@ -587,6 +612,15 @@ class SettingsWindow(QMainWindow):
         self.pad_combo.activated.connect(lambda i: self.save("controller", self.pad_combo.itemData(i) or ""))
         self.pad_card = card("Controller", " ", self.pad_combo, buddy=self.pad_combo)
         lay.addWidget(self.pad_card)
+        pictures = QComboBox()
+        pictures.setFixedWidth(280)
+        pictures.setAccessibleName("Button pictures")
+        pictures.addItem("Match the controller", "auto")
+        for family in FAMILIES:
+            pictures.addItem(FAMILY_NAMES[family], family)
+        pictures.activated.connect(lambda i: self.save("button_pictures", pictures.itemData(i)))
+        lay.addWidget(card("Button pictures", "Which controller’s buttons the hints and this window show.",
+                           pictures, buddy=pictures))
         test = QFrame()
         test.setProperty("card", True)
         tl = QHBoxLayout(test)
@@ -661,6 +695,7 @@ class SettingsWindow(QMainWindow):
             two.set(c().two_toons)
             tray.set(c().close_to_tray)
             hold.set(c().timing.hold_seconds)
+            pictures.setCurrentIndex(max(0, pictures.findData(c().button_pictures)))
             self._refresh_pads()
             self._light_test(self.pad.buttons)
         self._refreshers.append(refresh)
@@ -681,8 +716,10 @@ class SettingsWindow(QMainWindow):
             self.pad_combo.blockSignals(False)
         self.pad_combo.setCurrentIndex(max(0, [d for _, d in items].index(preferred) if preferred in
                                            [d for _, d in items] else 0))
-        status = (f"Connected: {self.pad.name}. Press any button to test it." if self.pad.name else
-                  "No controller connected. Press the Xbox button to wake it.")
+        family = FAMILY_NAMES.get(self.pad.reader.family or "", "")
+        shown = f" ({family} buttons)" if family else ""
+        status = (f"Connected: {self.pad.name}{shown}. Press any button to test it." if self.pad.name else
+                  "No controller connected. Press its Xbox, PS or Home button to wake it.")
         self.pad_card.desc.setText(status)
 
     def _light_test(self, buttons: frozenset) -> None:
@@ -763,13 +800,13 @@ class SettingsWindow(QMainWindow):
             height = 20 if ":" in sprite else 22 if sprite in ("LB", "RB", "LS", "RS") else 26
             icon.setPixmap(self.art.pixmap(sprite, height))
             nl.addWidget(icon)
-            nl.addWidget(label(BUTTON_LABELS[button]))
+            nl.addWidget(label(self.labels[button]))
             nl.addStretch(1)
             self.grid.addWidget(name, row, 0)
             for col, hold in ((1, False), (2, True)):
                 current = (b.hold if hold else b.press).get(button)
                 combo = QComboBox()
-                combo.setAccessibleName(f"{BUTTON_LABELS[button]} {'hold' if hold else 'press'}")
+                combo.setAccessibleName(f"{self.labels[button]} {'hold' if hold else 'press'}")
                 combo.addItem("Not set", None)
                 for action, text in action_choices(table, current):
                     combo.addItem(text, action)
@@ -784,7 +821,7 @@ class SettingsWindow(QMainWindow):
             mv = QPushButton("Move…")
             mv.setProperty("link", True)
             mv.setToolTip("Move what this button does to another button")
-            mv.setAccessibleName(f"Move {BUTTON_LABELS[button]}")
+            mv.setAccessibleName(f"Move {self.labels[button]}")
             mv.clicked.connect(lambda _=False, bt=button: self._move(bt))
             self.grid.addWidget(mv, row, 3)
 
@@ -809,7 +846,7 @@ class SettingsWindow(QMainWindow):
             return
         moved, clash = move(b, source, target)
         if clash:
-            a, t = BUTTON_LABELS[source], BUTTON_LABELS[target]
+            a, t = self.labels[source], self.labels[target]
             box = QMessageBox(self)
             box.setWindowTitle("Swap buttons")
             box.setText(f"{t} already does {describe(table, b, target)}")
@@ -857,10 +894,13 @@ class SettingsWindow(QMainWindow):
         size.changed = self._draw_preview
         for w in (show.card, bar.card, size.card):
             lay.addWidget(w)
-        lay.addWidget(card("Hints follow your Controls", "Move Pass to RB and the badge on Pass shows RB."))
+        follow = card("Hints follow your Controls", " ")
+        lay.addWidget(follow)
         lay.addStretch(1)
 
         def refresh():
+            rb = self.labels["rb"]
+            follow.desc.setText(f"Move Pass to {rb} and the badge on Pass shows {rb}.")
             show.set(c().hints)
             bar.set(c().hints_walking_bar)
             size.set(c().hints_scale)
@@ -1007,16 +1047,17 @@ class SettingsWindow(QMainWindow):
         tg = QGridLayout(tile)
         tg.setContentsMargins(6, 6, 6, 6)
         tg.setSpacing(2)
+        tile_icons = []
         for i, s in enumerate(("Y", "B", "X", "A")):
             icon = QLabel()
-            icon.setPixmap(self.art.pixmap(s, 24))
+            tile_icons.append((icon, s))
             tg.addWidget(icon, i // 2, i % 2)
         hl.addWidget(tile)
         text = QVBoxLayout()
         title = label("Toontown Controller Module")
         title.setStyleSheet("font-size: 14pt; font-weight: 600;")
         text.addWidget(title)
-        text.addWidget(label(f"Version {_version()} · Xbox controller support for Toontown Rewritten", sub=True))
+        text.addWidget(label(f"Version {_version()} · Controller support for Toontown Rewritten", sub=True))
         hl.addLayout(text, 1)
         hl.addWidget(self._link("Project page", REPO))
         lay.addWidget(head)
@@ -1032,12 +1073,19 @@ class SettingsWindow(QMainWindow):
         lay.addWidget(card("Restore every setting",
                            "All buttons and options back to their defaults. Your current file is backed up first "
                            f"({self.store.backup.name}).", everything))
-        lay.addWidget(card("Report a problem", "Opens the project’s issue page. A screenshot from LB + RB in game helps.",
-                           self._link("Open issues", REPO + "/issues")))
+        report = card("Report a problem", " ", self._link("Open issues", REPO + "/issues"))
+        lay.addWidget(report)
         lay.addSpacing(12)
         lay.addWidget(label("A fan-made tool, not made by or affiliated with Toontown Rewritten. Button pictures from "
-                            "the Xbox controller sprite sheet included with the project.", sub=True, wrap=True))
+                            "the controller sprite sheets included with the project.", sub=True, wrap=True))
         lay.addStretch(1)
+
+        def refresh():
+            for icon, s in tile_icons:
+                icon.setPixmap(self.art.pixmap(s, 24))
+            report.desc.setText("Opens the project’s issue page. A screenshot from "
+                                f"{self.labels['lb']} + {self.labels['rb']} in game helps.")
+        self._refreshers.append(refresh)
         return scroll
 
     def _link(self, text: str, url: str) -> QPushButton:

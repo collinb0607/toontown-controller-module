@@ -65,9 +65,15 @@ HELP = {
     "hints_scale": "How big the hints are drawn: 1 is the normal size, 1.25 a quarter bigger.",
     "controller": "Which controller to use, by name (the settings window lists them). Empty: the first one "
                   "plugged in. If the named one isn't plugged in, the first one is used.",
+    "button_pictures": "Which controller's buttons the hints show: \"auto\" (the one plugged in), \"xbox\", "
+                       "\"playstation\", \"switch\" or \"steam\".",
     "book": "Bindings used while the shticker book is open. "
             "Actions: " + "; ".join(f"{name} = {desc}" for name, desc in BOOK_ACTIONS.items()),
 }
+
+
+# The button_pictures choices: "auto", then hint_draw.FAMILIES.
+BUTTON_PICTURES = ("auto", "xbox", "playstation", "switch", "steam")
 
 
 @dataclass
@@ -94,6 +100,8 @@ class Config:
     hints_scale: float = 1.0
     # The controller to use, by name ("": the first one plugged in).
     controller: str = ""
+    # Which controller's button pictures the hints show: "auto" (the one in use) or a family.
+    button_pictures: str = "auto"
     # Two toons (M13): the controller plays a chosen TTR window in the background. Only the
     # mode is kept; the window is picked in the module's window each session.
     two_toons: bool = False
@@ -124,6 +132,7 @@ def to_json(config: Config) -> dict:
         "hints_walking_bar": config.hints_walking_bar,
         "hints_scale": config.hints_scale,
         "controller": config.controller,
+        "button_pictures": config.button_pictures,
         "two_toons": config.two_toons,
         "close_to_tray": config.close_to_tray,
         "fishing_cast": config.fishing_cast,
@@ -213,6 +222,12 @@ def parse(data: dict) -> tuple[Config, list[str]]:
         config = replace(config, controller=controller)
     else:
         warnings.append('controller: must be a controller name, or "" for the first one')
+    pictures = data.get("button_pictures", defaults.button_pictures)
+    if pictures in BUTTON_PICTURES:
+        config = replace(config, button_pictures=pictures)
+    else:
+        warnings.append(f'button_pictures: must be one of {", ".join(BUTTON_PICTURES)} '
+                        f'(using "{defaults.button_pictures}")')
     cast = data.get("fishing_cast", defaults.fishing_cast)
     if cast in ("move", "stick"):
         config = replace(config, fishing_cast=cast)

@@ -46,6 +46,25 @@ BUTTON_LABELS = {
     "rs_up": "Right stick up", "rs_down": "Right stick down", "rs_left": "Right stick left",
     "rs_right": "Right stick right", "guide": "Xbox button",
 }
+# The names on other controllers (the module's names are the Xbox buttons SDL reports: "a"
+# is the bottom face button, except on Nintendo pads, which go by label).
+FAMILY_LABELS = {
+    "xbox": BUTTON_LABELS,
+    "playstation": {**BUTTON_LABELS, "a": "Cross", "b": "Circle", "x": "Square", "y": "Triangle",
+                    "lb": "L1", "rb": "R1", "lt": "L2", "rt": "R2", "view": "Share", "start": "Options",
+                    "ls": "L3", "rs": "R3", "guide": "PS button"},
+    "switch": {**BUTTON_LABELS, "lb": "L", "rb": "R",
+               "lt": "ZL", "rt": "ZR", "view": "Minus", "start": "Plus", "guide": "Home button"},
+    "steam": {**BUTTON_LABELS, "view": "Back", "start": "Forward",
+              "rs": "Right trackpad click", "rs_up": "Right trackpad up", "rs_down": "Right trackpad down",
+              "rs_left": "Right trackpad left", "rs_right": "Right trackpad right", "guide": "Steam button"},
+}
+
+
+def button_labels(family: str | None) -> dict[str, str]:
+    """The buttons' names on this family's controller (hint_draw.FAMILIES); Xbox's otherwise."""
+    return FAMILY_LABELS.get(family or "xbox", BUTTON_LABELS)
+
 
 # The hint sprite (hint_draw) for each button.
 BUTTON_SPRITES = {
