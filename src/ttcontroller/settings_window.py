@@ -18,6 +18,7 @@ import numpy as np
 
 from .app_icon import app_pixmap, use_app_icon
 from .config import CONFIG_DIR, CONFIG_FILE, Config
+from .ttr_api import TOKEN_FILE, clear_token
 from .controller import ControllerReader, connected_names
 from .hint_draw import FAMILIES, FAMILY_NAMES, RING_STEPS, Drawer, find_sheet, pictures_for
 from .hints import BADGE, COVER, Badge, Bar
@@ -76,6 +77,9 @@ def stylesheet(t: dict) -> str:
     QPushButton:hover {{ background: {t['hover']}; }}
     QPushButton[accent="true"] {{ background: {t['accent']}; color: {t['accent_text']}; border-color: {t['accent']}; font-weight: 600; }}
     QPushButton[danger="true"] {{ color: {t['danger']}; }}
+    QPushButton[destructive="true"] {{ background: #c42b1c; color: #ffffff; border-color: #c42b1c; font-weight: 600; }}
+    QPushButton[destructive="true"]:hover {{ background: #a72417; border-color: #a72417; }}
+    QPushButton[destructive="true"]:disabled {{ background: {t['input']}; color: {t['muted']}; border-color: {t['input_border']}; }}
     QPushButton[link="true"], QToolButton[link="true"] {{ background: transparent; border: none; color: {t['accent']}; padding: 4px 6px; }}
     QPushButton[link="true"]:hover {{ text-decoration: underline; }}
     QPushButton#expander {{ background: transparent; border: none; border-radius: 8px; padding: 0; }}
@@ -647,6 +651,22 @@ class SettingsWindow(QMainWindow):
                       lambda v: self.save("close_to_tray", v))
         lay.addWidget(tray.card)
 
+        lay.addWidget(label("Rumble", h2=True))
+        rumble = Switch(lambda: self.theme, "Rumble on damage",
+                        "The controller rumbles when your toon loses laff: harder for bigger hits, long when it "
+                        "goes sad. Turn on Companion App Support in TTR’s Options; TTR asks once to allow it.",
+                        lambda v: self.save("rumble", v))
+        lay.addWidget(rumble.card)
+
+        lay.addWidget(label("TTR companion apps", h2=True))
+        reset = QPushButton("Reset token…")
+        reset.setProperty("destructive", True)
+        reset.setAccessibleName("Reset TTR companion token")
+        reset.clicked.connect(self._reset_token)
+        lay.addWidget(card("Reset companion token",
+                           "Forgets the key the module uses with TTR’s Companion App Support. TTR asks again to "
+                           "allow the module the next time it connects.", reset))
+
         lay.addWidget(label("Hints", h2=True))
         show = Switch(lambda: self.theme, "Show hints",
                       "Button pictures on TTR’s buttons while you use the controller.", lambda v: self.save("hints", v))
@@ -694,6 +714,7 @@ class SettingsWindow(QMainWindow):
             sprint.set(c().auto_sprint)
             two.set(c().two_toons)
             tray.set(c().close_to_tray)
+            rumble.set(c().rumble)
             hold.set(c().timing.hold_seconds)
             pictures.setCurrentIndex(max(0, pictures.findData(c().button_pictures)))
             self._refresh_pads()
@@ -1094,6 +1115,16 @@ class SettingsWindow(QMainWindow):
         b.setCursor(Qt.PointingHandCursor)
         b.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(url)))
         return b
+
+    def _reset_token(self) -> None:
+        answer = QMessageBox.question(self, "Reset companion token",
+                                      "Forget the module’s TTR companion token? TTR will ask you to allow the "
+                                      "module again the next time it connects.")
+        if answer == QMessageBox.Yes:
+            gone = clear_token(self.store.path.parent / TOKEN_FILE)
+            QMessageBox.information(self, "Reset companion token",
+                                    "Token cleared. Allow the module when TTR asks." if gone
+                                    else "There was no saved token to clear.")
 
     def _restore_everything(self) -> None:
         answer = QMessageBox.question(self, "Restore every setting",

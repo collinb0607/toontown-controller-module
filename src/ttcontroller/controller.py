@@ -206,6 +206,15 @@ class ControllerReader:
             right_trigger=_axis(pad, pygame.CONTROLLER_AXIS_TRIGGERRIGHT),
         )
 
+    def rumble(self, low: float, high: float, milliseconds: int) -> bool:
+        """Rumble the open controller: low is the heavy motor, high the light one (0 to 1)."""
+        if self._pad is None:
+            return False
+        try:
+            return bool(self._pad.rumble(low, high, milliseconds))
+        except pygame.error:
+            return False
+
     def _open_first(self) -> None:
         indexes = [i for i in range(sdl_controller.get_count()) if sdl_controller.is_controller(i)]
         if self.preferred:

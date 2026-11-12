@@ -128,6 +128,8 @@ the touched keys of config.json, tables as differences from the defaults, backup
 Run `ToontownControllerSettings` or `ttcontroller --settings`. A new action needs a label in
 the table's `actions` in settings_model (a test checks every default action has one).
 
+TTR's Local API (`ttr_api.py`, needs Companion App Support on in TTR's Options): JSON on 127.0.0.1:1547+ (one port per game; the port's owner process ties it to a window). TTR asks the player once per Authorization value, so one is saved (`ttr_api_token` beside config.json); never make a new one per run. `ToonWatcher` reads it on a thread for the controller's game: laff (damage rumble), toon name and ID, location, Unites. It has no screen or battle state, so readers stay; prefer it for facts it does have. Place-only readers are gated by `may_be_in`/`may_fish`/`away_from_estate` (unknown place: read as before); `places.log` beside config.json records what the location reads where.
+
 `output.MouseClicker` is a queue: click, hover, scroll, hold/release. `busy` includes holding.
 
 ### Coordinates

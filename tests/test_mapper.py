@@ -195,3 +195,12 @@ def test_a_toggled_control_goes_when_another_mode_takes_its_button():
     assert "showGags" in m.update(state(), 0.1)
     assert "showGags" not in m.update(state(), 0.2, blocked=frozenset({"y"}))  # a battle starts
     assert "showGags" not in m.update(state(), 0.3)
+
+
+def test_unite_does_nothing_when_the_toon_has_none():
+    m = OverworldMapper()
+    m.unites_available = False  # TTR's Local API: no Unites at all
+    m.update(ControllerState(left_trigger=0.9), 0.0, FakeScreen())
+    m.update(ControllerState(), 0.05, FakeScreen())
+    assert not m.take_unite()
+    assert m.take_clicks() == []

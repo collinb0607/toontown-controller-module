@@ -263,3 +263,20 @@ def test_the_module_window_follows_the_settings_window(qt, tmp_path):
         assert "not picked" in window.picked.text()
     finally:
         window.close()
+
+
+def test_the_picker_names_each_toon(qt):
+    from PySide6.QtCore import QCoreApplication
+
+    from ttcontroller.launcher import PickDialog
+
+    names = {11: "Doctor Pickles", 22: None}  # the right window is at toon selection
+    dialog = PickDialog(windows=[(11, "Left (in front)"), (22, "Right")], thumb=lambda h: None,
+                        toon_of=names.get)
+    for _ in range(50):
+        QCoreApplication.processEvents()
+        if dialog.tiles[0].text() != "Left (in front)":
+            break
+        time.sleep(0.01)
+    assert dialog.tiles[0].text() == "Doctor Pickles\nLeft (in front)"
+    assert dialog.tiles[1].text() == "Right"

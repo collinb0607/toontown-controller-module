@@ -234,12 +234,14 @@ REPLAY_AFTER_RESET = 0.35  # and before the first, while Reset redraws the row
 _FAILED_WAIT = 1.5  # after Plant closes the picker: no failure popup by then, and it planted
 
 
-def load_last_beans(path: Path | None) -> tuple[int, ...]:
-    """The last flower's beans, from garden.json (none if it's missing or not what's expected)."""
+def load_last_beans(path: Path | None, toon: str | None = None) -> tuple[int, ...]:
+    """The last flower's beans, from garden.json (none if it's missing or not what's expected).
+    toon: that toon's own (by its TTR toon ID); None: the one kept when the toon isn't known."""
     if path is None:
         return ()
     try:
-        beans = json.loads(path.read_text(encoding="utf-8")).get("last_flower_beans", [])
+        data = json.loads(path.read_text(encoding="utf-8"))
+        beans = (data.get("toons", {}).get(toon, {}) if toon else data).get("last_flower_beans", [])
     except (OSError, ValueError, AttributeError):
         return ()
     if not isinstance(beans, list) or not all(isinstance(b, int) and 0 <= b < BEANS for b in beans):
@@ -247,15 +249,23 @@ def load_last_beans(path: Path | None) -> tuple[int, ...]:
     return tuple(beans)
 
 
-def save_last_beans(path: Path | None, beans: tuple[int, ...]) -> None:
-    """Keep the last flower's beans in garden.json (anything else in it is left as it is)."""
+def save_last_beans(path: Path | None, beans: tuple[int, ...], toon: str | None = None) -> None:
+    """Keep the last flower's beans in garden.json (anything else in it is left as it is):
+    under "toons" by toon ID when the toon is known, so each toon keeps its own."""
     if path is None:
         return
     try:
         data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
         if not isinstance(data, dict):
             data = {}
-        data["last_flower_beans"] = list(beans)
+        if toon:
+            toons = data.get("toons") if isinstance(data.get("toons"), dict) else {}
+            entry = toons.get(toon) if isinstance(toons.get(toon), dict) else {}
+            entry["last_flower_beans"] = list(beans)
+            toons[toon] = entry
+            data["toons"] = toons
+        else:
+            data["last_flower_beans"] = list(beans)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     except (OSError, ValueError):
@@ -273,6 +283,7 @@ class GardenMapper:
         """cache_path: where the last flower's beans are kept (None: only while running)."""
         self.bindings = bindings or default_garden_bindings()
         self.cache_path = cache_path
+        self.toon: str | None = None  # whose beans (a TTR toon ID; None: not known)
         self.last_beans: tuple[int, ...] = load_last_beans(cache_path)  # the last flower planted
         self._added: list[int] = []  # beans added in the picker since it opened (or Reset)
         self._planted: tuple[int, ...] | None = None  # Plant pressed with these: did it work?
@@ -289,6 +300,12 @@ class GardenMapper:
         actions = (_PLANT_ACTIONS if screen.planting else _SELL_ACTIONS if screen.selling or screen.ok
                    else _PANEL_ACTIONS)
         return frozenset(b for b, a in self.bindings.press.items() if a in actions)
+
+    def set_toon(self, toon: str | None) -> None:
+        """Another toon (from TTR's Local API): its own last flower's beans."""
+        if toon and toon != self.toon:
+            self.toon = toon
+            self.last_beans = load_last_beans(self.cache_path, toon)
 
     @property
     def hovering(self) -> bool:
@@ -345,7 +362,7 @@ class GardenMapper:
             self._closed_at = now
         elif now - self._closed_at >= _FAILED_WAIT:
             self.last_beans = self._planted
-            save_last_beans(self.cache_path, self.last_beans)
+            save_last_beans(self.cache_path, self.last_beans, self.toon)
             self._planted, self._closed_at = None, None
 
     def _plant(self, delay: float = 0.0) -> list[PointerCommand]:

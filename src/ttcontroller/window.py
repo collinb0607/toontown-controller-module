@@ -50,10 +50,15 @@ def make_dpi_aware() -> None:
         pass
 
 
-def _process_path(hwnd) -> Path | None:
+def window_pid(hwnd) -> int:
+    """The process a window belongs to (0 if none)."""
     pid = wintypes.DWORD()
     _user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-    handle = _kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
+    return pid.value
+
+
+def _process_path(hwnd) -> Path | None:
+    handle = _kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, window_pid(hwnd))
     if not handle:
         return None
     try:

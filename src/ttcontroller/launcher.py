@@ -25,7 +25,8 @@ from .config import CONFIG_DIR, CONFIG_FILE
 from .screen import grab
 from .settings_model import SettingsStore
 from .settings_window import DARK, LIGHT, Art, Toggle, is_dark, label, stylesheet
-from .window import TargetChoice, client_rect, ttr_windows
+from .ttr_api import TOKEN_FILE, toon_name
+from .window import TargetChoice, client_rect, ttr_windows, window_pid
 
 from PySide6.QtCore import QByteArray, QObject, QSize, Qt, QTimer, Signal  # noqa: E402
 from PySide6.QtGui import QAction, QGuiApplication, QIcon, QImage, QPixmap, QTextCursor  # noqa: E402
@@ -84,20 +85,22 @@ TARGET_STATUS = {  # two toons: the controller toon's window, when it can't be p
 
 
 def status_text(controller: str | None, focused: bool, mouse_paused: bool,
-                target: str | None = None) -> tuple[str, str, str]:
+                target: str | None = None, toon: str | None = None) -> tuple[str, str, str]:
     """(headline, detail, tone) for the status: tone is "ok", "wait" or "off". target: the
-    controller toon's window's state in two-toon mode, None in one-toon mode."""
+    controller toon's window's state in two-toon mode, None in one-toon mode. toon: the
+    toon's name, from TTR's Local API (None: not known)."""
+    playing = f"Playing {toon}" if toon else "Playing"
     if not controller:
-        return "No controller", "Plug one in, or press its Xbox button to wake it.", "off"
+        return "No controller", "Plug one in, or press its Xbox, PS or Home button to wake it.", "off"
     if target in TARGET_STATUS:
         return TARGET_STATUS[target]
     if target is not None:
-        return "Playing", "The controller is driving its TTR window, in front or not.", "ok"
+        return playing, "The controller is driving its TTR window, in front or not.", "ok"
     if not focused:
         return "Waiting for TTR", "The controller works while Toontown Rewritten is in front.", "wait"
     if mouse_paused:
         return "Paused for the mouse", "Press anything on the controller to take over again.", "wait"
-    return "Playing", "The controller is driving TTR.", "ok"
+    return playing, "The controller is driving TTR.", "ok"
 
 
 THUMB_WIDTH = 240
@@ -114,11 +117,26 @@ def thumbnail(hwnd) -> QPixmap | None:
     return QPixmap.fromImage(image.scaledToWidth(THUMB_WIDTH, Qt.SmoothTransformation))
 
 
-class PickDialog(QDialog):
-    """One tile per TTR window, with a picture and where it is; click one to choose it."""
+def window_toon(hwnd) -> str | None:
+    """The toon logged in on that TTR window, from TTR's Local API (None at toon selection,
+    or with Companion App Support off)."""
+    return toon_name(window_pid(hwnd), CONFIG_DIR / TOKEN_FILE)
 
-    def __init__(self, parent=None, windows=None, thumb=thumbnail):
+
+class _Names(QObject):
+    found = Signal(int, str)  # tile index, toon name
+
+
+class PickDialog(QDialog):
+    """One tile per TTR window, with a picture and where it is; click one to choose it.
+    Each tile also shows its toon's name once TTR's Local API gives it (looked up on a
+    thread: the first ask can wait while TTR asks the player to allow the module)."""
+
+    def __init__(self, parent=None, windows=None, thumb=thumbnail, toon_of=window_toon):
         super().__init__(parent)
+        self._names = _Names(self)
+        self._names.found.connect(self._name_tile)
+        self._windows: list[tuple[int, str]] = []
         self.setWindowTitle("Pick the controller's toon")
         self.setModal(True)
         self.chosen: tuple[int, str] | None = None
@@ -148,12 +166,32 @@ class PickDialog(QDialog):
                 row.addWidget(tile)
                 self.tiles.append(tile)
             lay.addLayout(row)
+            self._windows = list(windows)
+            if toon_of is not None:
+                for index, (hwnd, _) in enumerate(windows):
+                    threading.Thread(target=self._look_up, args=(toon_of, index, hwnd), daemon=True).start()
         cancel = QPushButton("Cancel")
         cancel.clicked.connect(self.reject)
         bottom = QHBoxLayout()
         bottom.addStretch(1)
         bottom.addWidget(cancel)
         lay.addLayout(bottom)
+
+    def _look_up(self, toon_of, index: int, hwnd) -> None:
+        try:
+            toon = toon_of(hwnd)
+        except Exception:  # noqa: BLE001
+            toon = None
+        if toon:
+            try:
+                self._names.found.emit(index, toon)
+            except RuntimeError:
+                pass  # the dialog closed first
+
+    def _name_tile(self, index: int, toon: str) -> None:
+        hwnd, name = self._windows[index]
+        self.tiles[index].setText(f"{toon}\n{name}")
+        self.tiles[index].setAccessibleName(f"{toon}, {name} TTR window")
 
     def _choose(self, hwnd: int, name: str) -> None:
         self.chosen = (hwnd, name)
@@ -163,7 +201,7 @@ class PickDialog(QDialog):
 class _Bridge(QObject):
     """Carries the module thread's news to the window's thread."""
     line = Signal(str)
-    status = Signal(object, bool, bool, object)
+    status = Signal(object, bool, bool, object, object)
     stopped = Signal(str)  # "" when it stopped because the window asked
 
 
@@ -255,6 +293,7 @@ class ModuleWindow(QMainWindow):
         self._config_mtime = self._mtime()
         self.choice = TargetChoice(two_toons=self.store.config.two_toons)
         self._picked_name = ""
+        self._toon: str | None = None  # the controller toon's name, from TTR's Local API
         self._target_state: str | None = None
         self._pick_dialog = pick_dialog
         self._flash = None  # the Identify frame, while it shows
@@ -393,7 +432,8 @@ class ModuleWindow(QMainWindow):
         app.log_sinks.append(self._sink)
         try:
             app.run(ttr_dir=ttr_dir, dry_run=dry_run, debug=debug, stop=self._stop,
-                    on_status=lambda *s: self._bridge.status.emit(*s), choice=self.choice)
+                    on_status=lambda *s: self._bridge.status.emit(*(s + (None,) * (5 - len(s)))),
+                    choice=self.choice)
             self._bridge.stopped.emit("")
         except Exception:
             text = traceback.format_exc()
@@ -413,10 +453,11 @@ class ModuleWindow(QMainWindow):
         self.log_view.appendPlainText(line)
         self.log_view.moveCursor(QTextCursor.End)
 
-    def _show_status(self, controller, focused: bool, mouse_paused: bool, target=None) -> None:
+    def _show_status(self, controller, focused: bool, mouse_paused: bool, target=None, toon=None) -> None:
         self._target_state = target
+        self._toon = toon
         self._show_pick_row()
-        headline, detail, tone = status_text(controller, focused, mouse_paused, target)
+        headline, detail, tone = status_text(controller, focused, mouse_paused, target, toon)
         self.headline.setText(headline)
         self.detail.setText(detail)
         if self.tray is not None:
@@ -483,7 +524,8 @@ class ModuleWindow(QMainWindow):
         elif self._target_state == "gone":
             text = "Controller toon: its window closed"
         else:
-            text = f"Controller toon: the {self._picked_name.replace(' (in front)', '').lower()} TTR window"
+            where = f"the {self._picked_name.replace(' (in front)', '').lower()} TTR window"
+            text = f"Controller toon: {self._toon} ({where})" if self._toon else f"Controller toon: {where}"
         self.picked.setText(text)
         self.identify_button.setEnabled(self.choice.hwnd is not None and self._target_state != "gone")
         if hasattr(self, "log_view"):

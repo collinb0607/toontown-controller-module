@@ -41,8 +41,9 @@ from .makeatoon import MakeAToonMapper, MakeAToonScreen, read_make_a_toon
 from . import name_keyboard
 from .shop import ShopMapper, ShopScreen, read_shop
 from .speedchat import SpeedchatMapper, SpeedchatScreen, read_speedchat
+from .ttr_api import TOKEN_FILE, ToonWatcher, away_from_estate, may_be_in, may_fish, rumble_for
 from .window import (BoundTarget, ForegroundTarget, ForegroundWatcher, TargetChoice, TTRView,  # noqa: F401
-                     client_rect, focus_window, make_dpi_aware, ttr_windows)
+                     client_rect, focus_window, make_dpi_aware, ttr_windows, window_pid)
 from .window_switch import next_window
 
 FRAME_SECONDS = 1 / 120
@@ -139,11 +140,11 @@ def controls_to_keys(controls: set[str], settings: ttr_settings.TTRSettings) -> 
 
 def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
         stop: threading.Event | None = None,
-        on_status: Callable[[str | None, bool, bool, str | None], None] | None = None,
+        on_status: Callable[[str | None, bool, bool, str | None, str | None], None] | None = None,
         choice: TargetChoice | None = None) -> None:
     """The module's loop, until Ctrl+C or `stop` is set. on_status(controller name, TTR in
     front, paused for the mouse, the controller toon's window's state in two-toon mode or
-    None) is called whenever one of those changes. choice: which window to drive (two
+    None, the toon's name from TTR's Local API or None) is called whenever one of those changes. choice: which window to drive (two
     toons); None or choice.hwnd None drives the TTR window in front."""
     make_dpi_aware()
     watcher = ttr_settings.SettingsWatcher(ttr_dir or ttr_settings.DEFAULT_TTR_DIR)
@@ -318,6 +319,12 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
     log(("Running." if stop is not None else "Running. Press Ctrl+C to quit.")
         + (" (dry run: keys are printed, not sent)" if dry_run else ""))
     status = None
+    # TTR's Local API, for the game the controller plays: laff (damage rumble), the toon's
+    # name and ID, where it is and its Unites.
+    toon_api = ToonWatcher(module_config.CONFIG_DIR / TOKEN_FILE, log=log,
+                           places=module_config.CONFIG_DIR / "places.log")  # M14: what the location reads where
+    toon_api.start()
+    toon = toon_api.info
 
     try:
         while stop is None or not stop.is_set():
@@ -382,6 +389,24 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                         log(TARGET_LOG[target.state])
                     else:
                         log("TTR focused: controller active." if focused else "TTR not focused: controller paused.")
+            toon_api.follow(window_pid(target.hwnd) if focused and target.hwnd else None)
+            toon = toon_api.info
+            garden_mapper.set_toon(toon.id)  # each toon keeps its own last flower
+            mapper.unites_available = toon.unites != 0  # not known: as before
+            estate_maybe = not away_from_estate(toon)  # gardening and the mailbox are only there
+            # Boss and Cog HQ screens only where they can show (the user, Nov 11); not known: everywhere.
+            cog_hq_maybe = may_be_in(toon, "Sellbot HQ", "Cashbot HQ", "Lawbot HQ", "Bossbot HQ")
+            pies_maybe = may_be_in(toon, "Sellbot HQ", "Lawbot HQ")  # the VP's pie round, the CJ's evidence
+            leave_maybe = may_be_in(toon, "Cashbot HQ", "Bossbot HQ")  # CFO cranes, CEO seltzer and golf balls
+            golf_maybe = may_be_in(toon, "Bossbot HQ")  # the Cog Golf green puzzle
+            fish_maybe = may_fish(toon)
+            mapper.leave_possible = leave_maybe
+            for change in toon_api.changes():
+                rumble = rumble_for(change)
+                if rumble is not None and config.rumble:
+                    reader.rumble(*rumble)
+                    if debug:
+                        log(f"Laff {change.old} -> {change.new}/{change.max}: rumble {rumble}")
             if ttr_path is not None and ttr_dir is None:
                 # Follow the running game's install folder in case it isn't the default.
                 watcher.set_dir(ttr_path.parent)
@@ -420,8 +445,9 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
             # The hints and frame show while the controller is in use; in two-toon mode the
             # controller toon's window is the controller's alone, so always.
             presenting = hider.hidden or target.background
-            if on_status is not None and (controller_name, focused, mouse_paused, target_state(target)) != status:
-                status = (controller_name, focused, mouse_paused, target_state(target))
+            if on_status is not None and (controller_name, focused, mouse_paused, target_state(target),
+                                          toon.name) != status:
+                status = (controller_name, focused, mouse_paused, target_state(target), toon.name)
                 on_status(*status)
             if not active:
                 clicker.release()
@@ -528,20 +554,20 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                     hud_screen = hud
                     # Gardening, before NPCs too: the bubble search finds one in the bean picker.
                     garden = (read_garden(frame.width, frame.height, frame.get_pixel)
-                              if in_game and screen.kind is None and shop.kind is None and not book.is_open
+                              if in_game and estate_maybe and screen.kind is None and shop.kind is None and not book.is_open
                               else GardenScreen())
                     if garden != garden_screen and (dry_run or debug):
                         log(f"Gardening: {'bean picker' if garden.planting else 'sell popup' if garden.selling else 'OK popup' if garden.ok else 'panel' if garden.is_open else 'none'}"
                             + (" (no beans)" if garden.planting and not garden.beans else ""))
                     garden_screen = garden
                     intro = (read_garden_intro(frame.width, frame.height, frame.get_pixel)
-                             if in_game and screen.kind is None and shop.kind is None and not book.is_open
+                             if in_game and estate_maybe and screen.kind is None and shop.kind is None and not book.is_open
                              else GardenIntro())
                     if intro.is_open != garden_intro.is_open and (dry_run or debug):
                         log(f"Gardening intro: {'open' if intro.is_open else 'closed'}")
                     garden_intro = intro
                     mailbox = (read_mailbox(frame.width, frame.height, frame.get_pixel)
-                               if in_game and screen.kind is None and shop.kind is None and not book.is_open
+                               if in_game and estate_maybe and screen.kind is None and shop.kind is None and not book.is_open
                                else MailboxScreen())
                     if mailbox != mailbox_screen and (dry_run or debug):
                         log(f"Mailbox: {'open' if mailbox.is_open else 'closed'}")
@@ -559,19 +585,19 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                         log(f"Silly Meter: {'open' if silly.card else 'closed'}")
                     silly_screen = silly
                     golf = (read_golf_green(frame.width, frame.height, frame.get_pixel)
-                            if in_game and screen.kind is None and shop.kind is None and not book.is_open
+                            if in_game and golf_maybe and screen.kind is None and shop.kind is None and not book.is_open
                             else GolfGreenScreen())
                     if golf.is_open != golf_screen.is_open and (dry_run or debug):
                         log(f"Golf green: {'up' if golf.is_open else 'gone'}")
                     golf_screen = golf
                     fishing = (read_fishing(frame.width, frame.height, frame.get_pixel)
-                               if in_game and screen.kind is None and shop.kind is None and not book.is_open
+                               if in_game and fish_maybe and screen.kind is None and shop.kind is None and not book.is_open
                                else FishingScreen())
                     if fishing.kind != fishing_screen.kind and (dry_run or debug):
                         log(f"Fishing: {fishing.kind or 'none'}")
                     fishing_screen = fishing
                     facility = (read_facility(frame.width, frame.height, frame.get_pixel)
-                                if in_game and screen.kind is None and shop.kind is None and not book.is_open
+                                if in_game and cog_hq_maybe and screen.kind is None and shop.kind is None and not book.is_open
                                 and not golf.is_open else FacilityScreen())
                     if ((facility.popup, len(facility.tags)) != (facility_screen.popup, len(facility_screen.tags))
                             and (dry_run or debug)):
@@ -601,7 +627,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                     if friends.kind != friends_screen.kind and (dry_run or debug):
                         log(f"Friends screen: {friends.kind or 'none'}")
                     friends_screen = friends
-                    pies = in_game and screen.kind is None and not book.is_open and read_pie_round(
+                    pies = in_game and pies_maybe and screen.kind is None and not book.is_open and read_pie_round(
                         frame.width, frame.height, frame.get_pixel)
                     if pies != pie_round and (dry_run or debug):
                         log(f"VP pie round: {'on' if pies else 'off'}")
@@ -612,7 +638,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                             and friends.kind is None)
                     hint_mail = read_mail(frame.width, frame.height, frame.get_pixel) if calm else None
                     hint_hop = read_hop_off(frame.width, frame.height, frame.get_pixel) if calm else None
-                    hint_leave = read_leave(frame.width, frame.height, frame.get_pixel) if calm else None
+                    hint_leave = read_leave(frame.width, frame.height, frame.get_pixel) if calm and leave_maybe else None
                     # Walking around and in battle (its badge shows there too).
                     hint_friends = (hint_drawer is None or not config.hints or not in_game
                                     or ui.is_visible(ui.FRIENDS_BUTTON, frame.width, frame.height, frame.get_pixel))
@@ -925,7 +951,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                         mail_close=hint_mail.close if hint_mail else None,
                         mail_icon=hint_mail.icon if hint_mail else None, hop_off=hint_hop, leave=hint_leave, hud=in_hud,
                         friends_button=hint_friends, book_button=hint_book,
-                        walking_bar=config.hints_walking_bar,
+                        walking_bar=config.hints_walking_bar, unites=toon.unites != 0,
                         tables={"overworld": config.bindings, "battle": config.battle, "shop": config.shop,
                                 "npc": config.npc, "speedchat": config.speedchat, "friends": config.friends,
                                 "book": config.book}))
@@ -1024,6 +1050,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
     except KeyboardInterrupt:
         log("Quitting.")
     finally:
+        toon_api.stop()
         clicker.release()
         hider.show()
         if highlighter is not None:

@@ -62,6 +62,8 @@ HELP = {
     "close_to_tray": "true: closing the module's window keeps the controller running, with an icon in the "
                      "notification area (click it to open the window again, right-click for Settings and Quit). "
                      "false: closing it quits.",
+    "rumble": "true: the controller rumbles when your toon takes damage (harder for bigger hits, long when "
+              "it goes sad). Needs TTR's Companion App Support on (Options); TTR asks once to allow the module.",
     "hints_scale": "How big the hints are drawn: 1 is the normal size, 1.25 a quarter bigger.",
     "controller": "Which controller to use, by name (the settings window lists them). Empty: the first one "
                   "plugged in. If the named one isn't plugged in, the first one is used.",
@@ -107,6 +109,8 @@ class Config:
     two_toons: bool = False
     # Closing the module's window keeps it running in the notification area (the user: on by default).
     close_to_tray: bool = True
+    # Rumble on damage, from laff read through TTR's Local API (companion app support).
+    rumble: bool = True
     # Fishing (M14): "move" (the stick moves the aim) or "stick" (the stick is the aim).
     fishing_cast: str = "move"
     timing: Timing = field(default_factory=Timing)
@@ -135,6 +139,7 @@ def to_json(config: Config) -> dict:
         "button_pictures": config.button_pictures,
         "two_toons": config.two_toons,
         "close_to_tray": config.close_to_tray,
+        "rumble": config.rumble,
         "fishing_cast": config.fishing_cast,
         "movement": asdict(config.movement),
         "timing": asdict(config.timing),
@@ -234,7 +239,7 @@ def parse(data: dict) -> tuple[Config, list[str]]:
     else:
         warnings.append(f'fishing_cast: must be "move" or "stick" (using "{defaults.fishing_cast}")')
     for name in ("auto_sprint", "hide_cursor", "toggle_hud", "hints", "hints_walking_bar", "two_toons",
-                 "close_to_tray"):
+                 "close_to_tray", "rumble"):
         value = data.get(name, getattr(defaults, name))
         if isinstance(value, bool):
             config = replace(config, **{name: value})

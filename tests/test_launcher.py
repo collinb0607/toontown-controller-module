@@ -136,3 +136,10 @@ def test_close_to_tray_off_quits(tmp_path, monkeypatch):
     window.show()
     window.close()
     assert window._stop.is_set() and window.tray.messages == []
+
+
+def test_status_names_the_toon():
+    assert launcher.status_text("Pad", True, False, toon="Doctor Pickles")[0] == "Playing Doctor Pickles"
+    assert launcher.status_text("Pad", True, False, "ok", "Doctor Pickles")[0] == "Playing Doctor Pickles"
+    assert launcher.status_text("Pad", False, False, toon="Doctor Pickles")[0] == "Waiting for TTR"
+    assert launcher.status_text("Pad", True, False, toon=None)[0] == "Playing"

@@ -85,3 +85,10 @@ def test_a_darker_red_counts():
     assert read_leave(w, h, pixel) is not None
     assert read_leave(w, h, lambda x, y: (200, 120, 40) if (x - cx) ** 2 + (y - cy) ** 2 <= 900
                       else (255, 255, 255) if abs(y - (cy + 62)) <= 2 and x % 7 < 3 else (40, 40, 40)) is None  # orange
+
+
+def test_b_doesnt_look_for_leave_outside_cashbot_and_bossbot_hq():
+    point = replay("ceo_seltzer_1920x1009", read_leave)
+    m = OverworldMapper()
+    m.leave_possible = False  # TTR's Local API: somewhere else
+    assert b(m, View(point)) == []

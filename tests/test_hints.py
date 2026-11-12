@@ -370,3 +370,16 @@ def test_the_book_is_read():
         return replay(name, lambda w, h, get_pixel: ui.is_visible(ui.BOOK_BUTTON, w, h, get_pixel))
     assert shown("gardening_hud_1_1920x1009")
     assert not shown("no_book_options_only_1920x1009")
+
+
+def test_no_unites_drops_lt_from_the_walking_bar():
+    hints = H.hints_for(H.Context(unites=False))
+    assert bars(hints) == [("Walk", "Jump", "Gags", "Tasks", "Map")]
+
+
+def test_boarding_go_to_leader_has_a_y_badge():
+    from test_book import replay
+    from ttcontroller.boarding import read_boarding
+    away = H.hints_for(H.Context(boarding=replay("boarding_groups_go_to_leader", read_boarding)))
+    near = H.hints_for(H.Context(boarding=replay("boarding_groups_in_a_group_1920x1009", read_boarding)))
+    assert "Y" in repr(away) and "'Y'" not in repr(near)

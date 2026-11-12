@@ -252,3 +252,26 @@ def test_a_broken_cache_file_is_ignored(tmp_path):
     assert GardenMapper(cache_path=path).last_beans == ()
     path.write_text('{"last_flower_beans": [1, 99]}', encoding="utf-8")
     assert GardenMapper(cache_path=path).last_beans == ()
+
+
+def test_each_toon_keeps_its_own_last_flower(tmp_path):
+    path = tmp_path / "garden.json"
+    m = GardenMapper(cache_path=path)
+    m.set_toon("TTID-AAAA")
+    t = plant_flower(m, [2, 2, 5])
+    m.update(frozenset(), t, PANEL)
+    m.update(frozenset(), t + 2.0, PANEL)
+    assert m.last_beans == (2, 2, 5)
+    m.set_toon("TTID-BBBB")  # another toon: nothing planted yet
+    assert m.last_beans == ()
+    t = plant_flower(m, [1], t + 3.0)
+    m.update(frozenset(), t, PANEL)
+    m.update(frozenset(), t + 2.0, PANEL)
+    m.set_toon("TTID-AAAA")
+    assert m.last_beans == (2, 2, 5)
+    again = GardenMapper(cache_path=path)
+    assert again.last_beans == ()  # the toon isn't known yet: not someone else's
+    again.set_toon("TTID-BBBB")
+    assert again.last_beans == (1,)
+    m.set_toon(None)  # the API stopped answering: keep the toon it was
+    assert m.last_beans == (2, 2, 5)

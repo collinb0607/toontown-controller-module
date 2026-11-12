@@ -106,6 +106,11 @@ class OverworldMapper:
         # When on, each run (a full tilt forward, not a walk) starts with a sprint.
         self.auto_sprint = auto_sprint
         self._sprint_toggled = False
+        # False when TTR's Local API says the toon has no Unites: the unite button does nothing.
+        self.unites_available = True
+        # False when TTR's Local API says the toon isn't in Cashbot or Bossbot HQ: B doesn't
+        # look for a CFO crane's or CEO seltzer/golf ball's leave button.
+        self.leave_possible = True
         # Map, tasks and gags: a press shows them and the next press hides them.
         self.toggles = TOGGLE_CONTROLS if toggle_show else frozenset()
         self._actions = ButtonActions(self.bindings, self.timing.hold_seconds,
@@ -188,7 +193,8 @@ class OverworldMapper:
         elif (action == "back" and screen is not None and screen.is_visible(ui.WHISPER_CLOSE)
               and screen.is_visible(ui.WHISPER_BAR)):
             self._clicks.append(ui.WHISPER_CLOSE)  # stop whispering
-        elif action == "back" and self._free and screen is not None and (leave := screen.read(read_leave)):
+        elif (action == "back" and self._free and self.leave_possible and screen is not None
+              and (leave := screen.read(read_leave))):
             # The CEO's seltzer bottle or golf ball, or the CFO's crane: its X leave button (read on the press).
             self._clicks.append(ui.Button("leave", leave))
         elif action == "back" and self._free and screen is not None and (hop := screen.read(read_hop_off)):
@@ -204,6 +210,8 @@ class OverworldMapper:
         elif action == "speedchat":
             self._clicks.append(ui.SPEEDCHAT)
         elif action == "unite":
+            if not self.unites_available:
+                return
             self._unite = True
             if screen is None or not screen.is_visible(ui.SPEEDCHAT_MENU):
                 self._clicks.append(ui.SPEEDCHAT)

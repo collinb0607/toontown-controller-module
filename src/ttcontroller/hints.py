@@ -182,6 +182,7 @@ class Context:
     friends_button: bool = True  # the friends button shows (not a timer in its place)
     book_button: bool = True  # the shticker book shows (else only the Options gadget, opened by holding Start)
     walking_bar: bool = True  # the walking bar (its own setting)
+    unites: bool = True  # the toon has a Unite (False only when TTR's API says it has none)
     # The config's remappable tables: "overworld", "battle", "shop", "npc", "speedchat",
     # "friends", "book" (missing ones are the defaults).
     tables: dict | None = field(default=None, compare=False)
@@ -198,6 +199,8 @@ OPTIONS_HOLD = _badge("START", _px(1838, 912, "right", "bottom"), scale=0.8, hol
 WALK_BAR = Bar((("L", "Walk"), ("A", "Jump", _walk("jump")), ("Y", "Gags", _walk("showGags")),
                 ("X", "Tasks", _walk("showTasks")), ("DU", "Map", _walk("showMap")), ("LT", "Unite", _walk("unite"))),
                _px(560, 985, "left", "bottom"), S * 0.6)
+# The toon has no Unites (TTR's Local API says so): LT does nothing, so it isn't shown.
+WALK_BAR_NO_UNITE = Bar(tuple(item for item in WALK_BAR.items if item[0] != "LT"), WALK_BAR.at, WALK_BAR.size)
 
 
 def _free(c: Context) -> list:
@@ -254,7 +257,7 @@ def _free(c: Context) -> list:
         out += [_badge("Y", g.top, -36, -34)] if g.top is not None else []
         out += [_badge("X", g.bottom, -36, -35)] if g.bottom is not None else []
     elif c.walking_bar and not c.hud:
-        out.append(WALK_BAR)
+        out.append(WALK_BAR if c.unites else WALK_BAR_NO_UNITE)
     return out
 
 

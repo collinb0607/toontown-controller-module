@@ -169,6 +169,9 @@ The controls are written with Xbox names. A PlayStation or Steam controller uses
 - A controller: Xbox, PlayStation (DualShock 4, DualSense), Switch Pro (or a pair of Joy-Cons) or Steam Controller, or anything Windows sees as one of them (see [Other controllers](#other-controllers))
 - Toontown Rewritten running in **windowed** mode
 - TTR's built-in controller support turned **off** (Options > Controls), or each button will act twice
+- Optional: **Companion App Support** turned on in TTR's Options, for damage rumble and your toon's name. The first time the module connects, TTR asks to allow it; press **OK**:
+
+  ![TTR asking to allow Toontown Controller Module as a Companion App](docs/images/companion_app_prompt.png)
 
 ## Changing controls
 
@@ -201,6 +204,9 @@ The settings live in `%APPDATA%\ToontownControllerModule\config.json`, created o
 - **`fishing_cast`** (`"move"` or `"stick"`, default `"move"`): how the left stick casts while fishing; LS on the dock switches it and saves it here.
 - **`two_toons`** (true or false, default false): [two toons](#two-toons). Only the mode is saved; the module's window asks which TTR window is the controller's each time.
 - **`close_to_tray`** (true or false, default true): closing the module's window keeps the controller running, with its icon in the notification area. Click the icon to open the window again; right-click it for Settings and Quit. Starting the module again also brings the window back. false: closing the window quits.
+- **`rumble`** (true or false, default true): the controller rumbles when your toon loses laff, harder and longer the bigger the hit (20 or more is the strongest), and long when it goes sad; laff going up gives a short light buzz. Turn on **Companion App Support** in TTR's Options; TTR asks once to allow Toontown Controller Module.
+- **Companion App Support** (TTR's Options) also lets the module show your toon's name ("Playing Doctor Pickles", and on the two-toon picker), keep each toon's last planted flower separately, hide LT's Unite when the toon has none, and look for gardening and the mailbox only at an estate. With it off, all of that works as before.
+- **Reset token…** (Settings > General, red): forgets the module's TTR companion token; TTR asks again to allow the module the next time it connects.
 - **`hints`** (true or false, default true) shows the controller button hints. **`hints_walking_bar`** (default true) adds the small bar beside the laff meter while walking around (walk, jump, gags, tasks, map, unite). **`hints_scale`** (default 1) makes them bigger or smaller (0.25 to 4).
 
 If something in the file is wrong, the console prints `Config problem: ...` and the module uses the default for that setting.
