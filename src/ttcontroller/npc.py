@@ -119,7 +119,9 @@ def _is_bubble_corner(rgb: np.ndarray, x: int, y: int, unit: int) -> bool:
     near = max(1, round(0.003 * unit))
 
     def dark_near(px: int, py: int) -> bool:
-        return any(dark(px + d, py) for d in range(-near, near + 1)) or any(dark(px, py + d) for d in (-near, near))
+        # Every row and column within `near`: a thin outline 2 px off the row the corner
+        # was found on was missed when only ±near was looked at (the user, Nov 12).
+        return any(dark(px + d, py) for d in range(-near, near + 1)) or any(dark(px, py + d) for d in range(-near, near + 1))
 
     step = max(1, round(0.004 * unit))
     bottom = [dark_near(x - i, yb) for i in range(0, round(0.09 * unit), step)]

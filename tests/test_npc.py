@@ -40,6 +40,8 @@ def replay(name):
     ("dialogue_958x300", False, (594, 76)),
     ("dialogue_last_1920x1009", True, (1148, 252)),
     ("dialogue_last_hover_1920x1009", True, (1150, 257)),
+    # Its bottom outline 2 px below where the corner met it: missed (the user, Nov 12).
+    ("dialogue_last_thin_outline_1920x1009", True, (1423, 253)),
 ])
 def test_speech_bubble_button(name, last, at):
     w, h, rgb = bubble_frame(name)
