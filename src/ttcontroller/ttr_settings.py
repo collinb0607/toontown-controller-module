@@ -1,6 +1,8 @@
 """Read Toontown Rewritten's settings.json (keybinds, controller and display options)."""
 
 import json
+import os
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -8,6 +10,7 @@ from .keys import KeyCombo, parse_combo
 
 DEFAULT_TTR_DIR = Path(r"C:\Program Files (x86)\Toontown Rewritten")
 SETTINGS_FILE = "settings.json"
+BACKUP_FILE = "settings.backup.json"  # beside settings.json, made before each write
 
 # Classic Toontown defaults, used only when settings.json is missing or lacks a control.
 DEFAULT_CONTROLS = {
@@ -77,7 +80,9 @@ def load(path: Path) -> TTRSettings:
 def set_custom_cursor(path: Path, on: bool) -> bool:
     """Turn TTR's custom cursor (video.enable-cursor, which has no switch in TTR's Options)
     on or off, keeping the rest of settings.json as it is. TTR reads it when it starts.
-    Returns whether the file was written."""
+    Returns whether the file was written. The file as it was is copied to
+    settings.backup.json first, and the new one is written beside it and swapped in, so a
+    crash part way can't leave TTR a half-written file (and the player's key bindings lost)."""
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -88,9 +93,16 @@ def set_custom_cursor(path: Path, on: bool) -> bool:
     if not isinstance(video, dict):
         return False
     video["enable-cursor"] = on
+    temporary = path.with_name(path.name + ".tmp")
     try:
-        path.write_text(json.dumps(data, indent=4), encoding="utf-8")
+        shutil.copyfile(path, path.with_name(BACKUP_FILE))
+        temporary.write_text(json.dumps(data, indent=4), encoding="utf-8")
+        os.replace(temporary, path)
     except OSError:
+        try:
+            temporary.unlink()
+        except OSError:
+            pass
         return False
     return True
 

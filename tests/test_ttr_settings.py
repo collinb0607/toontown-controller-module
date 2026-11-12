@@ -47,6 +47,29 @@ def test_set_custom_cursor_keeps_the_rest(tmp_path):
     assert not ttr_settings.load(path).custom_cursor
 
 
+def test_set_custom_cursor_backs_up_first_and_leaves_no_temporary_file(tmp_path):
+    path = tmp_path / "settings.json"
+    before = json.dumps({"controls": {"jump": "space"}, "video": {"enable-cursor": True}})
+    path.write_text(before)
+    assert ttr_settings.set_custom_cursor(path, False)
+    assert (tmp_path / "settings.backup.json").read_text() == before
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["settings.backup.json", "settings.json"]
+
+
+def test_set_custom_cursor_failing_keeps_the_old_file(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    before = json.dumps({"video": {"enable-cursor": True}})
+    path.write_text(before)
+
+    def locked(*args):
+        raise PermissionError("in use")
+
+    monkeypatch.setattr(ttr_settings.os, "replace", locked)
+    assert not ttr_settings.set_custom_cursor(path, False)
+    assert path.read_text() == before
+    assert not (tmp_path / "settings.json.tmp").exists()
+
+
 def test_set_custom_cursor_leaves_a_broken_file_alone(tmp_path):
     path = tmp_path / "settings.json"
     path.write_text("{not json")

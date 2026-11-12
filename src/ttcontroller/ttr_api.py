@@ -14,6 +14,7 @@ turns a change into a rumble.
 import ctypes
 import http.client
 import json
+import os
 import secrets
 import threading
 import time
@@ -152,6 +153,7 @@ class ToonInfo:
 
 
 NO_TOON = ToonInfo()
+PLACES_MAX_BYTES = 1_000_000  # places.log past this moves to places.old.log (replacing it) and starts over
 INFO_SECONDS = 1.0  # the toon, its location and Unites: read this often (laff every poll)
 
 def at_estate(info: ToonInfo) -> bool:
@@ -286,6 +288,11 @@ class ToonWatcher:
             return
         try:
             self._places.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                if self._places.stat().st_size > PLACES_MAX_BYTES:
+                    os.replace(self._places, self._places.with_name(self._places.stem + ".old" + self._places.suffix))
+            except FileNotFoundError:
+                pass
             with open(self._places, "a", encoding="utf-8") as out:
                 out.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {text}\n")
         except OSError:

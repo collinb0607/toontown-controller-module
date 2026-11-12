@@ -244,6 +244,20 @@ def test_places_are_written_down_across_sessions(tmp_path):
     assert len(lines) == 5
 
 
+def test_a_big_places_log_starts_over(tmp_path, monkeypatch):
+    monkeypatch.setattr(ttr_api, "PLACES_MAX_BYTES", 100)
+    places = tmp_path / "places.log"
+    places.write_text("x" * 101, encoding="utf-8")
+    (tmp_path / "places.old.log").write_text("the oldest", encoding="utf-8")
+    game = InfoGame({1547: 111}, (116, 116))
+    watcher = ToonWatcher(tmp_path / "token", log=lambda text: None, get=game.get, ports=lambda: game.ports,
+                          clock=lambda: 0.0, places=places)
+    watcher.follow(111)
+    watcher.step()
+    assert (tmp_path / "places.old.log").read_text(encoding="utf-8") == "x" * 101
+    assert "API answering" in places.read_text(encoding="utf-8").splitlines()[0]
+
+
 def test_screens_only_where_they_show():
     info = ttr_api.ToonInfo
     street = info(zone="Loopy Lane", neighborhood="Toontown Central")
