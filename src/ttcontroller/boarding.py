@@ -12,7 +12,8 @@ Controls (the user, Nov 7, 2026): the right stick right opens the panel and left
 it; while it's open, the D-pad up/down hovers the members (or Start a Group; nothing is
 hovered at first, except Start a Group, which is hovered as soon as the panel opens,
 and TTR's own hover, the name turning yellow, shows which), A clicks
-the one hovered, and holding B clicks the red X. The left stick still walks. It stays in
+the one hovered, Y clicks the green go-to-leader button when it's there (the user, Nov 11),
+and holding B clicks the red X. The left stick still walks. It stays in
 use until put away: after the gags, a toon's panel or a dialog had the controls, the D-pad
 works there again and the hover goes back where it was (or to Start a Group).
 
@@ -40,7 +41,9 @@ TAB = _pt(12, 482)
 _TAB_BLUE = tuple(_pt(12, y) for y in (474, 482, 490))  # blue there whether it points right (closed) or left
 _TAB_EDGES = (_pt(2, 480), _pt(22, 480))  # its orange edge, either side of the blue
 _PANEL_ORANGE = (_pt(40, 600), _pt(40, 620))
-_LIST_WHITE = (_pt(250, 430), _pt(250, 540), _pt(60, 540))
+# The list's left margin (x 45) is white beside every row; x 60 is the 4th member's thumb
+# icon (boarding_groups_bossbot_4_toons, Nov 11: read as closed with 4 members).
+_LIST_WHITE = (_pt(250, 430), _pt(250, 540), _pt(45, 540))
 # The panel's height follows the group's size (4 toons for a facility, 8 for a boss:
 # boarding_groups_8_toons), so its layout is placed from its own edges: the list's
 # white top (found up column _TOP_X) and the panel's orange bottom (down column _BOTTOM_X).
@@ -53,6 +56,12 @@ START = _pt(160, 515)  # where it is on the 4-toon panel
 LEAVE = _pt(272, 575)  # and the red X
 _NAME_XS = tuple(85 + 3 * i for i in range(52))
 _NAME_CLICK_X = 105  # a little into the name: the name's own text is what's clickable
+# The big green button under "Going To:" that takes you to the group's leader, only there
+# when you aren't where the leader is (boarding_groups_go_to_leader, Nov 11). It hangs below
+# the panel, so the orange edge reads 33 px lower and the red X is measured from above it.
+_GO_PROBE = (140, -14)  # green there, above the edge's bottom, when it's there (orange otherwise)
+_GO_CENTER = (160, -14)
+_GO_DROP = 33
 
 
 @dataclass(frozen=True)
@@ -61,6 +70,7 @@ class BoardingScreen:
     leave: ui.UIPoint | None = None  # open: the red X
     members: tuple[ui.UIPoint, ...] = ()  # open: where to click each member's name, top to bottom
     start: ui.UIPoint | None = None  # open, in no group: Start a Group
+    go: ui.UIPoint | None = None  # open, away from the leader: the green go-to-leader button
 
     @property
     def items(self) -> tuple[ui.UIPoint, ...]:
@@ -88,6 +98,11 @@ def _is_panel_edge(c: ui.RGB) -> bool:
 
 def _is_white(c: ui.RGB) -> bool:
     return min(c) > 235
+
+
+def _is_go_green(c: ui.RGB) -> bool:
+    r, g, b = c
+    return g > 150 and g - r > 60 and g - b > 60
 
 
 def _is_start_blue(c: ui.RGB) -> bool:
@@ -124,12 +139,17 @@ def read_boarding(width: int, height: int, get_pixel: PixelReader) -> BoardingSc
     while y < height - 1 and _is_panel_edge(get_pixel(bx, y + 1)):
         y += 1
     bottom = y
+    go = None
+    gx, gy = round(_GO_PROBE[0] * scale), round(bottom + _GO_PROBE[1] * scale)
+    if all(_is_go_green(get_pixel(gx + round(dx * scale), gy + round(dy * scale))) for dx in (-10, 0) for dy in (-4, 4)):
+        go = to_point(round(_GO_CENTER[0] * scale), round(bottom + _GO_CENTER[1] * scale))
+        bottom -= round(_GO_DROP * scale)
     leave = to_point(round(_LEAVE_X * scale), round(bottom + _LEAVE_DY * scale))
     # Start a Group: its blue icon down the middle of the list.
     sx = round(_START_X * scale)
     blue = [y for y in range(top, bottom) if _is_start_blue(get_pixel(sx, y))]
     if blue and _START_SIZE[0] * unit <= blue[-1] - blue[0] <= _START_SIZE[1] * unit:
-        return BoardingScreen("open", start=to_point(sx, (blue[0] + blue[-1]) // 2), leave=leave)
+        return BoardingScreen("open", start=to_point(sx, (blue[0] + blue[-1]) // 2), leave=leave, go=go)
     members = []
     for i in range(_ROWS):
         y = round(top + (_ROW0_DY + i * _ROW_STEP) * scale)
@@ -139,7 +159,7 @@ def read_boarding(width: int, height: int, get_pixel: PixelReader) -> BoardingSc
         if ink < 3:
             break
         members.append(to_point(round(_NAME_CLICK_X * scale), y))
-    return BoardingScreen("open", members=tuple(members), leave=leave)
+    return BoardingScreen("open", members=tuple(members), leave=leave, go=go)
 
 
 BOARDING_ACTIONS = {
@@ -147,6 +167,7 @@ BOARDING_ACTIONS = {
     "rs_left": "close it",
     "dpad_up/down": "while it's open: hover the member above/below (or Start a Group)",
     "a": "while one is hovered: click it (a member opens their toon panel; Start a Group starts one)",
+    "y": "while it's open, away from the leader: the green button that takes you to them",
     "hold b": "while it's open, in a group: the red X (leave, or disband as the leader), then Yes/No",
 }
 
@@ -184,6 +205,8 @@ class BoardingMapper:
             taken = {"rs_left", "rs_right", "dpad_up", "dpad_down"}
             if self.item is not None:
                 taken.add("a")
+            if screen.go is not None:
+                taken.add("y")
             return frozenset(taken)
         return frozenset()
 
@@ -230,6 +253,8 @@ class BoardingMapper:
         if "a" in pressed and self.item is not None and items:
             name = "start a group" if screen.start else f"boarding member {self.item + 1}"
             commands.append(PointerCommand("click", items[self.item], name))
+        if "y" in pressed and screen.go is not None:
+            commands.append(PointerCommand("click", screen.go, "go to the group leader"))
         # Holding B: the red X (only in a group; Start a Group's panel has nothing to leave).
         if "b" in buttons:
             if self._b_down_at is None:

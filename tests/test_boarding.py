@@ -245,3 +245,25 @@ def test_leave_goes_where_the_panel_says():
         out += m.update(frozenset({"b"}), t * 0.1, screen)
     [click] = [c for c in out if c.name == "leave boarding group"]
     assert click.point == screen.leave
+
+
+def test_go_to_the_leader_button():
+    screen = replay("boarding_groups_go_to_leader", read_boarding)
+    assert screen.kind == "open" and len(screen.members) == 2
+    assert screen.go is not None and screen.go.to_client(1920, 1009) == (160, 668)
+    assert screen.leave.to_client(1920, 1009) == (272, 576)  # the button hangs below: the X stays put
+    for name in ("boarding_groups_in_a_group_1920x1009", "boarding_groups_8_toons_1920x1009",
+                 "boarding_groups_empty_1920x1009"):
+        assert replay(name, read_boarding).go is None
+
+
+def test_y_goes_to_the_leader():
+    m = BoardingMapper()
+    screen = replay("boarding_groups_go_to_leader", read_boarding)
+    assert "y" in m.buttons(screen)
+    m.update(frozenset(), 0.0, screen)
+    commands = m.update(frozenset({"y"}), 0.1, screen)
+    assert [(c.kind, c.point) for c in commands] == [("click", screen.go)]
+    near = replay("boarding_groups_in_a_group_1920x1009", read_boarding)
+    assert "y" not in m.buttons(near)
+    assert m.update(frozenset({"y"}), 0.3, near) == []

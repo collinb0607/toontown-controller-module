@@ -235,7 +235,8 @@ def _free(c: Context) -> list:
         return [_cover("B", c.leave, 0.125, act=_walk("back")),
                 Bar((("L", "Turn"), ("A", "Charge", _walk("jump"))), _px(960, 905, "center", "bottom"))]
     if c.boarding.kind == "open" and c.boarding.leave is not None:
-        return [_badge("B", c.boarding.leave, -16, -16, 0.9, hold=True),
+        go = [_badge("Y", c.boarding.go, -40, -16, 0.9)] if c.boarding.go is not None else []
+        return go + [_badge("B", c.boarding.leave, -16, -16, 0.9, hold=True),
                 Bar((("DUD", "Move"), ("A", "Select"), ("R:l", "Close")), _by(c.boarding.leave, -107, 104), S * 0.65)]
     out: list = [WALK_BADGES[0]] + ([WALK_BADGES[1]] if c.friends_button else [])
     out.append(WALK_BADGES[2] if c.book_button else OPTIONS_HOLD)
