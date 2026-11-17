@@ -270,8 +270,13 @@ def char_key(ch: str) -> tuple[str, bool]:
 def type_text(send: Callable[[str, bool], None], text: str) -> None:
     """Types text a key at a time: capitals and symbols like ! with Shift held, " " as
     Space, "\b" as Backspace (the on-screen keyboards; "delete" on toon selection)."""
+    # Posted keys (two toons) post capitals and symbols as characters instead.
+    type_char = getattr(send, "type_char", None)
     for ch in text:
         name, shift = char_key(ch)
+        if shift and type_char is not None:
+            type_char(ch)
+            continue
         if shift:
             send("shift", True)
         send(name, True)
@@ -332,7 +337,6 @@ def _xy(x: int, y: int) -> int:
 
 
 # The character each key types with Shift held (letters and the symbols above).
-_SHIFTED_CHAR = {**{c: c.upper() for c in "abcdefghijklmnopqrstuvwxyz"}, **{k: c for c, k in _SHIFTED.items()}}
 
 
 class PostedKeys:
@@ -340,18 +344,18 @@ class PostedKeys:
 
     def __init__(self, hwnd, post=_post, lparam=key_lparam):
         self.hwnd, self._post, self._lparam = hwnd, post, lparam
-        self._shift = False
 
     def __call__(self, name: str, down: bool) -> None:
-        if name == "shift":
-            self._shift = down
-        elif self._shift and name in _SHIFTED_CHAR:
-            # A posted Shift doesn't change the window's keyboard state, so a posted key
-            # would still come out unshifted: the capital or symbol goes as a character.
-            if down:
-                self._post(self.hwnd, WM_CHAR, ord(_SHIFTED_CHAR[name]), self._lparam(name, True))
-            return
+        # Always a plain key down or up. Turning keys into characters while Shift (TTR's
+        # walk key) was held swallowed W/A/S/D's key-ups while walking: the toon walked on
+        # by itself, in circles and backwards (the user, Nov 13).
         self._post(self.hwnd, WM_KEYDOWN if down else WM_KEYUP, keys.vk_code(name), self._lparam(name, down))
+
+    def type_char(self, ch: str) -> None:
+        """One typed character (an on-screen keyboard's capital or symbol). A posted Shift
+        doesn't change the window's keyboard state, so the character itself is posted."""
+        name, _ = char_key(ch)
+        self._post(self.hwnd, WM_CHAR, ord(ch), self._lparam(name, True))
 
 
 class PostedMouse:
@@ -403,6 +407,8 @@ def posted_output(hwnd, send_wrap=None) -> tuple[KeyboardOutput, MouseClicker, P
     send = PostedKeys(hwnd)
     mouse = PostedMouse(hwnd)
     wrapped = send_wrap(send) if send_wrap else send
+    if wrapped is not send:
+        wrapped.type_char = send.type_char  # typing's capitals, through the debug log's wrapper
     return (KeyboardOutput(wrapped),
             MouseClicker(mouse.move, mouse.button, mouse.get_pos, mouse.wheel, steps=POSTED_STEPS, restores=False),
             wrapped)

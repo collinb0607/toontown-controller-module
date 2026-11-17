@@ -126,3 +126,48 @@ def test_drag_presses_moves_and_lets_go_in_order():
         clicker.update(t * 0.05)
     assert events == [("move", 100, 50), ("down",), ("move", 120, 50), ("move", 140, 50), ("up",), ("move", 140, 50)]
     assert not clicker.busy and not clicker.holding and clicker.moved_to == (140, 50)
+
+
+def test_posted_keys_walk_with_shift_held():
+    # TTR's walk key is Shift: W/A/S/D must still go down and up as keys while it's held,
+    # or a key-up is lost and the toon walks on by itself (the user, Nov 13).
+    from ttcontroller.output import WM_KEYDOWN, WM_KEYUP, PostedKeys
+    posted = []
+    send = PostedKeys(1, post=lambda h, m, w, l: posted.append((m, w)), lparam=lambda n, d: 0)
+    send("w", True)
+    send("shift", True)
+    send("a", True)
+    send("w", False)
+    send("a", False)
+    send("shift", False)
+    assert [m for m, _ in posted] == [WM_KEYDOWN, WM_KEYDOWN, WM_KEYDOWN, WM_KEYUP, WM_KEYUP, WM_KEYUP]
+
+
+def test_posted_typing_posts_capitals_as_characters():
+    from ttcontroller.output import WM_CHAR, WM_KEYDOWN, WM_KEYUP, PostedKeys, type_text
+    posted = []
+    send = PostedKeys(1, post=lambda h, m, w, l: posted.append((m, w)), lparam=lambda n, d: 0)
+    type_text(send, "Ab!")
+    assert posted[0] == (WM_CHAR, ord("A"))
+    assert [m for m, _ in posted[1:3]] == [WM_KEYDOWN, WM_KEYUP]
+    assert posted[3] == (WM_CHAR, ord("!"))
+    assert len(posted) == 4  # no Shift posted
+
+
+def test_posted_typing_through_the_debug_wrapper():
+    from ttcontroller.output import WM_CHAR, posted_output, type_text
+    import ttcontroller.output as output
+    posted = []
+    real = output._post
+    output._post = lambda h, m, w, l: posted.append((m, w))
+    try:
+        PostedKeysInit = output.PostedKeys.__init__.__defaults__
+        output.PostedKeys.__init__.__defaults__ = (output._post, lambda n, d: 0)
+        try:
+            _, _, send = posted_output(1, lambda s: (lambda n, d: s(n, d)))
+            type_text(send, "Z")
+        finally:
+            output.PostedKeys.__init__.__defaults__ = PostedKeysInit
+    finally:
+        output._post = real
+    assert posted == [(WM_CHAR, ord("Z"))]

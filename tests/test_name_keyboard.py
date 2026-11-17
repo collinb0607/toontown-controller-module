@@ -189,8 +189,8 @@ def test_posted_capitals_go_as_characters():
     posts = []
     send = PostedKeys(1, post=lambda hwnd, msg, w, l: posts.append((msg, w)))
     type_text(send, "Ab")
-    assert posts == [(WM_KEYDOWN, 0x10), (WM_CHAR, ord("A")), (WM_KEYUP, 0x10),
-                     (WM_KEYDOWN, ord("B")), (WM_KEYUP, ord("B"))]
+    # The capital is one character, with no Shift posted (Shift is TTR's walk key).
+    assert posts == [(WM_CHAR, ord("A")), (WM_KEYDOWN, ord("B")), (WM_KEYUP, ord("B"))]
 
 
 @pytest.mark.parametrize("unit", [1009, 534])
