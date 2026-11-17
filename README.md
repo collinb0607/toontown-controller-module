@@ -119,7 +119,7 @@ Working now:
 
 | Boss fights | Controls |
 |---|---|
-| VP pie round, CJ evidence round | RB throws (TTR's throw key, Delete by default): press for one, hold to wind up, as with the key |
+| VP pie round, CJ evidence round | RB or RT throws (TTR's throw key, Delete by default): press for one, hold to wind up, as with the key |
 | CJ cannon round | Same as the trolley's Cannon game (already works) |
 | CFO | Left stick move crane · hold X magnet · B leave the crane (clicks its red X) |
 | CEO | Left stick turn · hold X charge, release to fire · B leaves the seltzer bottle or golf ball (clicks its red X) |

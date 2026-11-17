@@ -29,6 +29,9 @@ class ScreenView(Protocol):
     def read(self, reader: Callable[..., Any]) -> Any: ...
 
 
+# The buttons that throw in the VP's pie round and the CJ's evidence round, instead of what they do.
+THROW_ACTIONS = ("friendsList", "mail")
+
 # Actions that do more than hold a TTR key.
 SPECIAL_ACTIONS = {
     "sprint": "turn auto-sprint on or off (when on, every run starts with a sprint)",
@@ -38,7 +41,8 @@ SPECIAL_ACTIONS = {
     "speedchat": "open speedchat, or close it if it's open",
     "unite": "open speedchat at the UNITE! menu, on Toon-Up (works in battle too)",
     "mail": "close Clarabelle's mail popup, or click her icon if there's no popup (only "
-            "while walking around, with nothing else open). A tap: it fires when let go of, since holding it "
+            "while walking around, with nothing else open); in the VP's pie round and the CJ's evidence "
+            "round, throw (TTR's performAction, held while the button is). A tap: it fires when let go of, since holding it "
             "is the Silly Meter",
     "sillyMeter": "hold: open the Silly Meter (top right), or close it if it's open",
 }
@@ -161,13 +165,14 @@ class OverworldMapper:
 
         held, fired = self._actions.update(buttons, now)
         controls |= held
-        if pies and any(self.bindings.press.get(b) == "friendsList" for b in buttons):
-            # TTR throws on the key, and winds up while it's held. On RB, the friends list's
-            # button, since a bumper is easier to press over and over than RT (the user,
-            # Nov 10); the list can't open in a boss round anyway.
+        if pies and any(self.bindings.press.get(b) in THROW_ACTIONS for b in buttons):
+            # TTR throws on the key, and winds up while it's held. On RB (the friends list's
+            # button: a bumper is easier to press over and over, the user, Nov 10) or RT
+            # (the mail's), either one (the user, Nov 12). Neither the list nor the mail
+            # opens in a boss round anyway.
             controls.add("performAction")
         for action in fired:
-            if pies and action == "friendsList":
+            if pies and action in THROW_ACTIONS:
                 continue
             self._run(action, now, screen)
         # A shown map, tasks or gags goes away when another mode takes its button

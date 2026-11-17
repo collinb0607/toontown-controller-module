@@ -56,10 +56,14 @@ def test_rb_throws_while_held_in_the_pie_round():
     assert m.take_clicks() == [] and "friendsList" not in m.update(ControllerState(), 0.7, view, pies=True)
 
 
-def test_rt_doesnt_throw_in_the_pie_round():
+def test_rt_throws_too_in_the_pie_round():
+    # Either RB or RT throws (the user, Nov 12).
     m = OverworldMapper()
-    assert "performAction" not in m.update(RT, 0.0, MailView(), pies=True)
-    assert "performAction" not in m.update(ControllerState(), 0.6, MailView(), pies=True)
+    view = MailView()
+    assert "performAction" in m.update(RT, 0.0, view, pies=True)
+    assert "performAction" in m.update(RT, 0.5, view, pies=True)  # held: winding up
+    assert "performAction" not in m.update(ControllerState(), 0.6, view, pies=True)
+    assert m.take_clicks() == []  # no mail click, no Silly Meter
 
 
 def test_rt_is_mail_again_outside_the_round():
