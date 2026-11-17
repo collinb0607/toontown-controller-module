@@ -314,7 +314,10 @@ class KeyboardOutput:
 WM_KEYDOWN, WM_KEYUP, WM_CHAR = 0x0100, 0x0101, 0x0102
 WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEWHEEL = 0x0201, 0x0202, 0x0207, 0x0208, 0x020A
 MK_LBUTTON, MK_MBUTTON = 0x0001, 0x0010
-POSTED_STEPS = (0.05, 0.08, 0.03)  # after the move, after the press, after the rest
+# After the move (the middle press that puts TTR's pointer on the point), after the left
+# press, after the rest: the same as real clicks (the user, Nov 14; (0.05, 0.08) was the
+# Nov 5 tests' pacing, and (0.07, 0.15) felt too slow).
+POSTED_STEPS = (MouseClicker.STEP_SECONDS,) * 3
 
 
 def _post(hwnd, msg: int, wparam: int, lparam: int) -> None:
@@ -387,6 +390,9 @@ class PostedMouse:
         if self._at is None or down == self._down and not down:
             self._down = down
             return  # nothing pressed yet, or a release with nothing held
+        # Nothing else is posted between a press and its release: Panda3D sends a release to
+        # the region the last press went down on and then forgets it, so a middle press and
+        # release while the left button is down loses the left release (Nov 14).
         self._down = down
         self._post(self.hwnd, WM_LBUTTONDOWN if down else WM_LBUTTONUP, MK_LBUTTON if down else 0, self._where())
 

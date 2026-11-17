@@ -48,8 +48,9 @@ def test_a_posted_click_is_paced_and_leaves_the_pointer_on_it():
     clicker = posted_clicker(posts)
     clicker.click(400, 300)  # restore=True by default: nothing to put back when posted
     times = run(clicker, posts)
-    assert times[WM_LBUTTONDOWN] - times[WM_MBUTTONDOWN] >= 0.05 - 1e-9
-    assert times[WM_LBUTTONUP] - times[WM_LBUTTONDOWN] >= 0.08 - 1e-9
+    assert times[WM_LBUTTONDOWN] - times[WM_MBUTTONDOWN] >= MouseClicker.STEP_SECONDS - 1e-9
+    assert times[WM_LBUTTONUP] - times[WM_LBUTTONDOWN] >= MouseClicker.STEP_SECONDS - 1e-9
+    # Nothing between the left press and its release (TTR would lose the release).
     assert [m for m, _, _ in posts] == [WM_MBUTTONDOWN, WM_MBUTTONUP, WM_LBUTTONDOWN, WM_LBUTTONUP]
     assert all(lp == (250 << 16) | 300 for _, _, lp in posts)
     assert not clicker.busy
