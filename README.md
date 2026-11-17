@@ -281,6 +281,12 @@ TTR's 2D UI scales with the window's shorter side, and each element is pinned to
 3. Measure the button in both and check that the anchored offsets agree.
 4. If the module needs to detect whether the button is showing, add probe points where a known color shows, then make test crops with `tools\make_fixture.py`.
 
+## Support this project
+Toontown Controller is free. If it made TTR more fun on a controller, you can support its
+development on Ko-fi:
+
+[![Support me on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/collinbrooksdev)
+
 ## Disclaimer
 
 This is a fan project. It is not affiliated with or endorsed by Toontown Rewritten, Toontown Corporate Clash or Disney.

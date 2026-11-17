@@ -158,3 +158,14 @@ def test_only_one_copy_runs_at_a_time():
     again = instance.claim(name)
     assert again is not None  # free again once the first quits
     instance.release(again)
+
+
+def test_support_link_opens_ko_fi(tmp_path, monkeypatch):
+    window = _tray_window(tmp_path, monkeypatch)
+    assert window.support_link.openExternalLinks()
+    assert launcher.SUPPORT_URL in window.support_link.text()
+    opened = []
+    monkeypatch.setattr(launcher.QDesktopServices, "openUrl", lambda url: opened.append(url.toString()))
+    window.open_support()  # the tray menu's "Support this project"
+    assert opened == [launcher.SUPPORT_URL]
+    window.quit()

@@ -29,14 +29,15 @@ from .settings_window import DARK, LIGHT, Art, Toggle, is_dark, label, styleshee
 from .ttr_api import TOKEN_FILE, toon_name
 from .window import TargetChoice, client_rect, ttr_windows, window_pid
 
-from PySide6.QtCore import QByteArray, QObject, QSize, Qt, QTimer, Signal  # noqa: E402
-from PySide6.QtGui import QAction, QGuiApplication, QIcon, QImage, QPixmap, QTextCursor  # noqa: E402
+from PySide6.QtCore import QByteArray, QObject, QSize, Qt, QTimer, QUrl, Signal  # noqa: E402
+from PySide6.QtGui import QAction, QDesktopServices, QGuiApplication, QIcon, QImage, QPixmap, QTextCursor  # noqa: E402
 from PySide6.QtWidgets import (QApplication, QDialog, QFrame, QHBoxLayout, QLabel, QMainWindow,  # noqa: E402
                                QMenu, QMessageBox, QPlainTextEdit, QPushButton, QSizePolicy,
                                QSystemTrayIcon, QToolButton,
                                QVBoxLayout, QWidget)
 
 TITLE = "Toontown Controller"
+SUPPORT_URL = "https://ko-fi.com/collinbrooksdev"
 SETTINGS_TITLE = "Toontown Controller Settings"
 LOG_FILE = CONFIG_DIR / "ttcontroller.log"  # this session's log, for bug reports
 # Where the window was when it closed, and whether the log was open, so it comes back the
@@ -388,6 +389,11 @@ class ModuleWindow(QMainWindow):
         self.log_button.toggled.connect(self._toggle_log)
         buttons.addWidget(self.log_button)
         buttons.addStretch(1)
+        # Opens the Ko-fi page in the browser.
+        self.support_link = QLabel(f'<a href="{SUPPORT_URL}" style="color: #c8364f;">♥ Support this project</a>')
+        self.support_link.setOpenExternalLinks(True)
+        self.support_link.setToolTip(SUPPORT_URL)
+        buttons.addWidget(self.support_link)
         lay.addLayout(buttons)
 
         self.log_view = QPlainTextEdit()
@@ -631,7 +637,8 @@ class ModuleWindow(QMainWindow):
         tray = QSystemTrayIcon(QApplication.windowIcon(), self)
         tray.setToolTip(TITLE)
         menu = QMenu(self)
-        for text, slot in (("Open", self.show_window), ("Settings", self.open_settings), ("Quit", self.quit)):
+        for text, slot in (("Open", self.show_window), ("Settings", self.open_settings),
+                           ("Support this project", self.open_support), ("Quit", self.quit)):
             action = QAction(text, menu)
             action.triggered.connect(slot)
             menu.addAction(action)
@@ -639,6 +646,9 @@ class ModuleWindow(QMainWindow):
         tray.activated.connect(self._tray_clicked)
         tray.show()
         return tray
+
+    def open_support(self) -> None:
+        QDesktopServices.openUrl(QUrl(SUPPORT_URL))
 
     def _tray_clicked(self, reason) -> None:
         if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
