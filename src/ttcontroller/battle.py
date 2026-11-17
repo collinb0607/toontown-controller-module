@@ -9,6 +9,7 @@ The highlight is the real mouse cursor parked on a button, so TTR shows its
 own hover effect and gag info card.
 """
 
+import colorsys
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -389,9 +390,35 @@ def _read_trunk(width: int, height: int, get_pixel: PixelReader) -> BattleScreen
     return BattleScreen("trunk", tab=tab, items=tuple(items), **choices)
 
 
+# Street walls fooled the color probes alone (the user, Nov 13: a red building read as the
+# gag picker, a yellow wall as the target label; walking was off and B did nothing). So:
+# the picker's Throw and Squirt rows (every toon has both) keep their hue, dimmed or not,
+# just left of their first gag ...
+_TRACK_HUES = ((4, 25), (5, 318))  # (row, hue in degrees): Throw orange, Squirt pink
+# ... and "Which cog/toon?" has its red panel above, below and left of the label, and the
+# blue BACK arrow.
+_TARGET_REDS = (_center(-0.29, 0.02), _center(0.0, -0.025), _center(0.0, 0.065))
+
+
+def _hue_near(c: RGB, hue: float, within: float = 12) -> bool:
+    h, s, v = colorsys.rgb_to_hsv(*(x / 255 for x in c))
+    return s > 0.4 and v > 0.25 and abs((h * 360 - hue + 180) % 360 - 180) <= within
+
+
+def _picker_rows(width: int, height: int, get_pixel: PixelReader) -> bool:
+    return all(_hue_near(get_pixel(*cell(row, 0).offset(-0.13, 0.0).to_client(width, height)), hue)
+               for row, hue in _TRACK_HUES)
+
+
+def _target_panel(width: int, height: int, get_pixel: PixelReader) -> bool:
+    r, g, b = get_pixel(*TARGET_BACK.to_client(width, height))
+    return (b > 170 and b - r > 80 and b - g > 50
+            and all(is_panel_red(get_pixel(*p.to_client(width, height))) for p in _TARGET_REDS))
+
+
 def read_screen(width: int, height: int, get_pixel: PixelReader) -> BattleScreen:
     """Work out which battle screen is showing, and what's on it."""
-    if ui.is_visible(PICKER, width, height, get_pixel):
+    if ui.is_visible(PICKER, width, height, get_pixel) and _picker_rows(width, height, get_pixel):
         usable = tuple(
             tuple(is_usable_gag(get_pixel(*cell(r, c).offset(*_CELL_BG).to_client(width, height)))
                   for c in range(LEVELS))
@@ -400,7 +427,7 @@ def read_screen(width: int, height: int, get_pixel: PixelReader) -> BattleScreen
         return BattleScreen("picker", usable=usable, close=close, **_read_choices(width, height, get_pixel))
     if ui.is_visible(TRUNK_RED, width, height, get_pixel) and ui.is_visible(TRUNK_BLUE, width, height, get_pixel):
         return _read_trunk(width, height, get_pixel)
-    if ui.is_visible(TARGET, width, height, get_pixel):
+    if ui.is_visible(TARGET, width, height, get_pixel) and _target_panel(width, height, get_pixel):
         targets = (_scan_arrows(width, height, get_pixel, COG_ARROW_ROW)
                    or _scan_arrows(width, height, get_pixel, TOON_ARROW_ROW))
         return BattleScreen("target", targets=tuple(targets))

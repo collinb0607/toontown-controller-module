@@ -83,6 +83,19 @@ PANEL_BUTTONS = ((FRIEND, "friends"), (GO_TO, "go to"), (WHISPER, "whisper"), (I
 # leader looking at a member, Kick: a red boot). It joins the up/down list last, after
 # Toon Details, the order they're in going down (the user, Nov 7, 2026). Measured in boarding_groups_invite and _kick, 1920x1009.
 BOARDING = _right(-0.1070, 0.5669)
+# The list's frame, above its red X: green on the right edge, pale green-white on the left.
+# A red building or the trolley behind the X alone read as the list, and walking stopped
+# (the user, Nov 13).
+_LIST_FRAME_RIGHT = ui._FRIENDS_X.offset(96 / 1009, -125 / 1009)
+_LIST_FRAME_LEFT = ui._FRIENDS_X.offset(-95 / 1009, -125 / 1009)
+
+
+def _list_frame(width: int, height: int, get_pixel: PixelReader) -> bool:
+    r, g, b = get_pixel(*_LIST_FRAME_RIGHT.to_client(width, height))
+    left = get_pixel(*_LIST_FRAME_LEFT.to_client(width, height))
+    return g > 130 and g - r > 30 and g - b > 50 and min(left) > 200 and left[1] >= left[0]
+
+
 _BOARDING_LABEL = (_right(-0.1784, 0.4797), _right(-0.1784, 0.5054))  # above and below its text
 _BOARDING_GREEN = (_right(-0.1784, 0.5451), _right(-0.1784, 0.5698))
 
@@ -491,7 +504,7 @@ def read_friends(width: int, height: int, get_pixel: PixelReader, dialogs: bool 
         dialog = _read_dialog(width, height, get_pixel)
         if dialog is not None:
             return dialog
-    listed = ui.is_visible(ui.FRIENDS_CLOSE, width, height, get_pixel)
+    listed = ui.is_visible(ui.FRIENDS_CLOSE, width, height, get_pixel) and _list_frame(width, height, get_pixel)
     if listed or ui.is_visible(PORTRAIT, width, height, get_pixel):
         # A centered Yes/No over them: Invite for a +1 ("Would you like to invite ... as one
         # of your remaining +1 spaces?", boarding_groups_plus_one_invite_popup).

@@ -681,3 +681,20 @@ def test_b_closes_the_gag_trees_picker_instead_of_running(hold):
     m.update(frozenset({"b"}), 1.0, screen)
     commands = m.update(frozenset({"b"}), 2.0, screen) if hold else m.update(frozenset(), 1.1, screen)
     assert [c.point for c in commands if c.kind == "click"] == [PICKER_CLOSE]
+
+
+@pytest.mark.parametrize("n", range(1, 7))
+def test_street_walls_are_not_battle_or_friends_screens(n):
+    # A red building read as the gag picker, a yellow wall as the target label, a red
+    # building or the trolley behind the friends list's X as the list: walking was off and
+    # B did nothing (the user, Nov 13).
+    from ttcontroller.friends import read_friends
+    name = f"street_walls_{n}_1920x1009"
+    data = json.loads((Path(__file__).parent / "fixtures" / "battle" / f"{name}.json").read_text())
+    w, h = data["size"]
+    pixels = data["pixels"]
+
+    def get_pixel(x, y):
+        return tuple(pixels[f"{x},{y}"])
+    assert battle.read_screen(w, h, get_pixel).kind is None
+    assert read_friends(w, h, get_pixel).kind is None
