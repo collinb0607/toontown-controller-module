@@ -162,6 +162,10 @@ class PickDialog(QDialog):
                 if picture is not None:
                     tile.setIcon(QIcon(picture))
                     tile.setIconSize(QSize(picture.width(), picture.height()))
+                if toon_of is not None:
+                    # Room for the toon's name above the window's: it comes later, from a
+                    # thread, and the tile didn't grow for it (both lines were cut off).
+                    tile.setMinimumHeight(tile.sizeHint().height() + tile.fontMetrics().lineSpacing())
                 tile.clicked.connect(lambda _=False, h=hwnd, n=name: self._choose(h, n))
                 row.addWidget(tile)
                 self.tiles.append(tile)
@@ -192,6 +196,8 @@ class PickDialog(QDialog):
         hwnd, name = self._windows[index]
         self.tiles[index].setText(f"{toon}\n{name}")
         self.tiles[index].setAccessibleName(f"{toon}, {name} TTR window")
+        self.tiles[index].updateGeometry()
+        self.adjustSize()
 
     def _choose(self, hwnd: int, name: str) -> None:
         self.chosen = (hwnd, name)
