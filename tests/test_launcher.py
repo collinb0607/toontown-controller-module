@@ -148,7 +148,7 @@ def test_status_names_the_toon():
 def test_only_one_copy_runs_at_a_time():
     # The console (ttcontroller) and the module's window share one lock.
     from ttcontroller import instance
-    name = "Local\ToontownControllerModuleTest"
+    name = r"Local\ToontownControllerModuleTest"
     first = instance.claim(name)
     try:
         assert first is not None

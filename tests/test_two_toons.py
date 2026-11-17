@@ -188,13 +188,21 @@ def test_stack_above_a_window():
 def qt():
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     widgets = pytest.importorskip("PySide6.QtWidgets")
-    return widgets.QApplication.instance() or widgets.QApplication([])
+    from PySide6.QtCore import QCoreApplication, QEvent
+    app = widgets.QApplication.instance() or widgets.QApplication([])
+    yield app
+    # Close and delete every window the test made: Qt objects still alive when Python
+    # exits crashed the test run there now and then (a segfault after every test passed).
+    for w in app.topLevelWidgets():
+        w.close()
+        w.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
 
 def test_the_picker_chooses_a_tile(qt):
     from ttcontroller.launcher import PickDialog
 
-    dialog = PickDialog(windows=[(11, "Left (in front)"), (22, "Right")], thumb=lambda h: None)
+    dialog = PickDialog(windows=[(11, "Left (in front)"), (22, "Right")], thumb=lambda h: None, toon_of=None)
     dialog.tiles[1].click()
     assert dialog.chosen == (22, "Right") and dialog.result() == dialog.DialogCode.Accepted
 
@@ -202,7 +210,7 @@ def test_the_picker_chooses_a_tile(qt):
 def test_the_picker_says_when_no_ttr_is_open(qt):
     from ttcontroller.launcher import PickDialog
 
-    dialog = PickDialog(windows=[], thumb=lambda h: None)
+    dialog = PickDialog(windows=[], thumb=lambda h: None, toon_of=None)
     assert dialog.chosen is None and not hasattr(dialog, "tiles")
 
 
