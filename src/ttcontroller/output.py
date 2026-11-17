@@ -181,6 +181,19 @@ class MouseClicker:
             self._button(False)
             self.holding = False
 
+    def cancel(self) -> None:
+        """The real mouse took over: drop everything waiting, let go of a press the module
+        made, and leave the cursor where the user has it (no putting it back)."""
+        job, step = self._job, self._step
+        pressed = self.holding or (job is not None and (
+            (job[2] is True and step == 2) or (job[2] == "drag" and 2 <= step <= 4)))
+        self._queue.clear()
+        self._job = None
+        self._restore_to = None
+        self.holding = False
+        if pressed:
+            self._button(False)
+
     def hover(self, x: int, y: int) -> None:
         # A newer hover replaces any hover still waiting, so fast stick input doesn't lag behind.
         if self._queue and not self._queue[-1][2] and not self._queue[-1][4]:

@@ -99,7 +99,8 @@ def status_text(controller: str | None, focused: bool, mouse_paused: bool,
     if not focused:
         return "Waiting for TTR", "The controller works while Toontown Rewritten is in front.", "wait"
     if mouse_paused:
-        return "Paused for the mouse", "Press anything on the controller to take over again.", "wait"
+        return ("Paused for the mouse and keyboard",
+                "Press anything on the controller to take over.", "wait")
     return playing, "The controller is driving TTR.", "ok"
 
 
@@ -706,8 +707,8 @@ def main() -> None:
     app.setApplicationName(TITLE)
     use_app_icon(app)
     # One copy at a time: a second one would fight the first over the keys and cursor.
-    mutex = _kernel32.CreateMutexW(None, False, _MUTEX)
-    if ctypes.get_last_error() == ERROR_ALREADY_EXISTS:
+    mutex = instance.claim()
+    if mutex is None:
         # The running copy may be hidden in the tray: ask it to show its window.
         show = _kernel32.OpenEventW(EVENT_MODIFY_STATE, False, _SHOW_EVENT)
         if show:
@@ -721,7 +722,7 @@ def main() -> None:
     window = ModuleWindow(ttr_dir=args.ttr_dir, dry_run=args.dry_run, debug=args.debug)
     window.show()
     code = app.exec()
-    _kernel32.CloseHandle(mutex)
+    instance.release(mutex)
     sys.exit(code)
 
 

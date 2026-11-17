@@ -10,7 +10,7 @@ from ttcontroller import launcher
 def test_status_text():
     assert launcher.status_text(None, True, False)[2] == "off"
     assert launcher.status_text("Pad", False, False)[0] == "Waiting for TTR"
-    assert launcher.status_text("Pad", True, True)[0] == "Paused for the mouse"
+    assert launcher.status_text("Pad", True, True)[0] == "Paused for the mouse and keyboard"
     assert launcher.status_text("Pad", True, False) == ("Playing", "The controller is driving TTR.", "ok")
 
 

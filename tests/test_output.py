@@ -128,6 +128,50 @@ def test_drag_presses_moves_and_lets_go_in_order():
     assert not clicker.busy and not clicker.holding and clicker.moved_to == (140, 50)
 
 
+def _recording_clicker(events):
+    return MouseClicker(
+        move=lambda x, y: events.append(("move", x, y)),
+        button=lambda down: events.append(("down" if down else "up",)),
+        get_pos=lambda: (5, 6),
+    )
+
+
+def test_cancel_drops_waiting_moves():
+    # The real mouse took over: nothing the module queued moves the cursor afterwards.
+    events = []
+    clicker = _recording_clicker(events)
+    clicker.hover(1, 1)
+    clicker.click(2, 2)
+    clicker.cancel()
+    for t in range(10):
+        clicker.update(t * 0.01)
+    assert events == [] and not clicker.busy
+
+
+def test_cancel_mid_click_lets_go_and_leaves_the_cursor():
+    events = []
+    clicker = _recording_clicker(events)
+    clicker.click(2, 2)
+    clicker.update(0.0)  # moved
+    clicker.update(0.05)  # pressed
+    assert events == [("move", 2, 2), ("down",)]
+    clicker.cancel()
+    for t in range(10):
+        clicker.update(0.1 + t * 0.01)
+    assert events == [("move", 2, 2), ("down",), ("up",)]  # no putting the cursor back
+
+
+def test_cancel_lets_go_of_a_hold():
+    events = []
+    clicker = _recording_clicker(events)
+    clicker.hold(3, 3)
+    clicker.update(0.0)
+    clicker.update(0.05)
+    assert clicker.holding
+    clicker.cancel()
+    assert events[-1] == ("up",) and not clicker.holding and not clicker.busy
+
+
 def test_posted_keys_walk_with_shift_held():
     # TTR's walk key is Shift: W/A/S/D must still go down and up as keys while it's held,
     # or a key-up is lost and the toon walks on by itself (the user, Nov 13).
