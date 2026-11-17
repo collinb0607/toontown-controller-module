@@ -286,7 +286,8 @@ class ModuleWindow(QMainWindow):
                  start: bool = True, config_path: Path = CONFIG_FILE, pick_dialog=PickDialog,
                  place_path: Path = PLACE_FILE, tray: bool = True):
         super().__init__()
-        self.setWindowTitle(TITLE)
+        from . import display_version
+        self.setWindowTitle(f"{TITLE} {display_version()}")  # e.g. 0.9 beta
         art = Art()
         self._settings: subprocess.Popen | None = None
         self._bridge = _Bridge()

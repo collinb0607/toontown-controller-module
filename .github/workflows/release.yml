@@ -1,0 +1,74 @@
+# Builds ToontownController.exe on Windows and attaches it, zipped, to a GitHub release.
+# Runs when a version tag is pushed:  git tag v0.9.0-beta && git push origin v0.9.0-beta
+# A tag with "beta" (or "alpha", "rc") in it is published as a pre-release.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:  # manual run from the Actions tab: builds and tests only, no release
+
+permissions:
+  contents: write  # needed to create the release
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Pinned to the versions the module was tested with.
+      - run: python -m pip install pygame-ce==2.5.8 numpy==2.5.4 PySide6-Essentials==6.12.0 windows-capture==2.0.1 pyinstaller==6.22.3 pyinstaller-hooks-contrib==2026.10 pytest==9.2.0
+      - run: python -m pip install --no-deps -e .
+
+      - name: Tests
+        env:
+          PYTHONPATH: "src;tests"
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -q
+
+      - name: Build
+        run: python tools/build_exe.py --no-pause
+
+      # Smoke test: the module must start and still be running after 20 s
+      # (a missing module or library makes a packaged app quit at once).
+      - name: Smoke test
+        run: |
+          $p = Start-Process dist/ToontownController/ToontownController.exe -PassThru
+          Start-Sleep 20
+          if ($p.HasExited) { throw "The app exited early with code $($p.ExitCode)" }
+          Stop-Process -Id $p.Id -Force
+
+      - name: Zip
+        run: |
+          $version = python -c "import sys; sys.path.insert(0, 'src'); import ttcontroller as t; print(t.display_version().replace(' ', '-'))"
+          $zip = "Toontown-Controller-$version-Windows.zip"
+          Compress-Archive -Path dist/ToontownController -DestinationPath $zip
+          "ZIP=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-zip
+          path: ${{ env.ZIP }}
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-zip
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          pre=""
+          case "$TAG" in *alpha*|*beta*|*rc*) pre="--prerelease";; esac
+          version=$(python3 -c "import sys; sys.path.insert(0, 'src'); import ttcontroller as t; print(t.display_version())")
+          gh release create "$TAG" Toontown-Controller-*-Windows.zip $pre --repo "${{ github.repository }}" \
+            --title "Toontown Controller $version" --notes-file .github/release-notes.md

@@ -12,7 +12,6 @@ to). The module pauses while TTR isn't in front, so presses here never reach the
 
 import os
 import sys
-from importlib.metadata import PackageNotFoundError, version
 
 import numpy as np
 
@@ -98,10 +97,9 @@ def stylesheet(t: dict) -> str:
 
 
 def _version() -> str:
-    try:
-        return version("toontown-controller-module")
-    except PackageNotFoundError:
-        return "dev"
+    # From the package itself: the packaged exe has no install record to read it from.
+    from . import display_version
+    return display_version()
 
 
 # ---- art --------------------------------------------------------------------------------
