@@ -4,7 +4,13 @@ Play **Toontown Rewritten** with a controller.
 
 Toontown Rewritten's own controller support is experimental: it covers movement and a virtual mouse, but has no menu navigation and no remapping. This module runs alongside the game, reads your controller, and turns its input into the keyboard and mouse actions the game expects. Controller buttons press on-screen buttons for you directly, so you never have to steer a mouse cursor around. Every button can be remapped.
 
-> **Status:** early development. Overworld controls, battles, the gag shop, NPCs, speedchat menus, the friends list, every page of the shticker book, the start-up screen, toon selection, TTR's own Options window, Make-a-Toon, boarding groups, gardening, the estate mailbox, the CFO and CEO fights and on-screen button hints work. Next: a settings window (M12). See [plan.md](plan.md) for the full design.
+> **Status: 0.9 beta.** Overworld controls, battles, the gag shop, NPCs, SpeedChat, the friends list, every page of the Shticker Book, toon selection and Make-a-Toon, TTR's Options window, boarding groups, gardening, the estate mailbox, fishing, the CFO and CEO fights, the Cog Golf green, two toons at once, on-screen button hints and a Settings window all work. Some of the newest screens haven't been play-tested much yet. See [plan.md](plan.md) for the full design.
+
+## Download
+
+Get **Toontown-Controller-0.9-beta-Windows.zip** from the [Releases page](https://github.com/collinb0607/toontown-controller-module/releases), unzip it, open the **ToontownController** folder and run **ToontownController.exe**. Nothing else to install (no Python). Keep the folder together: the exe needs the `_internal` folder beside it.
+
+Windows may show "Windows protected your PC" because the app isn't signed: click **More info**, then **Run anyway**. Then set up TTR as under [Requirements](#requirements) (windowed, TTR's own controller support off).
 
 ## Features
 
