@@ -448,7 +448,7 @@ def test_cancelling_a_task_delete_goes_back_to_that_task():
 
 def test_the_book_takes_the_trunks_buttons_too():
     # LS is the SOS filter on the Trunk tab, so it mustn't also toggle sprint.
-    assert "ls" in BookMapper().buttons
+    assert "ls" in BookMapper().buttons()
 
 
 def test_resistance_rank_pages_turn_with_left_and_right():

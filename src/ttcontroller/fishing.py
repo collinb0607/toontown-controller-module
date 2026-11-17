@@ -30,7 +30,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from . import ui
-from .battle import PointerCommand
+from .commands import PointerCommand
 
 RGB = tuple[int, int, int]
 PixelReader = Callable[[int, int], RGB]
@@ -177,8 +177,7 @@ class FishingMapper:
     BUTTONS = frozenset({"a", "b", "x", "ls"})
     METHODS = ("move", "stick")
 
-    @staticmethod
-    def buttons(screen: FishingScreen) -> frozenset[str]:
+    def buttons(self, screen: FishingScreen) -> frozenset[str]:
         """The buttons fishing takes from the rest (X only while the card shows; LS, which
         is auto-sprint's elsewhere, switches the casting)."""
         return frozenset({"a", "b", "ls"}) | ({"x"} if screen.kind == "card" else set())
@@ -206,6 +205,10 @@ class FishingMapper:
         self._held = self.BUTTONS
         self.holding = self.grabbed = self._wanted = False
         self._pulled = None
+
+    def reset_buttons(self) -> None:
+        """Start over (the controller paused): as reset()."""
+        self.reset()
 
     def _press(self, now: float) -> list[PointerCommand]:
         self.holding, self.grabbed = True, False

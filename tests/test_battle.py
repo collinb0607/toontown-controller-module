@@ -327,7 +327,7 @@ def test_lb_moves_between_teammates_with_a_face_covering_a_panel():
 
 
 def test_rb_is_left_for_the_friends_list():
-    assert "rb" not in BattleMapper().buttons
+    assert "rb" not in BattleMapper().buttons()
 
 
 def test_lb_does_nothing_when_solo():

@@ -174,13 +174,14 @@ def test_drawer_keeps_its_art_when_a_sheet_is_missing(tmp_path, monkeypatch):
 
 
 def test_name_keyboard_hint_bar_follows_the_family():
+    from ttcontroller import keyboard_draw as kd
     from ttcontroller import name_keyboard as nk
     from ttcontroller.name_keyboard import NameKeyboard
-    keys = nk.find_sheet()
+    keys = kd.find_sheet()
     if keys is None:
         pytest.skip("no input_sprites/all_input.png")
     pygame.init()
-    drawer = nk.KeyboardDrawer(keys, _sheet("xbox"))
+    drawer = kd.KeyboardDrawer(keys, _sheet("xbox"))
     assert drawer.buttons_family == "xbox"
     k = NameKeyboard(text="Ga")
     xbox = drawer.image(k, 1009)

@@ -27,7 +27,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from . import ui
-from .battle import PointerCommand
+from .commands import PointerCommand
 from .bindings import Bindings, ButtonActions
 
 RGB = tuple[int, int, int]
@@ -93,6 +93,8 @@ def _is_close_red(c: RGB) -> bool:
 def _cells(width: int, height: int) -> list[tuple[float, float]]:
     """Every margin cell's middle and tag top, in pixels, in the order they're cycled."""
     unit = min(width, height)
+    if unit <= 0:  # a minimized window
+        return []
     k_max = int(height / unit / CELL_STEP) + 2
     sides = [SIDE_TOP + CELL_STEP * k for k in range(-k_max, k_max + 1)]
     lowest = height / 2 / unit - BOTTOM_TOP - CELL_STEP / 2  # clear of the bottom row
@@ -121,7 +123,7 @@ def _is_facility_tag(width: int, height: int, get_pixel: PixelReader, cx: float,
             if _is_box(c):
                 box.append(c)
             letters += _is_letter(c)
-    if len(box) < 0.5 * n or letters < 0.25 * n:
+    if not n or len(box) < 0.5 * n or letters < 0.25 * n:  # (nothing sampled: a tiny window)
         return False
     # An edge along its top: the scene above isn't the box's color (a light patch of
     # scene, or a bigger panel, would be). Light ground can be above (Lawbot HQ's).

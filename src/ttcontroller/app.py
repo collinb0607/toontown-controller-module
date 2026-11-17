@@ -1,4 +1,10 @@
-"""Main loop: read the controller, map it, and send keys while TTR is focused."""
+"""Main loop: read the controller, map it, and send keys while TTR is focused.
+
+Each frame: poll the controller, follow the target window, hand the screen reads to
+pipeline.ReadWorker (its own thread) every BATTLE_CHECK_SECONDS and take its newest result,
+decide which screen owns the controller (routing.route), run that screen's mapper and the
+overworld's, and draw the overlay (the highlight frame, the hints, the name keyboard, the
+golf aim)."""
 
 import sys
 import threading
@@ -7,41 +13,39 @@ from pathlib import Path
 from typing import Callable
 
 from . import config as module_config
-from . import ttr_settings
-from .battle import BattleMapper, BattleScreen, read_screen
+from . import hints as hint_layout
+from . import keyboard_draw, name_keyboard, overlay, ttr_settings, ui, window_capture
+from .battle import BattleMapper
+from .boarding import BoardingMapper
+from .book import CODE_PANEL_SIZE, CODE_PANEL_TOP, BookMapper
 from .combo import ButtonCombo
 from .controller import NEUTRAL, ControllerReader
-from .dialog import DialogMapper, find_cancel_alone, find_ok_cancel
 from .cursor import MOVE_TOLERANCE, CursorHider
-from .book import CODE_PANEL_SIZE, CODE_PANEL_TOP, BookMapper, BookScreen, read_book
-from .friends import FriendsMapper, FriendsScreen, read_friends
-from .garden import GardenMapper, GardenScreen, read_garden
-from .garden_intro import GardenIntro, GardenIntroMapper, read_garden_intro
-from .golf_green import AIM_RADIUS, PIVOT, GolfGreenMapper, GolfGreenScreen, aim_image, read_golf_green
-from .hud import HudMapper, HudScreen, read_hud
-from .facility import FacilityMapper, FacilityScreen, read_facility
-from .fishing import FishingMapper, FishingScreen, read_fishing
-from .mailbox import MailboxMapper, MailboxScreen, read_mailbox
-from .boarding import BoardingMapper, BoardingScreen, read_boarding
-from .silly import SillyMapper, SillyScreen, read_silly
-from .vp import read_pie_round
-from . import hints as hint_layout
-from . import overlay, ui, window_capture
-from .ceo import read_leave
-from .elevator import read_hop_off
+from .dialog import DialogMapper
+from .facility import FacilityMapper
+from .fishing import FishingMapper, FishingScreen
+from .friends import FriendsMapper
+from .garden import GardenMapper, GardenScreen
+from .garden_intro import GardenIntro, GardenIntroMapper
+from .golf_green import AIM_RADIUS, PIVOT, GolfGreenMapper, aim_image
 from .hint_draw import FAMILY_NAMES, Drawer, find_sheet, pictures_for
+from .hud import HudMapper, HudScreen
 from .keyboard_watch import KeyboardWatcher
-from .mail import read_mail
+from .mailbox import MailboxMapper, MailboxScreen
+from .makeatoon import MakeAToonMapper
 from .mapper import OverworldMapper, controller_buttons
-from .overlay import Highlighter, stack
+from .npc import NpcMapper
+from .options import OptionsMapper, OptionsScreen
 from .output import KeyboardOutput, MouseClicker, cursor_pos, mouse_button_down, posted_output, send_key, type_text
-from .npc import NpcMapper, NpcScreen, read_npc
-from .options import OptionsMapper, OptionsScreen, read_options
-from .pregame import PregameMapper, PregameScreen, read_pregame
-from .makeatoon import MakeAToonMapper, MakeAToonScreen, read_make_a_toon
-from . import name_keyboard
-from .shop import ShopMapper, ShopScreen, read_shop
-from .speedchat import SpeedchatMapper, SpeedchatScreen, read_speedchat
+from .overlay import Highlighter, stack
+from .pipeline import Gates, Guard, Reads, ReadWorker, changes
+from .pregame import PregameMapper
+from .routing import FREE_ORDER, route, share
+from .boarding import BoardingScreen
+from .facility import FacilityScreen
+from .shop import ShopMapper
+from .silly import SillyMapper, SillyScreen
+from .speedchat import SpeedchatMapper
 from .ttr_api import TOKEN_FILE, ToonWatcher, away_from_estate, may_be_in, may_fish, rumble_for
 from .window import (BoundTarget, ForegroundTarget, ForegroundWatcher, TargetChoice, TTRView,  # noqa: F401
                      client_rect, focus_window, make_dpi_aware, ttr_windows, window_pid)
@@ -167,46 +171,39 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
     config = config_watcher.config
     mapper = make_mapper(config)
     battle_mapper = BattleMapper(config.battle)
-    battle_screen = BattleScreen()
     shop_mapper = ShopMapper(config.shop)
-    shop_screen = ShopScreen()
     npc_mapper = NpcMapper(config.npc)
-    npc_screen = NpcScreen()
     speedchat_mapper = SpeedchatMapper(config.speedchat)
-    speedchat_screen = SpeedchatScreen()
     friends_mapper = FriendsMapper(config.friends)
-    friends_screen = FriendsScreen()
+    book_mapper = BookMapper(config.book)
+    # The remappable screens' mappers, by their table's key (config.SCREEN_TABLES).
+    table_mappers = {"battle": battle_mapper, "shop": shop_mapper, "npc": npc_mapper,
+                     "speedchat": speedchat_mapper, "friends": friends_mapper, "book": book_mapper}
     hud_mapper = HudMapper()
-    hud_screen = HudScreen()
     garden_mapper = GardenMapper(cache_path=module_config.CONFIG_DIR / "garden.json")  # the last flower's beans kept there
-    garden_screen = GardenScreen()
     garden_intro_mapper = GardenIntroMapper()  # the first-time gardening introduction's pages
-    garden_intro = GardenIntro()
-    pie_round = False
     golf_mapper = GolfGreenMapper()  # the Cog Golf golf green puzzle
-    golf_screen = GolfGreenScreen()
     golf_aim = None  # its aim angle, while aiming (for the aim line and crosshair)
     fishing_mapper = FishingMapper()  # a pond's dock: hold A to cast (M14)
     fishing_mapper.method = config.fishing_cast
-    fishing_screen = FishingScreen()
     mailbox_mapper = MailboxMapper()  # the estate mailbox, open
     facility_mapper = FacilityMapper()  # Cog HQ facility nametags and their teleport popup
-    facility_screen = FacilityScreen()
-    mailbox_screen = MailboxScreen()
     boarding_mapper = BoardingMapper()  # the boarding group panel by a Cog HQ elevator
-    boarding_screen = BoardingScreen()
     silly_mapper = SillyMapper()  # the Silly Meter's card, open
-    silly_screen = SillyScreen()
     dialog_mapper = DialogMapper()  # an OK/Cancel dialog nothing else owns
-    stray_dialog = None  # its OK and Cancel, when one is showing
     pregame_mapper = PregameMapper()  # the start-up screen and toon selection
-    pregame_screen = PregameScreen()
-    book_mapper = BookMapper(config.book)
-    book_screen = BookScreen()
     options_mapper = OptionsMapper()  # TTR's own Options window, over anything
-    options_screen = OptionsScreen()
     mat_mapper = MakeAToonMapper()  # Make-a-Toon, from an empty slot on toon selection
-    mat_screen = MakeAToonScreen()
+    # Every screen's mapper: all start over when the controller pauses.
+    screen_mappers = (*table_mappers.values(), hud_mapper, garden_mapper, garden_intro_mapper, golf_mapper,
+                      fishing_mapper, mailbox_mapper, facility_mapper, boarding_mapper, silly_mapper,
+                      dialog_mapper, pregame_mapper, options_mapper, mat_mapper)
+    # Walking around, the small screens that can show together (routing.FREE_ORDER).
+    free_mappers = {"dialog": dialog_mapper, "garden": garden_mapper, "facility": facility_mapper,
+                    "mailbox": mailbox_mapper, "hud": hud_mapper, "garden_intro": garden_intro_mapper,
+                    "silly": silly_mapper, "boarding": boarding_mapper}
+    assert tuple(free_mappers) == FREE_ORDER
+    reads = Reads()  # what the screen readers last saw
     send = logged(send_key) if dry_run or debug else send_key
     output = KeyboardOutput(send)
     clicker = MouseClicker()
@@ -221,6 +218,9 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
             log(f"Note: TTR's window can't be captured ({reason}), so the screen is read instead "
                 "and the hints won't show in recordings or streams.")))
         log("Reading TTR's own window picture: the hints show in recordings and streams.")
+    # The screens are read on a thread of their own (pipeline.py).
+    read_worker = ReadWorker(Guard(log, debug), lambda hwnd, background: TTRView(hwnd, background).snapshot())
+    generation = 0  # goes up whenever the screens start over: a read asked for before is dropped
     highlighter = None if dry_run else Highlighter()
     if highlighter is not None and not highlighter.excluded and not window_capture.enabled():
         # A frame the module's own screen reading could see would throw it off.
@@ -251,12 +251,12 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
     # input_sprites/all_input.png; without it, Type-A-Name takes the real keyboard only.
     osk_drawer = osk_window = osk_key = osk_image = None
     if highlighter is not None:
-        osk_sheet = name_keyboard.find_sheet(module_config.CONFIG_DIR)
+        osk_sheet = keyboard_draw.find_sheet(module_config.CONFIG_DIR)
         if osk_sheet is None:
             log("Note: no on-screen keyboard for names (input_sprites/all_input.png wasn't found).")
         else:
             try:
-                osk_drawer = name_keyboard.KeyboardDrawer(osk_sheet, find_sheet(module_config.CONFIG_DIR))
+                osk_drawer = keyboard_draw.KeyboardDrawer(osk_sheet, find_sheet(module_config.CONFIG_DIR))
                 osk_window = Highlighter()
             except Exception as e:  # broken art shouldn't stop the controller
                 log(f"Note: no on-screen keyboard for names ({e}).")
@@ -264,9 +264,6 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
     # or the controller in use); the last one tried, so a missing sheet is looked for once.
     pictures_tried: str | None = None
     hints = ()  # what the hints overlay shows now
-    hint_mail = hint_hop = hint_leave = None  # read for the hints only: Clarabelle's X, Hop off, a CEO leave button
-    hint_friends = True  # the friends button is showing (a timer can take its place)
-    hint_book = True  # the shticker book is showing (else just the Options gadget)
     last_buttons = frozenset()
     foreground = ForegroundWatcher()
     # The window the controller drives (two toons, M13): the TTR window in front, or the
@@ -311,6 +308,12 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
         else:
             clicker.click(x, y, restore=restore, delay=delay)
 
+    def do(commands, view, restore: bool = True) -> None:
+        """Carry out a mapper's PointerCommands."""
+        for c in commands:
+            point(c.kind, c.point, c.name, view, restore=restore, notches=c.notches, delay=c.delay, size=c.size,
+                  frame_at=c.frame_at, color=c.color, to=c.to, pointer=c.pointer)
+
     controller_name = ""  # differs from None so the first poll logs either way
     ttr_focused = None
     # Using the real mouse in TTR pauses the controller, like TTR losing focus, until
@@ -335,6 +338,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
     toon_api = ToonWatcher(module_config.CONFIG_DIR / TOKEN_FILE, log=log,
                            places=module_config.CONFIG_DIR / "places.log")  # M14: what the location reads where
     toon_api.start()
+    read_worker.start()
     # The real keyboard pauses the controller like the mouse (one toon only).
     keyboard_watch = KeyboardWatcher()
     if not dry_run:
@@ -400,23 +404,26 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
             ttr_path = target.path
             focused = dry_run or target.active
             if (focused, target.state) != ttr_focused:
+                was_focused = ttr_focused is not None and ttr_focused[0]
                 ttr_focused = (focused, target.state)
                 if not dry_run:
                     if target.background:
                         log(TARGET_LOG[target.state])
+                    elif focused and not was_focused and now >= switch_until:
+                        # Brought to the front by the mouse or keyboard (a click, Alt+Tab, the
+                        # taskbar): it waits for the controller, so nothing moves the cursor
+                        # under the click that brought it up. (The LB + RB window switch is
+                        # the controller's own, so that one stays active.)
+                        mouse_paused = True
+                        clicker.cancel()
+                        log("TTR focused: press any controller button to take over.")
                     else:
                         log("TTR focused: controller active." if focused else "TTR not focused: controller paused.")
             toon_api.follow(window_pid(target.hwnd) if focused and target.hwnd else None)
             toon = toon_api.info
             garden_mapper.set_toon(toon.id)  # each toon keeps its own last flower
             mapper.unites_available = toon.unites != 0  # not known: as before
-            estate_maybe = not away_from_estate(toon)  # gardening and the mailbox are only there
-            # Boss and Cog HQ screens only where they can show (the user, Nov 11); not known: everywhere.
-            cog_hq_maybe = may_be_in(toon, "Sellbot HQ", "Cashbot HQ", "Lawbot HQ", "Bossbot HQ")
-            pies_maybe = may_be_in(toon, "Sellbot HQ", "Lawbot HQ")  # the VP's pie round, the CJ's evidence
             leave_maybe = may_be_in(toon, "Cashbot HQ", "Bossbot HQ")  # CFO cranes, CEO seltzer and golf balls
-            golf_maybe = may_be_in(toon, "Bossbot HQ")  # the Cog Golf green puzzle
-            fish_maybe = may_fish(toon)
             mapper.leave_possible = leave_maybe
             for change in toon_api.changes():
                 rumble = rumble_for(change)
@@ -443,14 +450,37 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                     config = config_watcher.config
                     reader.set_preferred(config.controller)
                     mapper = make_mapper(config)
-                    battle_mapper.set_bindings(config.battle)
-                    shop_mapper.set_bindings(config.shop)
-                    npc_mapper.set_bindings(config.npc)
-                    speedchat_mapper.set_bindings(config.speedchat)
-                    friends_mapper.set_bindings(config.friends)
-                    book_mapper.set_bindings(config.book)
+                    for key, table_mapper in table_mappers.items():
+                        table_mapper.set_bindings(getattr(config, key))
                     fishing_mapper.method = config.fishing_cast
 
+            # The real mouse and keyboard are checked before any screen runs, so the module
+            # never moves the cursor (a hover, parking it) under the user's own click.
+            # Taken every frame, so a key pressed while paused or in two-toon mode doesn't
+            # pause the controller later.
+            key_pressed = keyboard_watch.take()
+            if not dry_run and not target.background:
+                # The real cursor and mouse are the other toon's in two-toon mode.
+                would_be_active = focused and not mouse_paused and not swapped and now >= switch_until
+                was_hidden = hider.hidden
+                pos = cursor_pos()
+                mouse_moved = hider.update(would_be_active, controller_used(state), pos, clicker.busy,
+                                           clicker.moved_to)
+                if debug and hider.hidden != was_hidden:
+                    reason = "mouse moved" if mouse_moved else "controller used" if hider.hidden else "paused"
+                    log(f"Cursor {'hidden' if hider.hidden else 'shown'} ({reason}) at {pos[0]},{pos[1]}, "
+                        f"module last moved it to {clicker.moved_to}")
+                if would_be_active and (mouse_moved or (not clicker.busy and mouse_button_down())):
+                    mouse_paused = True
+                    clicker.cancel()
+                    hider.show()
+                    log("Mouse in use: controller paused. Press any controller button to resume."
+                        + (f" ({'moved' if mouse_moved else 'button'})" if debug else ""))
+                elif would_be_active and key_pressed:
+                    mouse_paused = True
+                    clicker.cancel()
+                    hider.show()
+                    log("Keyboard in use: controller paused. Press any controller button to resume.")
             if mouse_paused and (not focused or controller_used(state)):
                 mouse_paused = False
                 if focused:
@@ -466,201 +496,37 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                                           toon.name) != status:
                 status = (controller_name, focused, mouse_paused, target_state(target), toon.name)
                 on_status(*status)
+            taken = read_worker.take()
             if not active:
                 clicker.release()
                 # The button that resumes the controller only resumes it: anything held
                 # when it comes back does nothing until it's let go.
                 mapper.reset(ignore_held=True)
-                battle_mapper.reset_buttons()
-                shop_mapper.reset_buttons()
-                npc_mapper.reset_buttons()
-                speedchat_mapper.reset_buttons()
-                friends_mapper.reset_buttons()
-                book_mapper.reset_buttons()
-                pregame_mapper.reset_buttons()
-                pregame_screen = PregameScreen()
-                options_mapper.reset_buttons()
-                options_screen = OptionsScreen()
-                mat_mapper.reset_buttons()
-                mat_screen = MakeAToonScreen()
-                battle_screen = BattleScreen()
-                shop_screen = ShopScreen()
-                npc_screen = NpcScreen()
-                speedchat_screen = SpeedchatScreen()
-                friends_screen = FriendsScreen()
-                hud_screen = HudScreen()
-                garden_screen = GardenScreen()
-                garden_intro_mapper.reset_buttons()
-                garden_intro = GardenIntro()
-                pie_round = False
-                stray_dialog = None
-                mailbox_screen = MailboxScreen()
-                boarding_mapper.reset()
-                boarding_screen = BoardingScreen()
-                silly_mapper.reset_buttons()
-                silly_screen = SillyScreen()
-                golf_screen = GolfGreenScreen()
-                fishing_mapper.reset()
-                fishing_screen = FishingScreen()
-                facility_screen = FacilityScreen()
-                book_screen = BookScreen()
+                for screen_mapper in screen_mappers:
+                    screen_mapper.reset_buttons()
+                reads = Reads()
+                generation += 1  # a read still running is from before: dropped
                 output.release_all()
             else:
                 view = TTRView(target.hwnd, target.background) if target.hwnd else None
-                if view is not None and now >= next_battle_check:
+                if taken is not None and taken[0] == generation:
+                    if dry_run or debug:
+                        for line in changes(reads, taken[1]):
+                            log(line)
+                    reads = taken[1]
+                if view is not None and now >= next_battle_check and not read_worker.busy:
                     next_battle_check = now + BATTLE_CHECK_SECONDS
-                    frame = view.snapshot()
-                    # The book can't open in battle or the shop, so it's read first and the
-                    # rest are skipped while it's open: a blank white page looks like the
-                    # battle's waiting screen, the shop takes a dialog over the book for its
-                    # own, and the NPC bubble search finds false arrows in its pages.
-                    # TTR's Options window is over everything, so it comes first, and the
-                    # rest aren't read while it's open (their screens are under it).
-                    opts = read_options(frame.width, frame.height, frame.get_pixel)
-                    if (opts.kind, opts.tab) != (options_screen.kind, options_screen.tab) and (dry_run or debug):
-                        log(f"Options: {opts.kind or 'closed'}" + (f" ({opts.tab + 1})" if opts.tab is not None else ""))
-                    options_screen = opts
-                    # Make-a-Toon, the start-up screen and toon selection come before all the rest.
-                    mat = (read_make_a_toon(frame.width, frame.height, frame.get_pixel) if opts.kind is None
-                           else MakeAToonScreen())
-                    if mat.kind != mat_screen.kind and (dry_run or debug):
-                        log(f"Make-a-Toon: {mat.kind or 'closed'}")
-                    mat_screen = mat
-                    pregame = (read_pregame(frame.width, frame.height, frame.get_pixel)
-                               if opts.kind is None and mat.kind is None else PregameScreen())
-                    if pregame.kind != pregame_screen.kind and (dry_run or debug):
-                        log(f"Pre-game screen: {pregame.kind or 'none'}")
-                    pregame_screen = pregame
-                    in_game = pregame.kind is None and opts.kind is None and mat.kind is None
-                    book = read_book(frame.width, frame.height, frame.get_pixel) if in_game else BookScreen()
-                    screen = (read_screen(frame.width, frame.height, frame.get_pixel) if in_game and not book.is_open
-                              else BattleScreen())
-                    if screen.kind != battle_screen.kind and (dry_run or debug):
-                        log(f"Battle screen: {screen.kind or 'none'}")
-                    battle_screen = screen
-                    # The Run? prompt's layout is any OK/Cancel dialog's: outside a battle it's
-                    # another one (the estate's "Do you want to teleport?"), handled below.
-                    stray_dialog = (find_ok_cancel(frame.width, frame.height, frame.get_pixel)
-                                    if screen.kind == "confirm_run" else None)
-                    if stray_dialog is None and in_game and screen.kind is None and not book.is_open:
-                        # A dialog with Cancel alone (a boarding group keeping you in the area):
-                        # A and B both click it.
-                        alone = find_cancel_alone(frame.width, frame.height, frame.get_pixel)
-                        stray_dialog = (alone, alone) if alone is not None else None
-                    if ((book.is_open, book.page, book.dialog is not None)
-                            != (book_screen.is_open, book_screen.page, book_screen.dialog is not None)
-                            and (dry_run or debug)):
-                        log(f"Book: {'closed' if not book.is_open else 'dialog' if book.dialog else book.page or 'unknown page'}")
-                    book_screen = book
-                    shop = (read_shop(frame.width, frame.height, frame.get_pixel)
-                            if in_game and screen.kind is None and not book.is_open else ShopScreen())
-                    if shop.kind != shop_screen.kind and (dry_run or debug):
-                        log(f"Gag shop screen: {shop.kind or 'none'}")
-                    shop_screen = shop
-                    # The gags/trunk and tasks HUDs, kept up by toggle_hud. Read before NPCs:
-                    # the bubble search finds arrows in the trunk's SOS cards, as in the book.
-                    # (They only take buttons with nothing else open; see free below.)
                     shown = mapper.shown
-                    hud = (read_hud(frame.width, frame.height, frame.get_pixel,
-                                    gags="showGags" in shown, tasks="showTasks" in shown)
-                           if (in_game and {"showGags", "showTasks"} & shown and not book.is_open
-                               and screen.kind is None and shop.kind is None)
-                           else HudScreen())
-                    if hud.kind != hud_screen.kind and (dry_run or debug):
-                        log(f"HUD: {hud.kind or 'none'}")
-                    hud_screen = hud
-                    # Gardening, before NPCs too: the bubble search finds one in the bean picker.
-                    garden = (read_garden(frame.width, frame.height, frame.get_pixel)
-                              if in_game and estate_maybe and screen.kind is None and shop.kind is None and not book.is_open
-                              else GardenScreen())
-                    if garden != garden_screen and (dry_run or debug):
-                        log(f"Gardening: {'bean picker' if garden.planting else 'sell popup' if garden.selling else 'OK popup' if garden.ok else 'panel' if garden.is_open else 'none'}"
-                            + (" (no beans)" if garden.planting and not garden.beans else ""))
-                    garden_screen = garden
-                    intro = (read_garden_intro(frame.width, frame.height, frame.get_pixel)
-                             if in_game and estate_maybe and screen.kind is None and shop.kind is None and not book.is_open
-                             else GardenIntro())
-                    if intro.is_open != garden_intro.is_open and (dry_run or debug):
-                        log(f"Gardening intro: {'open' if intro.is_open else 'closed'}")
-                    garden_intro = intro
-                    mailbox = (read_mailbox(frame.width, frame.height, frame.get_pixel)
-                               if in_game and estate_maybe and screen.kind is None and shop.kind is None and not book.is_open
-                               else MailboxScreen())
-                    if mailbox != mailbox_screen and (dry_run or debug):
-                        log(f"Mailbox: {'open' if mailbox.is_open else 'closed'}")
-                    mailbox_screen = mailbox
-                    boarding = (read_boarding(frame.width, frame.height, frame.get_pixel)
-                                if in_game and screen.kind is None and shop.kind is None and not book.is_open
-                                else BoardingScreen())
-                    if boarding.kind != boarding_screen.kind and (dry_run or debug):
-                        log(f"Boarding group: {boarding.kind or 'none'}")
-                    boarding_screen = boarding
-                    silly = (read_silly(frame.width, frame.height, frame.get_pixel)
-                             if in_game and screen.kind is None and shop.kind is None and not book.is_open
-                             else SillyScreen())
-                    if silly.card != silly_screen.card and (dry_run or debug):
-                        log(f"Silly Meter: {'open' if silly.card else 'closed'}")
-                    silly_screen = silly
-                    golf = (read_golf_green(frame.width, frame.height, frame.get_pixel)
-                            if in_game and golf_maybe and screen.kind is None and shop.kind is None and not book.is_open
-                            else GolfGreenScreen())
-                    if golf.is_open != golf_screen.is_open and (dry_run or debug):
-                        log(f"Golf green: {'up' if golf.is_open else 'gone'}")
-                    golf_screen = golf
-                    fishing = (read_fishing(frame.width, frame.height, frame.get_pixel)
-                               if in_game and fish_maybe and screen.kind is None and shop.kind is None and not book.is_open
-                               else FishingScreen())
-                    if fishing.kind != fishing_screen.kind and (dry_run or debug):
-                        log(f"Fishing: {fishing.kind or 'none'}")
-                    fishing_screen = fishing
-                    facility = (read_facility(frame.width, frame.height, frame.get_pixel)
-                                if in_game and cog_hq_maybe and screen.kind is None and shop.kind is None and not book.is_open
-                                and not golf.is_open else FacilityScreen())
-                    if ((facility.popup, len(facility.tags)) != (facility_screen.popup, len(facility_screen.tags))
-                            and (dry_run or debug)):
-                        log(f"Facility: {len(facility.tags)} nametags" + (", popup up" if facility.popup else ""))
-                    facility_screen = facility
-                    npc = (read_npc(frame.width, frame.height, frame.get_pixel, frame.rgb())
-                           if (in_game and screen.kind is None and shop.kind is None and not book.is_open
-                               and hud.kind != "trunk" and not garden.popup and not mailbox.is_open
-                               and not golf.is_open and not facility.popup
-                               # The bubble search took the fishing bucket's "4/20" for a
-                               # bubble's arrow; nobody talks to NPCs from a dock.
-                               and fishing.kind is None and not intro.is_open)
-                           else NpcScreen())
-                    if npc.kind != npc_screen.kind and (dry_run or debug):
-                        log(f"NPC screen: {npc.kind or 'none'}")
-                    npc_screen = npc
-                    # Speedchat and the friends list work in battle too.
-                    menus = in_game and shop.kind is None and npc.kind != "tasks"
-                    speedchat = (read_speedchat(frame.width, frame.height, frame.get_pixel,
-                                                look_for_unite=speedchat_mapper.wants_unite)
-                                 if menus else SpeedchatScreen())
-                    if speedchat.is_open != speedchat_screen.is_open and (dry_run or debug):
-                        log(f"Speedchat menu: {'open' if speedchat.is_open else 'closed'}")
-                    speedchat_screen = speedchat
-                    friends = (read_friends(frame.width, frame.height, frame.get_pixel,
-                                            dialogs=friends_mapper.expects_dialog(now)) if menus else FriendsScreen())
-                    if friends.kind != friends_screen.kind and (dry_run or debug):
-                        log(f"Friends screen: {friends.kind or 'none'}")
-                    friends_screen = friends
-                    pies = in_game and pies_maybe and screen.kind is None and not book.is_open and read_pie_round(
-                        frame.width, frame.height, frame.get_pixel)
-                    if pies != pie_round and (dry_run or debug):
-                        log(f"VP pie round: {'on' if pies else 'off'}")
-                    pie_round = pies
-                    # Buttons the overworld reads only when pressed, read here for their hints.
-                    calm = (hint_drawer is not None and config.hints and in_game and screen.kind is None
-                            and shop.kind is None and not book.is_open and npc.kind is None and not speedchat.is_open
-                            and friends.kind is None)
-                    hint_mail = read_mail(frame.width, frame.height, frame.get_pixel) if calm else None
-                    hint_hop = read_hop_off(frame.width, frame.height, frame.get_pixel) if calm else None
-                    hint_leave = read_leave(frame.width, frame.height, frame.get_pixel) if calm and leave_maybe else None
-                    # Walking around and in battle (its badge shows there too).
-                    hint_friends = (hint_drawer is None or not config.hints or not in_game
-                                    or ui.is_visible(ui.FRIENDS_BUTTON, frame.width, frame.height, frame.get_pixel))
-                    hint_book = (not calm
-                                 or ui.is_visible(ui.BOOK_BUTTON, frame.width, frame.height, frame.get_pixel))
+                    read_worker.request(target.hwnd, target.background, Gates(
+                        estate=not away_from_estate(toon),  # gardening and the mailbox are only there
+                        # Boss and Cog HQ screens only where they can show (the user, Nov 11); not known: everywhere.
+                        cog_hq=may_be_in(toon, "Sellbot HQ", "Cashbot HQ", "Lawbot HQ", "Bossbot HQ"),
+                        pies=may_be_in(toon, "Sellbot HQ", "Lawbot HQ"),  # the VP's pie round, the CJ's evidence
+                        leave=leave_maybe, golf=may_be_in(toon, "Bossbot HQ"), fish=may_fish(toon),
+                        hud_gags="showGags" in shown, hud_tasks="showTasks" in shown,
+                        look_for_unite=speedchat_mapper.wants_unite,
+                        friends_dialogs=friends_mapper.expects_dialog(now),
+                        hints=hint_drawer is not None and config.hints), generation)
 
                 state = state or NEUTRAL
                 state, screenshot, step = bumper_combo.update(state, now)
@@ -680,258 +546,185 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                     mapper.tap("screenshot", now)
                 # The run prompt only follows a battle screen: one out of nowhere is another
                 # dialog laid out the same (Ignore A Player's), not a battle.
-                if battle_screen.kind is not None and (battle_screen.kind != "confirm_run"
-                                                       or now - last_battle_seen < BATTLE_GRACE_SECONDS):
+                if reads.battle.kind is not None and (reads.battle.kind != "confirm_run"
+                                                      or now - last_battle_seen < BATTLE_GRACE_SECONDS):
                     last_battle_seen = now
-                if shop_screen.kind is not None:
+                if reads.shop.kind is not None:
                     last_shop_seen = now
-                in_options = options_screen.kind is not None
-                if in_options:
-                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
-                    for command in options_mapper.update(buttons, now, options_screen):
-                        point(command.kind, command.point, command.name, view, size=command.size, restore=False,
-                              notches=command.notches, delay=command.delay, frame_at=command.frame_at,
-                              color=command.color, to=command.to)
+                r = route(reads, battle_recent=now - last_battle_seen < BATTLE_GRACE_SECONDS,
+                          shop_recent=now - last_shop_seen < BATTLE_GRACE_SECONDS)
+                buttons = controller_buttons(state, config.timing.stick_button_threshold)
+                if r.options:
+                    do(options_mapper.update(buttons, now, reads.options), view, restore=False)
                 else:
                     options_mapper.reset_buttons()
                     options_mapper.update(frozenset(), now, OptionsScreen())
-                in_mat = mat_screen.kind is not None and not in_options
-                if in_mat:
-                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
-                    for command in mat_mapper.update(buttons, now, mat_screen):
-                        point(command.kind, command.point, command.name, view, size=command.size, restore=False,
-                              pointer=command.pointer)
+                if r.mat:
+                    do(mat_mapper.update(buttons, now, reads.mat), view, restore=False)
                 else:
                     mat_mapper.reset_buttons()
-                in_pregame = pregame_screen.kind is not None
-                if in_pregame:
-                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
-                    for command in pregame_mapper.update(buttons, now, pregame_screen):
-                        point(command.kind, command.point, command.name, view, restore=False, delay=command.delay)
-                elif in_options:
+                if r.pregame:
+                    do(pregame_mapper.update(buttons, now, reads.pregame), view, restore=False)
+                elif r.options:
                     pregame_mapper.pause()  # back to the same toon when Options closes over toon selection
                 else:
                     pregame_mapper.reset_buttons()
-                in_battle = not in_options and now - last_battle_seen < BATTLE_GRACE_SECONDS
-                in_shop = not (in_options or in_battle) and now - last_shop_seen < BATTLE_GRACE_SECONDS
-                if in_shop:
-                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
-                    for command in shop_mapper.update(buttons, now, shop_screen):
-                        point(command.kind, command.point, command.name, view, size=command.size, restore=False)
+                if r.shop:
+                    do(shop_mapper.update(buttons, now, reads.shop), view, restore=False)
                 else:
                     shop_mapper.reset_buttons()
-                if in_shop and shop_screen.kind != "shop":
+                if r.shop and reads.shop.kind != "shop":
                     highlight = None
-                # NPC screens come and go with the conversation, so no grace period.
-                npc_open = not (in_battle or in_shop) and npc_screen.kind is not None
-                # Speedchat first when both are open: it closes as soon as a phrase is said.
-                # Both are above battles and NPC screens too (a conversation, the task panel),
-                # which pause while one is open.
-                in_speedchat = not in_shop and speedchat_screen.is_open
-                in_friends = not (in_shop or in_speedchat) and friends_screen.kind is not None
-                in_npc = npc_open and not (in_speedchat or in_friends)
-                if (in_speedchat or in_friends) and npc_mapper.choosing:
+                if (r.speedchat or r.friends) and npc_mapper.choosing:
                     # The task panel is under it (speedchat can cover the panel, so it may
                     # not be read until speedchat closes).
                     npc_was_paused = True
-                if in_npc:
+                if r.npc:
                     if npc_was_paused:
                         npc_mapper.rehover()  # back on the task it was on
                         npc_was_paused = False
-                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
-                    for command in npc_mapper.update(buttons, now, npc_screen):
-                        point(command.kind, command.point, command.name, view, size=command.size, restore=False)
+                    do(npc_mapper.update(buttons, now, reads.npc), view, restore=False)
                 else:
                     npc_mapper.reset_buttons()
-                    if not (npc_open or in_speedchat or in_friends):
+                    if not (r.npc_open or r.speedchat or r.friends):
                         # Gone (the panel's timer can close it): nothing to come back to.
                         npc_mapper.forget()
                         npc_was_paused = False
-                # The book is under both (speedchat and the friends list open over it).
-                in_book = not (in_battle or in_shop or npc_open or in_speedchat or in_friends) and book_screen.is_open
-                in_menu = in_speedchat or in_friends or in_book
-                for menu_open, menu_mapper, menu_screen in ((in_speedchat, speedchat_mapper, speedchat_screen),
-                                                            (in_friends, friends_mapper, friends_screen),
-                                                            (in_book, book_mapper, book_screen)):
+                for menu_open, menu_mapper, menu_screen in ((r.speedchat, speedchat_mapper, reads.speedchat),
+                                                            (r.friends, friends_mapper, reads.friends),
+                                                            (r.book, book_mapper, reads.book)):
                     if menu_open:
-                        buttons = controller_buttons(state, config.timing.stick_button_threshold)
-                        for command in menu_mapper.update(buttons, now, menu_screen):
-                            point(command.kind, command.point, command.name, view, size=command.size, restore=False,
-                                  notches=command.notches, delay=command.delay, frame_at=command.frame_at)
+                        do(menu_mapper.update(buttons, now, menu_screen), view, restore=False)
                     else:
                         menu_mapper.reset_buttons()
-                if in_battle and was_in_menu and not in_menu:
+                if r.battle and was_in_menu and not r.menu:
                     battle_mapper.rehover()
-                was_in_menu = in_menu
-                if in_battle and not in_menu:
-                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
-                    for command in battle_mapper.update(buttons, now, battle_screen):
-                        # Battle clicks leave the cursor on the button, where the highlight is.
-                        point(command.kind, command.point, command.name, view, size=command.size, restore=False,
-                              notches=command.notches, delay=command.delay, frame_at=command.frame_at)
+                was_in_menu = r.menu
+                if r.battle and not r.menu:
+                    # Battle clicks leave the cursor on the button, where the highlight is.
+                    do(battle_mapper.update(buttons, now, reads.battle), view, restore=False)
                 else:
                     battle_mapper.reset_buttons()
-                if in_battle and not in_menu and battle_screen.kind not in ("picker", "trunk", "target"):
+                if r.battle and not r.menu and reads.battle.kind not in ("picker", "trunk", "target"):
                     # The frame goes around gags, trunk items and target arrows; once those
                     # are gone (a gag clicked, the round over) it goes too.
                     highlight = None
                 # In battle or the shop, their bindings own their buttons and the left stick doesn't walk.
-                if in_options or in_mat:
-                    blocked = controller_buttons(state, config.timing.stick_button_threshold)
-                elif in_pregame:
-                    # Toon selection takes every button. The start-up screen only Start and B:
-                    # any other key enters, as TTR says.
-                    blocked = (frozenset({"start", "b"}) if pregame_screen.kind == "startup"
-                               else controller_buttons(state, config.timing.stick_button_threshold))
-                elif in_battle:
-                    blocked = frozenset(battle_mapper.buttons)
-                    if in_speedchat:
-                        blocked |= speedchat_mapper.buttons
-                    elif in_friends:
-                        blocked |= friends_mapper.buttons
-                elif in_shop:
-                    blocked = frozenset(shop_mapper.buttons)
-                elif in_npc:
-                    blocked = frozenset(npc_mapper.buttons(npc_screen))
-                elif in_speedchat:
-                    blocked = frozenset(speedchat_mapper.buttons)
-                elif in_friends:
-                    blocked = frozenset(friends_mapper.buttons)
-                elif in_book:
-                    blocked = frozenset(book_mapper.buttons)
+                if r.options or r.mat:
+                    blocked = buttons
+                elif r.pregame:
+                    blocked = pregame_mapper.buttons(reads.pregame)
+                elif r.battle:
+                    blocked = frozenset(battle_mapper.buttons(reads.battle))
+                    if r.speedchat:
+                        blocked |= speedchat_mapper.buttons(reads.speedchat)
+                    elif r.friends:
+                        blocked |= friends_mapper.buttons(reads.friends)
+                elif r.shop:
+                    blocked = frozenset(shop_mapper.buttons(reads.shop))
+                elif r.npc:
+                    blocked = frozenset(npc_mapper.buttons(reads.npc))
+                elif r.speedchat:
+                    blocked = frozenset(speedchat_mapper.buttons(reads.speedchat))
+                elif r.friends:
+                    blocked = frozenset(friends_mapper.buttons(reads.friends))
+                elif r.book:
+                    blocked = frozenset(book_mapper.buttons(reads.book))
                 else:
                     blocked = frozenset()
-                # The golf green: the left stick aims instead of walking.
-                in_golf = golf_screen.is_open and not (in_options or in_mat or in_pregame or in_battle or in_shop
-                                                       or in_speedchat or in_friends or book_screen.is_open)
-                # Fishing on a dock: A casts (held, the stick pulls), B leaves. Its popups
-                # (bucket full, out of jellybeans) are dialogs with one button (stray_dialog).
-                in_fishing = (fishing_screen.kind is not None and stray_dialog is None
-                              and not (in_options or in_mat or in_pregame or in_battle or in_shop
-                                       or in_speedchat or in_friends or book_screen.is_open))
-                # Walking still works mid-conversation (it walks away); not while choosing a task.
-                walk = not (in_options or in_mat or in_battle or in_shop or in_book or npc_screen.kind == "tasks"
-                            or (in_pregame and pregame_screen.kind != "startup") or in_golf or in_fishing)
                 for control in book_mapper.take_taps():
                     mapper.tap(control, now)
                 if book_mapper.take_left_page():
                     highlight = None
                 # The book and friends list let go of their own holds while open (the kart, a
                 # scroll triangle); one held when it closes, or the other opens, is let go here.
-                holder = ("options" if in_options else "makeatoon" if in_mat else "book" if in_book
-                          else "friends" if in_friends else "fishing" if in_fishing else None)
-                if holder is None or holder != last_holder:
+                if r.holder is None or r.holder != last_holder:
                     clicker.release()
-                last_holder = holder
-                free = not (in_options or in_mat or in_pregame or in_battle or in_shop or npc_screen.kind is not None or in_speedchat
-                            or in_friends or book_screen.is_open)
-                if in_golf:
-                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
-                    blocked = blocked | golf_mapper.buttons
-                    for command in golf_mapper.update(buttons, state.left_stick, now, golf_screen):
-                        point(command.kind, command.point, command.name, view, restore=False)
+                last_holder = r.holder
+                if r.golf:
+                    blocked = blocked | golf_mapper.buttons(reads.golf)
+                    do(golf_mapper.update(buttons, state.left_stick, now, reads.golf), view, restore=False)
                     golf_aim = golf_mapper.angle
                 else:
                     if golf_aim is not None or golf_mapper.angle is not None:
                         golf_mapper.reset()
                     golf_aim = None
-                if in_fishing:
-                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
-                    blocked = blocked | fishing_mapper.buttons(fishing_screen)
-                    fishing_commands = fishing_mapper.update(buttons, state.left_stick, now, fishing_screen)
+                if r.fishing:
+                    blocked = blocked | fishing_mapper.buttons(reads.fishing)
+                    fishing_commands = fishing_mapper.update(buttons, state.left_stick, now, reads.fishing)
                 else:
                     # Let go of a cast in progress when the dock goes (a popup, the book).
                     fishing_commands = fishing_mapper.update(frozenset(), (0.0, 0.0), now, FishingScreen())
-                for command in fishing_commands:
-                    point(command.kind, command.point, command.name, view, restore=False)
+                do(fishing_commands, view, restore=False)
                 if fishing_mapper.take_switch():
                     log("Fishing: the stick " + ("moves the aim." if fishing_mapper.method == "move"
                                                  else "is the aim (where it points)."))
                     config_watcher.save_value("fishing_cast", fishing_mapper.method)
                     config = config_watcher.config
-                # The gardening HUD's buttons on Y and X, instead of showing gags and tasks.
-                if free and garden_screen.is_open:
-                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
-                    blocked = blocked | garden_mapper.buttons(garden_screen)
-                    for command in garden_mapper.update(buttons, now, garden_screen):
-                        point(command.kind, command.point, command.name, view, size=command.size,
-                              delay=command.delay)
-                else:
-                    garden_mapper.reset_buttons()
-                    garden_mapper.update(frozenset(), now, GardenScreen())
-                facility_buttons = facility_mapper.buttons(facility_screen) if free else frozenset()
-                if facility_buttons:
-                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
-                    blocked = blocked | facility_buttons
-                    for command in facility_mapper.update(buttons & facility_buttons, now, facility_screen):
-                        point(command.kind, command.point, command.name, view)
-                else:
-                    facility_mapper.reset_buttons()
-                if free and mailbox_screen.is_open:
-                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
-                    blocked = blocked | mailbox_mapper.buttons
-                    for command in mailbox_mapper.update(buttons, now, mailbox_screen):
-                        point(command.kind, command.point, command.name, view)
-                else:
-                    mailbox_mapper.reset_buttons()
-                if free and stray_dialog is not None and not garden_screen.is_open:
-                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
-                    blocked = blocked | DialogMapper.BUTTONS
-                    for command in dialog_mapper.update(buttons, now, stray_dialog):
-                        point(command.kind, command.point, command.name, view)
-                else:
-                    dialog_mapper.reset_buttons()
-                in_hud = free and hud_screen.kind is not None
-                if in_hud:
-                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
-                    blocked = blocked | hud_mapper.buttons(hud_screen)
-                    for command in hud_mapper.update(buttons, now, hud_screen):
-                        point(command.kind, command.point, command.name, view, restore=False,
-                              notches=command.notches, size=command.size, frame_at=command.frame_at)
-                else:
-                    hud_mapper.update(frozenset(), now, HudScreen())
-                # The boarding group panel: the right stick opens and closes it; while open the
-                # D-pad and A work its list, and holding B leaves the group. Not over the HUD
-                # (it has the right stick) or a dialog (A and B are its).
-                # The gardening introduction: A next (Done on the last page), B / D-pad left back.
-                if free and garden_intro.is_open and stray_dialog is None:
-                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
-                    blocked = blocked | GardenIntroMapper.BUTTONS
-                    for command in garden_intro_mapper.update(buttons, now, garden_intro):
-                        point(command.kind, command.point, command.name, view)
-                else:
-                    garden_intro_mapper.reset_buttons()
-                # The Silly Meter's card: D-pad left its details, B closes the top card.
-                if free and silly_screen.card and stray_dialog is None:
-                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
-                    blocked = blocked | SillyMapper.BUTTONS
-                    for command in silly_mapper.update(buttons, now, silly_screen):
-                        point(command.kind, command.point, command.name, view)
-                else:
-                    silly_mapper.reset_buttons()
-                in_boarding = (free and boarding_screen.kind is not None and not in_hud and stray_dialog is None)
-                if in_boarding:
-                    buttons = controller_buttons(state, config.timing.stick_button_threshold)
-                    taken = boarding_mapper.buttons(boarding_screen)
-                    blocked = blocked | taken
-                    for command in boarding_mapper.update(buttons & (taken | {"b"}), now, boarding_screen):
-                        point(command.kind, command.point, command.name, view, restore=False)
-                controls = mapper.update(state, now, view, blocked=blocked, movement=walk, free=free,
-                                         pies=pie_round and free)
+                # Walking around, the small screens showing, each with the buttons no screen
+                # before it took (routing.share): a dialog first, as TTR's dialogs are modal.
+                stray = reads.stray_dialog
+                showing = {
+                    # Not over gardening: its own popups are dialogs it reads itself.
+                    "dialog": r.free and stray is not None and not reads.garden.is_open,
+                    # The gardening HUD's buttons on Y and X, instead of showing gags and tasks.
+                    "garden": r.free and reads.garden.is_open,
+                    "facility": r.free and bool(facility_mapper.buttons(reads.facility)),
+                    "mailbox": r.free and reads.mailbox.is_open,
+                    "hud": r.free and reads.hud.kind is not None,
+                    # The gardening introduction: A next (Done on the last page), B / D-pad left back.
+                    "garden_intro": r.free and reads.garden_intro.is_open and stray is None,
+                    # The Silly Meter's card: D-pad left its details, B closes the top card.
+                    "silly": r.free and reads.silly.card and stray is None,
+                    # The boarding group panel: the right stick opens and closes it; while open the
+                    # D-pad and A work its list, and holding B leaves the group. Not over the HUD
+                    # (it has the right stick) or a dialog (A and B are its).
+                    "boarding": (r.free and reads.boarding.kind is not None and reads.hud.kind is None
+                                 and stray is None),
+                }
+                free_screens = {"dialog": stray, "garden": reads.garden, "facility": reads.facility,
+                                "mailbox": reads.mailbox, "hud": reads.hud, "garden_intro": reads.garden_intro,
+                                "silly": reads.silly, "boarding": reads.boarding}
+                shares = share((name, free_mappers[name].buttons(free_screens[name]))
+                               for name in FREE_ORDER if showing[name])
+                earlier: frozenset[str] = frozenset()
+                for name in FREE_ORDER:
+                    free_mapper, screen = free_mappers[name], free_screens[name]
+                    if not showing[name]:
+                        if name == "garden":
+                            garden_mapper.reset_buttons()
+                            garden_mapper.update(frozenset(), now, GardenScreen())
+                        elif name == "hud":
+                            hud_mapper.update(frozenset(), now, HudScreen())
+                        elif name != "boarding":
+                            free_mapper.reset_buttons()
+                        continue
+                    mine = shares[name]
+                    blocked = blocked | mine
+                    usable = buttons - earlier
+                    if name == "facility":
+                        usable = usable & mine
+                    elif name == "boarding":
+                        usable = usable & (mine | {"b"})  # holding B leaves (B isn't taken: it still closes menus)
+                    restore = name not in ("hud", "boarding")
+                    do(free_mapper.update(usable, now, screen), view, restore=restore)
+                    earlier = earlier | mine
+                controls = mapper.update(state, now, view, blocked=blocked, movement=r.walk, free=r.free,
+                                         pies=reads.pies and r.free)
                 output.sync(controls_to_keys(controls, watcher.settings))
                 for button in mapper.take_clicks():
                     point("click", button.center, button.name, view)
                 # Nothing to hover: while the cursor is hidden, leave it off the game area.
                 # Book pages without controls of their own don't hover anything.
-                idle = not (in_battle or in_shop or in_speedchat or in_friends or npc_screen.kind == "tasks" or in_golf
-                            or (in_fishing and fishing_mapper.holding)
-                            or (in_hud and hud_mapper.hovering())
-                            or (free and garden_screen.planting and garden_mapper.hovering)
-                            or (in_book and book_mapper.hovering(book_screen))
-                            or (in_pregame and pregame_mapper.hovering(pregame_screen))
-                            or (in_boarding and boarding_mapper.hovering(boarding_screen))
-                            or (in_options and options_mapper.hovering(options_screen))
-                            or (in_mat and mat_mapper.hovering(mat_screen)))
+                idle = not (r.battle or r.shop or r.speedchat or r.friends or reads.npc.kind == "tasks" or r.golf
+                            or (r.fishing and fishing_mapper.holding)
+                            or (showing["hud"] and hud_mapper.hovering(reads.hud))
+                            or (r.free and reads.garden.planting and garden_mapper.hovering(reads.garden))
+                            or (r.book and book_mapper.hovering(reads.book))
+                            or (r.pregame and pregame_mapper.hovering(reads.pregame))
+                            or (showing["boarding"] and boarding_mapper.hovering(reads.boarding))
+                            or (r.options and options_mapper.hovering(reads.options))
+                            or (r.mat and mat_mapper.hovering(reads.mat)))
                 if idle and hider.hidden and view is not None and not clicker.busy and not dry_run:
                     spot = view.park_spot()
                     # Checked against where the cursor really is: the mouse may have moved it.
@@ -947,54 +740,30 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                 if mapper.take_unite():
                     speedchat_mapper.go_to_unite(now)
                 if hint_drawer is not None:
-                    mode = ("options" if in_options else "mat" if in_mat else "pregame" if in_pregame
-                            else "speedchat" if in_speedchat else "friends" if in_friends else "battle" if in_battle
-                            else "shop" if in_shop else "npc" if in_npc else "book" if in_book
-                            else "golf" if in_golf else "fishing" if in_fishing else "free")
+                    free = r.free
                     hints = hint_layout.hints_for(hint_layout.Context(
-                        mode=mode, options=options_screen, options_row_y=options_mapper.row_y, mat=mat_screen,
-                        mat_keyboard=mat_mapper.showing_keyboard(mat_screen),
-                        book_keyboard=book_mapper.showing_keyboard(book_screen),
-                        pregame=pregame_screen, toon_slot=pregame_mapper.slot, battle=battle_screen,
-                        shop=shop_screen, friends=friends_screen, npc=npc_screen, book=book_screen,
-                        book_task=book_mapper.hovered_task, fishing=fishing_screen,
-                        fishing_cast=fishing_mapper.method, garden=garden_screen if free else GardenScreen(),
-                        garden_intro=garden_intro if free and stray_dialog is None else GardenIntro(),
-                        mailbox=mailbox_screen if free else MailboxScreen(),
-                        facility=facility_screen if free else FacilityScreen(),
-                        silly=silly_screen if free else SillyScreen(),
-                        boarding=boarding_screen if in_boarding else BoardingScreen(),
-                        dialog=stray_dialog if free and not garden_screen.is_open else None,
-                        mail_close=hint_mail.close if hint_mail else None,
-                        mail_icon=hint_mail.icon if hint_mail else None, hop_off=hint_hop, leave=hint_leave, hud=in_hud,
-                        friends_button=hint_friends, book_button=hint_book,
+                        mode=r.mode, options=reads.options, options_row_y=options_mapper.row_y, mat=reads.mat,
+                        mat_keyboard=mat_mapper.showing_keyboard(reads.mat),
+                        book_keyboard=book_mapper.showing_keyboard(reads.book),
+                        pregame=reads.pregame, toon_slot=pregame_mapper.slot, battle=reads.battle,
+                        shop=reads.shop, friends=reads.friends, npc=reads.npc, book=reads.book,
+                        book_task=book_mapper.hovered_task, fishing=reads.fishing,
+                        fishing_cast=fishing_mapper.method, garden=reads.garden if free else GardenScreen(),
+                        garden_intro=reads.garden_intro if free and stray is None else GardenIntro(),
+                        mailbox=reads.mailbox if free else MailboxScreen(),
+                        facility=reads.facility if free else FacilityScreen(),
+                        silly=reads.silly if free else SillyScreen(),
+                        boarding=reads.boarding if showing["boarding"] else BoardingScreen(),
+                        dialog=stray if showing["dialog"] else None,
+                        mail_close=reads.hint_mail_close, mail_icon=reads.hint_mail_icon, hop_off=reads.hint_hop,
+                        leave=reads.hint_leave, hud=showing["hud"],
+                        friends_button=reads.hint_friends, book_button=reads.hint_book,
                         walking_bar=config.hints_walking_bar, unites=toon.unites != 0,
-                        tables={"overworld": config.bindings, "battle": config.battle, "shop": config.shop,
-                                "npc": config.npc, "speedchat": config.speedchat, "friends": config.friends,
-                                "book": config.book}))
+                        tables=module_config.binding_tables(config)))
                     hint_drawer.hold_seconds = config.timing.hold_seconds
-                    hint_drawer.press(controller_buttons(state, config.timing.stick_button_threshold), now)
+                    hint_drawer.press(buttons, now)
             # Runs even when unfocused, so a click in progress always puts the cursor back.
             clicker.update(now)
-            # Taken every frame, so a key pressed while paused or in two-toon mode doesn't
-            # pause the controller later.
-            key_pressed = keyboard_watch.take()
-            if not dry_run and not target.background:
-                # The real cursor and mouse are the other toon's in two-toon mode.
-                was_hidden = hider.hidden
-                pos = cursor_pos()
-                mouse_moved = hider.update(active, controller_used(state), pos, clicker.busy, clicker.moved_to)
-                if debug and hider.hidden != was_hidden:
-                    reason = "mouse moved" if mouse_moved else "controller used" if hider.hidden else "paused"
-                    log(f"Cursor {'hidden' if hider.hidden else 'shown'} ({reason}) at {pos[0]},{pos[1]}, "
-                        f"module last moved it to {clicker.moved_to}")
-                if active and (mouse_moved or (not clicker.busy and mouse_button_down())):
-                    mouse_paused = True
-                    log("Mouse in use: controller paused. Press any controller button to resume."
-                        + (f" ({'moved' if mouse_moved else 'button'})" if debug else ""))
-                elif active and key_pressed:
-                    mouse_paused = True
-                    log("Keyboard in use: controller paused. Press any controller button to resume.")
             overlay_view = TTRView(target.hwnd, target.background) if active and target.hwnd else None
             above = target.hwnd if target.background else None
             if highlighter is not None:
@@ -1035,17 +804,17 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
                 stack(hint_windows[:len(pieces)][::-1], above=above)
             if osk_window is not None:
                 view = overlay_view
-                shown = None  # (keyboard, its top middle, its size)
-                if mat_mapper.showing_keyboard(mat_screen):
-                    submit = mat_screen.buttons[0]
-                    shown = (mat_mapper.keyboard,
-                             ui.UIPoint(submit.anchor, submit.x + name_keyboard.PANEL_DX,
-                                        submit.y + name_keyboard.PANEL_TOP_DY, submit.v_anchor),
-                             name_keyboard.PANEL_SIZE)
-                elif book_mapper.showing_keyboard(book_screen):
-                    shown = (book_mapper.code_keyboard, CODE_PANEL_TOP, CODE_PANEL_SIZE)
-                if view is not None and presenting and shown is not None:
-                    keyboard, top, size = shown
+                keyboard_shown = None  # (keyboard, its top middle, its size)
+                if mat_mapper.showing_keyboard(reads.mat):
+                    submit = reads.mat.buttons[0]
+                    keyboard_shown = (mat_mapper.keyboard,
+                                      ui.UIPoint(submit.anchor, submit.x + name_keyboard.PANEL_DX,
+                                                 submit.y + name_keyboard.PANEL_TOP_DY, submit.v_anchor),
+                                      name_keyboard.PANEL_SIZE)
+                elif book_mapper.showing_keyboard(reads.book):
+                    keyboard_shown = (book_mapper.code_keyboard, CODE_PANEL_TOP, CODE_PANEL_SIZE)
+                if view is not None and presenting and keyboard_shown is not None:
+                    keyboard, top, size = keyboard_shown
                     unit = min(client_rect(view.hwnd)[2:])
                     x, y = view.to_screen(top)
                     key = (keyboard.keys, keyboard.row, keyboard.col, keyboard.hints, size, unit, x, y,
@@ -1073,6 +842,7 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
     except KeyboardInterrupt:
         log("Quitting.")
     finally:
+        read_worker.stop()
         window_capture.stop_all()
         toon_api.stop()
         keyboard_watch.stop()

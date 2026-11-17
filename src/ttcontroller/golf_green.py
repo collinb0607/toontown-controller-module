@@ -25,7 +25,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from . import ui
-from .battle import PointerCommand
+from .commands import PointerCommand
 from .bindings import Bindings, ButtonActions
 
 RGB = tuple[int, int, int]
@@ -163,13 +163,16 @@ class GolfGreenMapper:
                                       repeats=lambda action: action in ("left", "right"))
         self.angle: float | None = None  # None: not aimed yet (the game just opened)
 
-    @property
-    def buttons(self) -> frozenset[str]:
+    def buttons(self, screen=None) -> frozenset[str]:
         return frozenset(self.bindings.press) | frozenset(self.bindings.hold)
 
     def reset(self) -> None:
         self._actions.reset(ignore_held=True)
         self.angle = None
+
+    def reset_buttons(self) -> None:
+        """Start over (the controller paused): as reset()."""
+        self.reset()
 
     def update(self, buttons: frozenset[str], stick: tuple[float, float], now: float,
                screen: GolfGreenScreen) -> list[PointerCommand]:

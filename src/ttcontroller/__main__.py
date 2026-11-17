@@ -1,5 +1,6 @@
 import argparse
 import ctypes
+import sys
 from pathlib import Path
 
 
@@ -15,10 +16,21 @@ def main() -> None:
         from .settings_window import main as settings
         settings()
         return
+    from . import instance
     from .app import run
+    # One copy at a time, as with the module's window: a second would fight the first
+    # over the keys and the cursor.
+    mutex = instance.claim()
+    if mutex is None:
+        print("Toontown Controller is already running (in its window or another console). "
+              "Close that one first.")
+        sys.exit(1)
     # So it's easy to find in Task Manager (the console window's title names it there).
     ctypes.WinDLL("kernel32").SetConsoleTitleW("Toontown Controller Module")
-    run(ttr_dir=args.ttr_dir, dry_run=args.dry_run, debug=args.debug)
+    try:
+        run(ttr_dir=args.ttr_dir, dry_run=args.dry_run, debug=args.debug)
+    finally:
+        instance.release(mutex)
 
 
 if __name__ == "__main__":

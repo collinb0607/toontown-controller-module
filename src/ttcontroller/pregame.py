@@ -15,8 +15,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from . import ui
-from .battle import PointerCommand
-from .bindings import Bindings, ButtonActions
+from .commands import PointerCommand
+from .bindings import STICK_BUTTONS, TRIGGER_BUTTONS, Bindings, ButtonActions
+from .controller import BUTTONS as PAD_BUTTONS
 from .dialog import find_ok_cancel
 
 PixelReader = Callable[[int, int], ui.RGB]
@@ -161,6 +162,8 @@ PREGAME_ACTIONS = {
 }
 
 _MOVES = {"up": -3, "down": 3, "left": -1, "right": 1}
+# Every button the controller has, as the module names them.
+ALL_BUTTONS = frozenset(PAD_BUTTONS) | frozenset(STICK_BUTTONS) | frozenset(TRIGGER_BUTTONS)
 
 
 @dataclass
@@ -190,6 +193,11 @@ class PregameMapper:
         self._actions.reset(ignore_held=True)
         if self._kind is not None:
             self._kind = "options"
+
+    def buttons(self, screen: PregameScreen | None = None) -> frozenset[str]:
+        """Toon selection takes every button. The start-up screen only Start and B: any
+        other key enters, as TTR says."""
+        return frozenset({"start", "b"}) if screen is not None and screen.kind == "startup" else ALL_BUTTONS
 
     def hovering(self, screen: PregameScreen) -> bool:
         return screen.kind in ("toons", "confirm")

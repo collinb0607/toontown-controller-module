@@ -9,6 +9,8 @@ be (new_toon_popup), and only an OK (read by the garden's OK-only popup reader).
 from collections.abc import Callable
 
 from . import ui
+from .bindings import Bindings, ButtonActions
+from .commands import PointerCommand
 
 RGB = tuple[int, int, int]
 PixelReader = Callable[[int, int], RGB]
@@ -98,8 +100,10 @@ class DialogMapper:
 
     BUTTONS = frozenset({"a", "b"})
 
+    def buttons(self, screen=None) -> frozenset[str]:
+        return self.BUTTONS
+
     def __init__(self):
-        from .bindings import Bindings, ButtonActions
         self._actions = ButtonActions(Bindings(press={"a": "ok", "b": "cancel"}), 0.5,
                                       is_oneshot=lambda action: True)
 
@@ -108,7 +112,6 @@ class DialogMapper:
 
     def update(self, buttons: frozenset[str], now: float, dialog: tuple[ui.UIPoint, ui.UIPoint]):
         """dialog: its OK and Cancel (find_ok_cancel). Returns PointerCommands."""
-        from .battle import PointerCommand
         _, fired = self._actions.update(buttons, now)
         ok, cancel = dialog
         return [PointerCommand("click", ok if action == "ok" else cancel, f"dialog {action}") for action in fired]

@@ -14,7 +14,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from . import ui
-from .battle import DIRECTIONS, TRACKS, PointerCommand, is_usable_gag, move, nearest_usable
+from .battle import DIRECTIONS, TRACKS, is_usable_gag, move, nearest_usable
+from .commands import PointerCommand
 from .bindings import Bindings, ButtonActions
 from .dialog import find_ok_cancel
 
@@ -169,8 +170,7 @@ class ShopMapper:
         self._actions = ButtonActions(bindings, 0.5, is_oneshot=lambda action: True,
                                       repeats=lambda action: action in DIRECTIONS)
 
-    @property
-    def buttons(self) -> set[str]:
+    def buttons(self, screen=None) -> set[str]:
         return self.bindings.buttons()
 
     def reset_buttons(self) -> None:
@@ -178,7 +178,7 @@ class ShopMapper:
         self._buying = None
 
     def update(self, buttons: frozenset[str], now: float, screen: ShopScreen) -> list[PointerCommand]:
-        _, fired = self._actions.update(buttons & self.buttons, now)
+        _, fired = self._actions.update(buttons & self.buttons(), now)
         if now < self._settle_until:
             return []
         commands: list[PointerCommand] = []

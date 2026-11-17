@@ -127,7 +127,7 @@ def test_a_plants_once_the_beans_are_gone_and_reset_brings_back_the_last_bean():
     press(m, picker, "dpad_right", 1.0)
     press(m, picker, "dpad_right", 2.0)  # the orange bean
     assert m.update(frozenset(), 3.0, full) == []
-    assert not m.hovering
+    assert not m.hovering()
     assert press(m, full, "a", 4.0) == [("click", PLANT)]
     assert press(m, full, "dpad_right", 5.0) == []
     assert hovers(m.update(frozenset(), 6.0, picker)) == [(bean_point(2), BEAN_SIZE)]  # reset: the beans are back

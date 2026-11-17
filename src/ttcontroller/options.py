@@ -25,7 +25,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from . import ui
-from .battle import PointerCommand
+from .commands import PointerCommand
 from .bindings import Bindings, ButtonActions
 from .dialog import find_ok_cancel
 from .held_scroll import HeldScroll
@@ -471,8 +471,7 @@ class OptionsMapper:
         self._actions = ButtonActions(bindings, 0.5, is_oneshot=lambda action: True,
                                       repeats=lambda action: action in _MOVES)
 
-    @property
-    def buttons(self) -> set[str]:
+    def buttons(self, screen=None) -> set[str]:
         return self.bindings.buttons()
 
     def _forget(self) -> None:

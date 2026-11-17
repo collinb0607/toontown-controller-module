@@ -75,7 +75,8 @@ from dataclasses import dataclass, field, replace
 
 from . import ui
 from .battle import DIRECTIONS as BATTLE_DIRECTIONS
-from .battle import _REMOTE_ROWS, _REMOTE_XS, BattleMapper, BattleScreen, Item, PointerCommand, _read_trunk, move
+from .battle import REMOTE_ROWS, REMOTE_XS, BattleMapper, BattleScreen, Item, move, read_trunk
+from .commands import PointerCommand
 from .battle import trunk_size as _battle_trunk_size
 from .bindings import Bindings, ButtonActions
 from .dialog import find_ok_cancel
@@ -420,7 +421,7 @@ def _is_trash_blue(c: RGB) -> bool:
     return c[2] > 95 and c[2] > c[0] + 25 and c[0] < 100
 
 
-def _read_tasks(width: int, height: int, get_pixel: PixelReader) -> tuple[ui.UIPoint | bool | None, ...]:
+def read_tasks(width: int, height: int, get_pixel: PixelReader) -> tuple[ui.UIPoint | bool | None, ...]:
     def at(point: ui.UIPoint, dx: float, dy: float) -> RGB:
         return get_pixel(*point.offset(dx, dy).to_client(width, height))
 
@@ -444,7 +445,7 @@ def _is_gag_blue(c: RGB) -> bool:
     return c[2] > 200 and c[0] < 120 and c[1] > 100
 
 
-def _read_gags(width: int, height: int, get_pixel: PixelReader) -> tuple[tuple[bool, ...], ...] | None:
+def read_gags(width: int, height: int, get_pixel: PixelReader) -> tuple[tuple[bool, ...], ...] | None:
     owned = tuple(tuple(any(_is_gag_blue(get_pixel(*gag_point(r, c).offset(dx, dy).to_client(width, height)))
                             for dx, dy in _GAG_PROBES) for c in range(GAG_COLS)) for r in range(GAG_ROWS))
     return owned if any(map(any, owned)) else None
@@ -459,7 +460,7 @@ def to_battle(point: ui.UIPoint) -> ui.UIPoint:
     return _center((point.x - _TRUNK_OFFSET[0]) / _TRUNK_SCALE, (point.y - _TRUNK_OFFSET[1]) / _TRUNK_SCALE)
 
 
-def _read_book_trunk(width: int, height: int, get_pixel: PixelReader) -> BattleScreen | None:
+def read_book_trunk(width: int, height: int, get_pixel: PixelReader) -> BattleScreen | None:
     unit = min(width, height)
 
     def battle_pixel(x: int, y: int) -> RGB:
@@ -467,14 +468,14 @@ def _read_book_trunk(width: int, height: int, get_pixel: PixelReader) -> BattleS
         return get_pixel(round(width / 2 + _TRUNK_SCALE * (x - width / 2) + _TRUNK_OFFSET[0] * unit),
                          round(height / 2 + _TRUNK_SCALE * (y - height / 2) + _TRUNK_OFFSET[1] * unit))
 
-    trunk = _read_trunk(width, height, battle_pixel)
+    trunk = read_trunk(width, height, battle_pixel)
     if trunk.tab is None:
         return None
     if trunk.tab == "remotes":
         # Unlike in battle, remotes you don't have can be hovered too, for their info.
         tabs = tuple(i for i in trunk.items if i.tab)
         slots = tuple(Item(f"{kind} remote {i + 1}", _center(x, y))
-                      for kind, y in _REMOTE_ROWS for i, x in enumerate(_REMOTE_XS))
+                      for kind, y in REMOTE_ROWS for i, x in enumerate(REMOTE_XS))
         return BattleScreen("trunk", tab=trunk.tab, items=tabs + slots)
     if trunk.tab != "SOS" or trunk.filter_open:
         return trunk
@@ -935,9 +936,9 @@ def read_book(width: int, height: int, get_pixel: PixelReader) -> BookScreen:
     districts, chosen, current_district = (_read_districts(width, height, get_pixel) if page == "districts"
                                            else ((), None, None))
     places, go_home, playground = _read_map(width, height, get_pixel) if page == "map" else ((), False, False)
-    trunk = _read_book_trunk(width, height, get_pixel) if page == "gags" else None
-    gags = _read_gags(width, height, get_pixel) if page == "gags" and trunk is None else None
-    tasks = _read_tasks(width, height, get_pixel) if page == "toontasks" else ()
+    trunk = read_book_trunk(width, height, get_pixel) if page == "gags" else None
+    gags = read_gags(width, height, get_pixel) if page == "gags" and trunk is None else None
+    tasks = read_tasks(width, height, get_pixel) if page == "toontasks" else ()
     summon_cogs = _read_summon_cogs(width, height, get_pixel) if page == "cog gallery" else ()
     fish = (_read_fish(width, height, get_pixel, page) if page in _LISTS and top_current == BUCKET_TAB
             else ())
@@ -1130,14 +1131,13 @@ class BookMapper:
         self.code_keyboard.hint_buttons = tuple(
             (button(action), words) for action, words in _CODE_HINTS) + (("START", "Submit"), (button("close"), "Clear"))
 
-    @property
-    def buttons(self) -> set[str]:
+    def buttons(self, screen=None) -> set[str]:
         # The Trunk tab's too (LS cycles the SOS filter), so they don't also do their
         # overworld action (LS is sprint).
         # Start submits on the code keyboard, and stays the book's until it's let go: let go
         # of while still held, the overworld would take it as a press (and close the book).
         start = self.typing or self._start_used
-        return self.bindings.buttons() | self._trunk.buttons | ({"start"} if start else set())
+        return self.bindings.buttons() | self._trunk.buttons() | ({"start"} if start else set())
 
     def showing_keyboard(self, screen: BookScreen) -> bool:
         return self.typing and screen.is_open and screen.page == "options" and screen.dialog is None

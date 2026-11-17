@@ -30,7 +30,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from . import ui
-from .battle import PointerCommand
+from .commands import PointerCommand
 from .bindings import Bindings, ButtonActions
 from .held_scroll import HeldScroll
 from .name_keyboard import CLEAR_PRESSES, NameKeyboard
@@ -413,8 +413,7 @@ class MakeAToonMapper:
         self.keyboard_open = False
         self._typed_until = 0.0
 
-    @property
-    def buttons(self) -> frozenset[str]:
+    def buttons(self, screen=None) -> frozenset[str]:
         return frozenset(self.bindings.press)
 
     def reset_buttons(self) -> None:

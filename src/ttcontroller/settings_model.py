@@ -8,19 +8,12 @@ file is backed up to config.backup.json before the first write of a session.
 """
 
 import json
-import shutil
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from .battle import BATTLE_ACTIONS
 from .bindings import Bindings
-from .book import BOOK_ACTIONS
-from .config import CONFIG_FILE, Config, parse, to_json
-from .friends import FRIENDS_ACTIONS
+from .config import BACKUP_NAME, CONFIG_FILE, SCREEN_TABLES, Config, back_up, parse, to_json, write_json
 from .mapper import SPECIAL_ACTIONS
-from .npc import NPC_ACTIONS
-from .shop import SHOP_ACTIONS
-from .speedchat import SPEEDCHAT_ACTIONS
 from .ttr_settings import DEFAULT_CONTROLS
 
 
@@ -116,10 +109,7 @@ TABLES = (
 TABLE_BY_KEY = {t.key: t for t in TABLES}
 
 # Descriptions for the action menus' tooltips.
-ACTION_HELP = {
-    "overworld": SPECIAL_ACTIONS, "battle": BATTLE_ACTIONS, "shop": SHOP_ACTIONS, "npc": NPC_ACTIONS,
-    "speedchat": SPEEDCHAT_ACTIONS, "friends": FRIENDS_ACTIONS, "book": BOOK_ACTIONS,
-}
+ACTION_HELP = {"overworld": SPECIAL_ACTIONS, **{key: actions for key, actions, *_ in SCREEN_TABLES}}
 
 
 def action_label(table: Table, action: str | None) -> str:
@@ -182,7 +172,7 @@ class SettingsStore:
 
     def __init__(self, path: Path = CONFIG_FILE):
         self.path = path
-        self.backup = path.with_name("config.backup.json")
+        self.backup = path.with_name(BACKUP_NAME)
         self._backed_up = False
         self.error: str | None = None
         self.raw: dict = {}
@@ -209,12 +199,11 @@ class SettingsStore:
     def _write(self) -> None:
         if not self.writable:
             return
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        if not self._backed_up and self.path.exists():
-            shutil.copyfile(self.path, self.backup)
+        if not self._backed_up:
+            back_up(self.path)
             self._backed_up = True
         self.raw.setdefault("_help", to_json(Config())["_help"])
-        self.path.write_text(json.dumps(self.raw, indent=2) + "\n", encoding="utf-8")
+        write_json(self.path, self.raw)
         self.config, self.warnings = parse(self.raw)
 
     def set(self, key: str, value, section: str | None = None) -> None:

@@ -9,7 +9,7 @@ button is held down on the triangle instead, until the direction is let go.
 from collections.abc import Iterable
 
 from . import ui
-from .battle import PointerCommand
+from .commands import PointerCommand
 
 
 class HeldScroll:

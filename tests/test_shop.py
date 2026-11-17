@@ -150,7 +150,7 @@ def test_presets_and_their_dialogs():
 
 
 def test_rb_and_lb_are_shop_buttons():
-    assert {"lb", "rb", "x", "y"} <= ShopMapper().buttons
+    assert {"lb", "rb", "x", "y"} <= ShopMapper().buttons()
     assert shop.default_shop_bindings().press["rb"] == "load_preset"
 
 

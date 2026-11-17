@@ -80,10 +80,17 @@ and sends keyboard keys and real mouse clicks (SendInput) to drive the game.
 
 ## Architecture
 
-`app.py` is the main loop. Each frame (screens every 0.1 s) it snapshots the TTR window
+`app.py` is the main loop (120 Hz): controller, target window, screens, mappers, overlay.
+The screens are read every 0.1 s on their own thread (`pipeline.ReadWorker`; the readers take
+20-60 ms and stalled the controller on its thread): it snapshots the TTR window
 (`TTRView.snapshot`: TTR's own window picture through `window_capture` on Windows 11, so the
 overlay isn't excluded from capture and shows in recordings; else a BitBlt of the screen with
-the overlay excluded) and runs readers, in order, each skipped when an earlier one matched:
+the overlay excluded) and `pipeline.read_all` runs the readers into one `Reads`, in order, each
+skipped when an earlier one matched (`Gates` carries what the loop knows: the API's place, the
+HUD shown...). A read is tagged with a generation, so one started before a pause is dropped.
+Every reader runs through `pipeline.Guard`: one that raises is logged once and reads as not
+showing (it used to stop the controller); tests run every reader on 0x0 and tiny frames.
+A new reader: a call in `read_all`, a field in `Reads`, a line in `changes` (the debug log).
 
 0. `options.read_options`: TTR's own Options window (and its dropdowns and popups), over
    anything; nothing else is read while it's open.
@@ -95,15 +102,27 @@ the overlay excluded) and runs readers, in order, each skipped when an earlier o
 3. `battle.read_screen`, then `shop.read_shop`, then `npc.read_npc`.
 4. `speedchat` and `friends`, which open over battles and the book and take buttons first.
 
+Who owns the controller is `routing.route(reads, battle_recent, shop_recent)`: a pure function
+(tests/test_routing.py), so overlaps are tested there, not found in game. Walking around, the
+small screens that can show together (a stray dialog, gardening, a facility popup, the mailbox,
+the HUD, the gardening intro, the Silly Meter, boarding) get their buttons through
+`routing.share` in `FREE_ORDER`: each gets what it claims less what one before it took, the
+dialog first (TTR's dialogs are modal). tests/test_app_loop.py runs `app.run` end to end in a
+dry run with the Windows parts faked.
+
 Each screen has a **reader** (pixels to a frozen dataclass screen) and a **mapper**
-(buttons + screen to `PointerCommand`s). `bindings.ButtonActions` turns buttons into
+(buttons + screen to `PointerCommand`s, from `commands.py`). Every mapper has the same
+interface (tests/test_interfaces.py): `update(buttons, now, screen)`, `buttons(screen)` (what
+it takes from the overworld) and `hovering(screen)` as methods, never properties, and
+`reset_buttons()` (the loop calls it on every mapper when the controller pauses). `bindings.ButtonActions` turns buttons into
 actions, with one-shots, repeats and hold actions. The overworld `mapper.OverworldMapper`
 always runs; buttons a screen owns are passed as `blocked`, and `movement=False` stops
 walking. Other modes send TTR keys through `mapper.tap(control)` (keys come from TTR's
 settings.json via `ttr_settings`).
 
-`PointerCommand(kind, point, name, notches, delay, size, frame_at)`:
-- `kind` is "hover", "click", "scroll", "hold", "release" or "type" (types `name` letter by letter).
+`PointerCommand(kind, point, name, notches, delay, size, frame_at, color, pointer, to)`; app.py
+carries out every field a mapper sets:
+- `kind` is "hover", "click", "scroll", "hold", "release", "drag" (to `to`) or "type" (types `name` letter by letter).
 - `size` draws the gold highlight frame (`overlay.Highlighter`); `frame_at` puts the
   frame somewhere other than the hover point; `color` changes its color (Options' blue);
   `pointer` draws a pulsing gold pointer left of the item instead (Make-a-Toon).
@@ -129,6 +148,13 @@ theme) over `settings_model.py` (no Qt: tables, labels, move/swap, `SettingsStor
 the touched keys of config.json, tables as differences from the defaults, backup first).
 Run `ToontownControllerSettings` or `ttcontroller --settings`. A new action needs a label in
 the table's `actions` in settings_model (a test checks every default action has one).
+The remappable tables are listed once, in `config.SCREEN_TABLES` (plus walking's `bindings`):
+parsing, writing, checking, the settings window's help and the hints go through it
+(`config.binding_tables`). A new table: a `Config` field, a `SCREEN_TABLES` row and a
+settings_model `Table`. Three processes write config.json (the module, the settings window,
+the module's window), always through `config.write_json` (a file beside it swapped in, so a
+reader never sees half of it), each backing it up to config.backup.json before its first
+write of a session. A file the module can't read keeps the settings it had.
 
 TTR's Local API (`ttr_api.py`, needs Companion App Support on in TTR's Options): JSON on 127.0.0.1:1547+ (one port per game; the port's owner process ties it to a window). TTR asks the player once per Authorization value, so one is saved (`ttr_api_token` beside config.json); never make a new one per run. `ToonWatcher` reads it on a thread for the controller's game: laff (damage rumble), toon name and ID, location, Unites. It has no screen or battle state, so readers stay; prefer it for facts it does have. Place-only readers are gated by `may_be_in`/`may_fish`/`away_from_estate` (unknown place: read as before); `places.log` beside config.json records what the location reads where.
 

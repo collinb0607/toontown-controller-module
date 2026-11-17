@@ -115,3 +115,85 @@ def test_toggle_hud():
     assert parse({"toggle_hud": True})[0].toggle_hud
     config, warnings = parse({"toggle_hud": 1})
     assert not config.toggle_hud and warnings
+
+
+def test_a_broken_file_keeps_the_settings_the_module_had(tmp_path):
+    # A typo mid-edit (or a file caught half written) used to swap every setting for the defaults.
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"timing": {"hold_seconds": 1.5}}))
+    watcher = config.ConfigWatcher(path)
+    path.write_text("{ oops")
+    os.utime(path, (2, 2))
+    assert watcher.check().timing.hold_seconds == 1.5
+    assert watcher.warnings and "keeping the settings" in watcher.warnings[0]
+    path.write_text(json.dumps({"timing": {"hold_seconds": 0.7}}))
+    os.utime(path, (3, 3))
+    assert watcher.check().timing.hold_seconds == 0.7 and watcher.warnings == []
+
+
+def test_a_deleted_file_starts_over_from_the_defaults(tmp_path):
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"timing": {"hold_seconds": 1.5}}))
+    watcher = config.ConfigWatcher(path)
+    path.unlink()
+    assert watcher.check() == config.Config() and path.exists()
+
+
+def test_writes_swap_the_whole_file_in(tmp_path):
+    path = tmp_path / "config.json"
+    path.write_text("{}")
+    config.write_json(path, {"a": 1})
+    assert json.loads(path.read_text()) == {"a": 1}
+    assert [p.name for p in tmp_path.iterdir()] == ["config.json"]  # no temporary file left
+
+
+def test_writes_wait_for_a_reader_to_let_go(tmp_path, monkeypatch):
+    # Windows refuses to replace a file another process has open for a moment.
+    path = tmp_path / "config.json"
+    real = os.replace
+    refusals = []
+
+    def replace(src, dst):
+        if len(refusals) < 2:
+            refusals.append(1)
+            raise PermissionError("in use")
+        real(src, dst)
+
+    monkeypatch.setattr(config.os, "replace", replace)
+    config.write_json(path, {"b": 2})
+    assert json.loads(path.read_text()) == {"b": 2} and len(refusals) == 2
+
+
+def test_the_modules_own_save_backs_the_file_up_first(tmp_path):
+    path = tmp_path / "config.json"
+    path.write_text('{"auto_sprint": false}', encoding="utf-8")
+    watcher = config.ConfigWatcher(path)
+    watcher.save_value("fishing_cast", "stick")
+    backup = tmp_path / config.BACKUP_NAME
+    assert json.loads(backup.read_text()) == {"auto_sprint": False}
+    watcher.save_auto_sprint(True)  # once a session: the backup stays the file from before
+    assert json.loads(backup.read_text()) == {"auto_sprint": False}
+    assert json.loads(path.read_text()) == {"auto_sprint": True, "fishing_cast": "stick"}
+
+
+def test_every_screen_table_is_a_config_field_with_its_defaults():
+    from dataclasses import fields
+    names = {f.name for f in fields(config.Config)}
+    defaults = config.Config()
+    for key, actions, default, _ in config.SCREEN_TABLES:
+        assert key in names and getattr(defaults, key) == default()
+        assert set(default().press.values()) | set(default().hold.values()) <= set(actions), key
+    assert list(config.binding_tables(defaults)) == ["overworld"] + [k for k, *_ in config.SCREEN_TABLES]
+
+
+def test_the_settings_window_has_a_tab_for_every_table():
+    from ttcontroller.settings_model import ACTION_HELP, TABLES
+    keys = list(config.binding_tables(config.Config()))
+    assert [t.key for t in TABLES] == keys and list(ACTION_HELP) == keys
+
+
+def test_unknown_screen_actions_name_their_table():
+    cfg, _ = config.parse({"bindings": {"npc": {"press": {"a": "dance"}}, "book": {"hold": {"x": "fly"}}}})
+    problems = config.unknown_actions(cfg, set())
+    assert "bindings.npc.press.a: unknown NPC action 'dance'" in problems
+    assert "bindings.book.hold.x: unknown book action 'fly'" in problems

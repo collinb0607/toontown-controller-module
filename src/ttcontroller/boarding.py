@@ -25,7 +25,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from . import ui
-from .battle import PointerCommand
+from .commands import PointerCommand
 
 PixelReader = Callable[[int, int], ui.RGB]
 
@@ -192,6 +192,10 @@ class BoardingMapper:
         self._b_fired = False
         self._was_open = False
         self._last = None
+
+    def reset_buttons(self) -> None:
+        """Start over (the controller paused): as reset()."""
+        self.reset()
 
     def hovering(self, screen: BoardingScreen) -> bool:
         return screen.kind == "open" and self.item is not None

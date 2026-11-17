@@ -16,7 +16,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from . import ui
-from .battle import PointerCommand
+from .commands import PointerCommand
 from .bindings import Bindings, ButtonActions
 
 RGB = tuple[int, int, int]
@@ -286,8 +286,7 @@ class SpeedchatMapper:
         self._actions = ButtonActions(bindings, 0.5, is_oneshot=lambda action: True,
                                       repeats=lambda action: action in ("up", "down"))
 
-    @property
-    def buttons(self) -> set[str]:
+    def buttons(self, screen=None) -> set[str]:
         return self.bindings.buttons()
 
     def reset_buttons(self) -> None:

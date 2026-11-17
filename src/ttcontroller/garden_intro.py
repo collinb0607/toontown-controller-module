@@ -15,7 +15,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from . import ui
-from .battle import PointerCommand
+from .commands import PointerCommand
 
 RGB = tuple[int, int, int]
 PixelReader = Callable[[int, int], RGB]
@@ -78,6 +78,9 @@ class GardenIntroMapper:
     """A next (Done on the last page), B or D-pad left back, D-pad right on."""
 
     BUTTONS = frozenset({"a", "b", "dpad_left", "dpad_right"})
+
+    def buttons(self, screen=None) -> frozenset[str]:
+        return self.BUTTONS
 
     def __init__(self):
         self._held: frozenset[str] = frozenset()

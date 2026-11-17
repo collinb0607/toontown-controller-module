@@ -27,6 +27,10 @@ from .screen import Frame
 FRAME_WAIT = 0.1  # how long a read waits for a newer frame before taking the last one
 FIRST_FRAME_WAIT = 0.5  # a new session's first frame takes longer
 IDLE_STOP = 30.0  # a window not read for this long has its session stopped
+# A frame nobody asked for is still copied once the kept copy is this old, so a read that
+# gets no newer frame in time (TTR stalled, its picture not changing) returns a picture at
+# most this much older than the window's last one, not the one from before its last change.
+KEEP_FRESH = 0.1
 BORDERLESS_BUILD = 22000  # Windows 11: a capture without the yellow border
 
 _dwmapi = ctypes.WinDLL("dwmapi")
@@ -70,8 +74,10 @@ def _start_session(hwnd, on_frame: Callable, on_closed: Callable):
 class WindowCapture:
     """One window's capture session, keeping a copy of the newest frame asked for."""
 
-    def __init__(self, hwnd, start=_start_session):
+    def __init__(self, hwnd, start=_start_session, *, clock=time.monotonic):
         self.hwnd = hwnd
+        self._clock = clock
+        self._copied_at = 0.0  # when the kept copy was taken
         self.closed = False
         self.last_used = time.monotonic()
         self._cond = threading.Condition()
@@ -83,8 +89,9 @@ class WindowCapture:
     def _on_frame(self, buffer) -> None:
         # Runs on the capture's own thread; the buffer is only valid during the call.
         with self._cond:
-            if self._want or self._image is None:
+            if self._want or self._image is None or self._clock() - self._copied_at >= KEEP_FRESH:
                 self._image = np.array(buffer)
+                self._copied_at = self._clock()
                 self._want = self._dirty = False
                 self._cond.notify_all()
             else:

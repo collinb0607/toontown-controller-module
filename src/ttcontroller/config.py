@@ -7,6 +7,8 @@ picked up while the module is running.
 
 import json
 import os
+import shutil
+import time
 from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
 
@@ -23,6 +25,8 @@ from .speedchat import SPEEDCHAT_ACTIONS, default_speedchat_bindings
 
 CONFIG_DIR = Path(os.environ.get("APPDATA", Path.home())) / "ToontownControllerModule"
 CONFIG_FILE = CONFIG_DIR / "config.json"
+# A copy of config.json from before this session first rewrote it (the module or Settings).
+BACKUP_NAME = "config.backup.json"
 
 VALID_BUTTONS = (*BUTTONS, *STICK_BUTTONS, *TRIGGER_BUTTONS)
 # Earlier names for the stick clicks, still accepted.
@@ -77,6 +81,19 @@ HELP = {
 # The button_pictures choices: "auto", then hint_draw.FAMILIES.
 BUTTON_PICTURES = ("auto", "xbox", "playstation", "switch", "steam")
 
+# The remappable tables besides walking around's (Config.bindings): each one's key (its
+# Config field and its place under "bindings" in config.json), its actions, its defaults
+# and what its problems call its actions. Everything that goes through every table
+# (reading, writing, checking, the settings window, the hints) goes through this list.
+SCREEN_TABLES = (
+    ("battle", BATTLE_ACTIONS, default_battle_bindings, "battle"),
+    ("shop", SHOP_ACTIONS, default_shop_bindings, "shop"),
+    ("npc", NPC_ACTIONS, default_npc_bindings, "NPC"),
+    ("speedchat", SPEEDCHAT_ACTIONS, default_speedchat_bindings, "speedchat"),
+    ("friends", FRIENDS_ACTIONS, default_friends_bindings, "friends"),
+    ("book", BOOK_ACTIONS, default_book_bindings, "book"),
+)
+
 
 @dataclass
 class Config:
@@ -122,12 +139,8 @@ def to_json(config: Config) -> dict:
         "bindings": {
             "press": config.bindings.press,
             "hold": config.bindings.hold,
-            "battle": {"press": config.battle.press, "hold": config.battle.hold},
-            "shop": {"press": config.shop.press, "hold": config.shop.hold},
-            "npc": {"press": config.npc.press, "hold": config.npc.hold},
-            "speedchat": {"press": config.speedchat.press, "hold": config.speedchat.hold},
-            "friends": {"press": config.friends.press, "hold": config.friends.hold},
-            "book": {"press": config.book.press, "hold": config.book.hold},
+            **{key: {"press": getattr(config, key).press, "hold": getattr(config, key).hold}
+               for key, *_ in SCREEN_TABLES},
         },
         "auto_sprint": config.auto_sprint,
         "hide_cursor": config.hide_cursor,
@@ -179,41 +192,18 @@ def parse(data: dict) -> tuple[Config, list[str]]:
     warnings: list[str] = []
     defaults = Config()
     bindings = data.get("bindings", {})
-    battle = bindings.get("battle", {})
-    shop = bindings.get("shop", {})
-    npc = bindings.get("npc", {})
-    speedchat = bindings.get("speedchat", {})
-    friends = bindings.get("friends", {})
-    book = bindings.get("book", {})
+    tables = {}
+    for key, *_ in SCREEN_TABLES:
+        table, default = bindings.get(key, {}), getattr(defaults, key)
+        tables[key] = Bindings(
+            press=_merge_bindings(default.press, table.get("press", {}), warnings, f"{key}.press"),
+            hold=_merge_bindings(default.hold, table.get("hold", {}), warnings, f"{key}.hold"))
     config = Config(
         bindings=Bindings(
             press=_merge_bindings(defaults.bindings.press, bindings.get("press", {}), warnings, "press"),
             hold=_merge_bindings(defaults.bindings.hold, bindings.get("hold", {}), warnings, "hold"),
         ),
-        battle=Bindings(
-            press=_merge_bindings(defaults.battle.press, battle.get("press", {}), warnings, "battle.press"),
-            hold=_merge_bindings(defaults.battle.hold, battle.get("hold", {}), warnings, "battle.hold"),
-        ),
-        shop=Bindings(
-            press=_merge_bindings(defaults.shop.press, shop.get("press", {}), warnings, "shop.press"),
-            hold=_merge_bindings(defaults.shop.hold, shop.get("hold", {}), warnings, "shop.hold"),
-        ),
-        npc=Bindings(
-            press=_merge_bindings(defaults.npc.press, npc.get("press", {}), warnings, "npc.press"),
-            hold=_merge_bindings(defaults.npc.hold, npc.get("hold", {}), warnings, "npc.hold"),
-        ),
-        speedchat=Bindings(
-            press=_merge_bindings(defaults.speedchat.press, speedchat.get("press", {}), warnings, "speedchat.press"),
-            hold=_merge_bindings(defaults.speedchat.hold, speedchat.get("hold", {}), warnings, "speedchat.hold"),
-        ),
-        friends=Bindings(
-            press=_merge_bindings(defaults.friends.press, friends.get("press", {}), warnings, "friends.press"),
-            hold=_merge_bindings(defaults.friends.hold, friends.get("hold", {}), warnings, "friends.hold"),
-        ),
-        book=Bindings(
-            press=_merge_bindings(defaults.book.press, book.get("press", {}), warnings, "book.press"),
-            hold=_merge_bindings(defaults.book.hold, book.get("hold", {}), warnings, "book.hold"),
-        ),
+        **tables,
         movement=_merge_numbers(defaults.movement, data.get("movement", {}), warnings, "movement"),
         timing=_merge_numbers(defaults.timing, data.get("timing", {}), warnings, "timing"),
     )
@@ -248,19 +238,57 @@ def parse(data: dict) -> tuple[Config, list[str]]:
     return config, warnings
 
 
-def load(path: Path = CONFIG_FILE) -> tuple[Config, list[str]]:
-    """Load the config, creating it with defaults if it doesn't exist yet."""
-    if not path.exists():
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(to_json(Config()), indent=2), encoding="utf-8")
-        return Config(), []
+def binding_tables(config: Config) -> dict[str, Bindings]:
+    """Every remappable table by its key: "overworld" (walking around), then SCREEN_TABLES'."""
+    return {"overworld": config.bindings, **{key: getattr(config, key) for key, *_ in SCREEN_TABLES}}
+
+
+REPLACE_TRIES = 10  # Windows refuses to swap a file in while another process is reading it
+
+
+def write_json(path: Path, data) -> None:
+    """Write JSON so nobody reading the file (the module, the settings window, the
+    module's window: three processes) ever sees half of it: into a file beside it, then
+    swapped in. Raises OSError if it can't."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.with_name(path.name + ".tmp")
+    temp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    for attempt in range(REPLACE_TRIES):
+        try:
+            os.replace(temp, path)
+            return
+        except PermissionError:
+            if attempt == REPLACE_TRIES - 1:
+                raise
+            time.sleep(0.02)
+
+
+def back_up(path: Path) -> None:
+    """Copy config.json to config.backup.json (before a session first rewrites it)."""
+    if path.exists():
+        shutil.copyfile(path, path.with_name(BACKUP_NAME))
+
+
+def read(path: Path) -> tuple[dict | None, str | None]:
+    """The file's JSON object, or None and what's wrong with it."""
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
-        # Don't overwrite a file the user is in the middle of editing.
-        return Config(), [f"couldn't read {path.name} ({e}); using defaults"]
+        return None, f"couldn't read {path.name} ({e})"
     if not isinstance(data, dict):
-        return Config(), [f"{path.name} should contain a JSON object; using defaults"]
+        return None, f"{path.name} should contain a JSON object"
+    return data, None
+
+
+def load(path: Path = CONFIG_FILE) -> tuple[Config, list[str]]:
+    """Load the config, creating it with defaults if it doesn't exist yet."""
+    if not path.exists():
+        write_json(path, to_json(Config()))
+        return Config(), []
+    data, problem = read(path)
+    if problem is not None:
+        # Don't overwrite a file the user is in the middle of editing.
+        return Config(), [f"{problem}; using defaults"]
     return parse(data)
 
 
@@ -271,25 +299,12 @@ def unknown_actions(config: Config, ttr_controls) -> list[str]:
         for button, action in bindings.items():
             if action not in SPECIAL_ACTIONS and action not in ttr_controls:
                 problems.append(f"bindings.{table}.{button}: unknown action {action!r}")
-    for table, bindings in (("battle.press", config.battle.press), ("battle.hold", config.battle.hold)):
-        for button, action in bindings.items():
-            if action not in BATTLE_ACTIONS:
-                problems.append(f"bindings.{table}.{button}: unknown battle action {action!r}")
-    for table, bindings in (("shop.press", config.shop.press), ("shop.hold", config.shop.hold)):
-        for button, action in bindings.items():
-            if action not in SHOP_ACTIONS:
-                problems.append(f"bindings.{table}.{button}: unknown shop action {action!r}")
-    for table, bindings in (("npc.press", config.npc.press), ("npc.hold", config.npc.hold)):
-        for button, action in bindings.items():
-            if action not in NPC_ACTIONS:
-                problems.append(f"bindings.{table}.{button}: unknown NPC action {action!r}")
-    for section, actions, bindings in (("speedchat", SPEEDCHAT_ACTIONS, config.speedchat),
-                                       ("friends", FRIENDS_ACTIONS, config.friends),
-                                       ("book", BOOK_ACTIONS, config.book)):
+    for section, actions, _, label in SCREEN_TABLES:
+        bindings = getattr(config, section)
         for table, table_bindings in (("press", bindings.press), ("hold", bindings.hold)):
             for button, action in table_bindings.items():
                 if action not in actions:
-                    problems.append(f"bindings.{section}.{table}.{button}: unknown {section} action {action!r}")
+                    problems.append(f"bindings.{section}.{table}.{button}: unknown {label} action {action!r}")
     return problems
 
 
@@ -300,6 +315,7 @@ class ConfigWatcher:
         self.path = path
         self.config, self.warnings = load(path)
         self._mtime = self._stat()
+        self._backed_up = False  # config.backup.json taken before this run's first save
 
     def _stat(self) -> float | None:
         try:
@@ -323,18 +339,31 @@ class ConfigWatcher:
             return
         data[key] = value
         try:
-            self.path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            if not self._backed_up:
+                back_up(self.path)
+                self._backed_up = True
+            write_json(self.path, data)
         except OSError:
             return
         self.config = replace(self.config, **{key: value})
         self._mtime = self._stat()
 
     def check(self) -> Config | None:
-        """Return the new config if the file changed since the last check, else None."""
+        """Return the new config if the file changed since the last check, else None.
+        A file that can't be read (a typo mid-edit) keeps the settings the module had,
+        with a warning, instead of falling back to the defaults. A deleted file starts
+        over from the defaults."""
         mtime = self._stat()
         if mtime == self._mtime:
             return None
         self._mtime = mtime
-        self.config, self.warnings = load(self.path)
+        if not self.path.exists():
+            self.config, self.warnings = load(self.path)
+        else:
+            data, problem = read(self.path)
+            if problem is None:
+                self.config, self.warnings = parse(data)
+            else:
+                self.warnings = [f"{problem}; keeping the settings from before until it's fixed"]
         self._mtime = self._stat()
         return self.config

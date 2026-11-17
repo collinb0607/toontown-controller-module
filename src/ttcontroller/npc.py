@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from . import ui
-from .battle import PointerCommand
+from .commands import PointerCommand
 from .bindings import Bindings, ButtonActions
 
 RGB = tuple[int, int, int]

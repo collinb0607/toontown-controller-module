@@ -144,7 +144,7 @@ def test_the_catch_card():
     assert kinds(m.update(frozenset({"a"}), (0.0, 0.0), 0.4, CARD)) == [("hold", CAST)]
     assert kinds(m.update(frozenset({"a"}), (0.0, 0.0), 0.5, FishingScreen("card", True, True))) == [
         ("hover", CAST.offset(*FIRST_PULL))]
-    assert FishingMapper.buttons(CARD) == {"a", "b", "x", "ls"} and FishingMapper.buttons(DOCK) == {"a", "b", "ls"}
+    assert FishingMapper().buttons(CARD) == {"a", "b", "x", "ls"} and FishingMapper().buttons(DOCK) == {"a", "b", "ls"}
 
 
 def test_ls_switches_to_the_stick_being_the_aim_and_back():

@@ -15,9 +15,10 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 
 from . import ui
-from .battle import BattleScreen, PointerCommand
+from .battle import BattleScreen
+from .commands import PointerCommand
 from .bindings import Bindings
-from .book import TASK_CENTERS, BookMapper, BookScreen, _read_book_trunk, _read_gags, _read_tasks, gag_point
+from .book import TASK_CENTERS, BookMapper, BookScreen, read_book_trunk, read_gags, read_tasks, gag_point
 from .ui import RGB
 
 PixelReader = Callable[[int, int], RGB]
@@ -85,18 +86,18 @@ def read_hud(width: int, height: int, get_pixel: PixelReader, gags: bool = True,
 
     if gags:
         if hits(_TRUNK_PROBES) >= _TRUNK_MIN:
-            trunk = _read_book_trunk(width, height, book_pixel)
+            trunk = read_book_trunk(width, height, book_pixel)
             if trunk is not None:
                 return HudScreen("trunk", trunk=trunk)
         if hits(_TRACK_PROBES) >= _TRACK_MIN:
-            owned = _read_gags(width, height, book_pixel)
+            owned = read_gags(width, height, book_pixel)
             if owned is not None:
                 return HudScreen("gags", gags=owned)
     if tasks:
         shown = [all(_is_parchment(get_pixel(*center.offset(dx, SHIFT + dy).to_client(width, height)))
                      for dx, dy in _SCROLL_DOTS) for center in TASK_CENTERS]
         if any(shown):
-            scrolls = _read_tasks(width, height, book_pixel)
+            scrolls = read_tasks(width, height, book_pixel)
             scrolls = tuple(task if up else None for task, up in zip(scrolls, shown))
             if any(t is not None for t in scrolls):
                 return HudScreen("tasks", tasks=scrolls)
@@ -137,7 +138,11 @@ class HudMapper:
         self._kind = None
         self._held = frozenset()
 
-    def hovering(self) -> bool:
+    def reset_buttons(self) -> None:
+        """Start over (the controller paused): as reset()."""
+        self.reset()
+
+    def hovering(self, screen=None) -> bool:
         return self._kind is not None and self._book.hovering(self._screen)
 
     def buttons(self, screen: HudScreen) -> frozenset[str]:

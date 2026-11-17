@@ -12,7 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from . import ui
-from .battle import PointerCommand
+from .commands import PointerCommand
 from .bindings import Bindings, ButtonActions
 
 RGB = tuple[int, int, int]
@@ -89,8 +89,7 @@ class MailboxMapper:
         self._actions = ButtonActions(self.bindings, 0.5, is_oneshot=lambda action: True,
                                       repeats=lambda action: action in ("previous", "next"))
 
-    @property
-    def buttons(self) -> frozenset[str]:
+    def buttons(self, screen=None) -> frozenset[str]:
         return frozenset(self.bindings.press)
 
     def reset_buttons(self) -> None:

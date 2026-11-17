@@ -237,7 +237,8 @@ def _free(c: Context) -> list:
     if c.hop_off is not None:
         return [_badge("B", c.hop_off, -142, 0, scale=2.0, act=_walk("back"))]  # big, on Hop off's left end
     if c.leave is not None:
-        return [_cover("B", c.leave, 0.125, act=_walk("back")),
+        # The red X's own size (75 px at 1920x1009): 0.125 covered "Leave Golf Ball" under it.
+        return [_cover("B", c.leave, 0.078, act=_walk("back")),
                 Bar((("L", "Turn"), ("A", "Charge", _walk("jump"))), _px(960, 905, "center", "bottom"))]
     if c.boarding.kind == "open" and c.boarding.leave is not None:
         go = [_badge("Y", c.boarding.go, -40, -16, 0.9)] if c.boarding.go is not None else []

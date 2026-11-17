@@ -143,3 +143,18 @@ def test_status_names_the_toon():
     assert launcher.status_text("Pad", True, False, "ok", "Doctor Pickles")[0] == "Playing Doctor Pickles"
     assert launcher.status_text("Pad", False, False, toon="Doctor Pickles")[0] == "Waiting for TTR"
     assert launcher.status_text("Pad", True, False, toon=None)[0] == "Playing"
+
+
+def test_only_one_copy_runs_at_a_time():
+    # The console (ttcontroller) and the module's window share one lock.
+    from ttcontroller import instance
+    name = "Local\ToontownControllerModuleTest"
+    first = instance.claim(name)
+    try:
+        assert first is not None
+        assert instance.claim(name) is None  # a second copy is turned away
+    finally:
+        instance.release(first)
+    again = instance.claim(name)
+    assert again is not None  # free again once the first quits
+    instance.release(again)

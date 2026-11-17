@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 
 from . import ui
 from .bindings import Bindings, ButtonActions
+from .commands import PointerCommand  # noqa: F401 (also imported from here)
 from .dialog import find_ok_cancel
 
 RGB = tuple[int, int, int]
@@ -113,8 +114,8 @@ _SOS_ROW_STEP = 0.18
 # The right stick turns the wheel a notch at a time over the cards, as in the book's
 # Trunk; once they've stopped moving for this long, the card under the cursor is hovered.
 SOS_STICK_SETTLE_SECONDS = 0.2
-_REMOTE_XS = (-0.3053, -0.1982, -0.0912)
-_REMOTE_ROWS = (("damage", -0.0837), ("healing", 0.1065))
+REMOTE_XS = (-0.3053, -0.1982, -0.0912)
+REMOTE_ROWS = (("damage", -0.0837), ("healing", 0.1065))
 _TRICK_ROW0, _TRICK_STEP, _TRICK_ROWS = -0.1829, 0.0551, 7
 _TRICK_ICON_X, _TRICK_X = -0.062, -0.0377  # probe on the blue button, click its center
 
@@ -358,7 +359,7 @@ def _read_knob(width: int, height: int, get_pixel: PixelReader) -> tuple[bool, b
     return middle > _SOS_KNOB_TOP, middle < _SOS_KNOB_BOTTOM
 
 
-def _read_trunk(width: int, height: int, get_pixel: PixelReader) -> BattleScreen:
+def read_trunk(width: int, height: int, get_pixel: PixelReader) -> BattleScreen:
     def looks(point: ui.UIPoint, test) -> bool:
         return test(get_pixel(*point.to_client(width, height)))
 
@@ -378,8 +379,8 @@ def _read_trunk(width: int, height: int, get_pixel: PixelReader) -> BattleScreen
         return BattleScreen("trunk", tab=tab, items=tuple(items),
                             can_scroll=_read_knob(width, height, get_pixel), **choices)
     elif tab == "remotes":
-        for kind, y in _REMOTE_ROWS:
-            items += [Item(f"{kind} remote {i + 1}", _center(x, y)) for i, x in enumerate(_REMOTE_XS)
+        for kind, y in REMOTE_ROWS:
+            items += [Item(f"{kind} remote {i + 1}", _center(x, y)) for i, x in enumerate(REMOTE_XS)
                       if looks(_center(x - 0.032, y), _is_bright_blue)
                       and looks(_center(x - 0.032, y + 0.04), _is_bright_blue)]
     elif tab == "doodle":
@@ -426,7 +427,7 @@ def read_screen(width: int, height: int, get_pixel: PixelReader) -> BattleScreen
         close = PICKER_CLOSE if _has_close(width, height, get_pixel) else None
         return BattleScreen("picker", usable=usable, close=close, **_read_choices(width, height, get_pixel))
     if ui.is_visible(TRUNK_RED, width, height, get_pixel) and ui.is_visible(TRUNK_BLUE, width, height, get_pixel):
-        return _read_trunk(width, height, get_pixel)
+        return read_trunk(width, height, get_pixel)
     if ui.is_visible(TARGET, width, height, get_pixel) and _target_panel(width, height, get_pixel):
         targets = (_scan_arrows(width, height, get_pixel, COG_ARROW_ROW)
                    or _scan_arrows(width, height, get_pixel, TOON_ARROW_ROW))
@@ -517,22 +518,6 @@ def nearest_usable(usable, pos: tuple[int, int]) -> tuple[int, int] | None:
     return min(cells, key=lambda p: (abs(p[0] - r) * 10 + abs(p[1] - c), -p[1]))
 
 
-@dataclass(frozen=True)
-class PointerCommand:
-    kind: str  # "hover" (park the cursor), "click", or "scroll" (turn the wheel there)
-    point: ui.UIPoint
-    name: str
-    notches: int = 0  # scroll: positive is up
-    delay: float = 0.0  # click: seconds to wait after the previous command
-    # hover: the item's width and height (units of the window's shorter side), for
-    # the highlight frame drawn around it. None draws no frame.
-    size: tuple[float, float] | None = None
-    frame_at: ui.UIPoint | None = None  # hover: draw the frame here instead of around the point
-    color: tuple[int, int, int] | None = None  # hover: the frame's color (None: the usual gold)
-    pointer: bool = False  # hover: a pulsing pointer left of the item instead of a frame round it
-    to: ui.UIPoint | None = None  # drag: press at point, move here, let go
-
-
 @dataclass
 class BattleTiming:
     hold_seconds: float = 0.5
@@ -575,8 +560,7 @@ class BattleMapper:
                                       repeats=lambda action: action in DIRECTIONS
                                       or action in ("sos_scroll_up", "sos_scroll_down"))
 
-    @property
-    def buttons(self) -> set[str]:
+    def buttons(self, screen=None) -> set[str]:
         return self.bindings.buttons()
 
     def reset_buttons(self) -> None:
@@ -589,7 +573,7 @@ class BattleMapper:
         self._kind = None
 
     def update(self, buttons: frozenset[str], now: float, screen: BattleScreen) -> list[PointerCommand]:
-        _, fired = self._actions.update(buttons & self.buttons, now)
+        _, fired = self._actions.update(buttons & self.buttons(), now)
         if now < self._settle_until:
             # Right after a click the old screen may still show; wait for the next one.
             return []

@@ -5,6 +5,7 @@ from dataclasses import replace
 import pytest
 from test_makeatoon import names, press, read
 
+from ttcontroller import keyboard_draw as kd
 from ttcontroller import name_keyboard as nk
 from ttcontroller.makeatoon import MakeAToonMapper
 from ttcontroller.name_keyboard import CLEAR_PRESSES, NameKeyboard
@@ -195,11 +196,11 @@ def test_posted_capitals_go_as_characters():
 
 @pytest.mark.parametrize("unit", [1009, 534])
 def test_drawing(unit):
-    sheet = nk.find_sheet()
+    sheet = kd.find_sheet()
     if sheet is None:
         pytest.skip("no input_sprites/all_input.png")
     k = NameKeyboard(text="Ga")
     from ttcontroller.hint_draw import find_sheet as button_sheet
-    image = nk.KeyboardDrawer(sheet, button_sheet()).image(k, unit)
+    image = kd.KeyboardDrawer(sheet, button_sheet()).image(k, unit)
     assert image.shape == (round(nk.PANEL_SIZE[1] * unit), round(nk.PANEL_SIZE[0] * unit), 4)
     assert image[unit // 20, image.shape[1] // 2, 3] == 255  # solid

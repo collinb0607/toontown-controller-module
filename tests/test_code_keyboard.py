@@ -44,12 +44,12 @@ def test_typing_a_code_with_ls_switching_modes():
 def test_the_keyboard_keeps_the_page_buttons_to_itself():
     m = opened()
     # B clears, not closes the book; X isn't the page's; Start is blocked from the overworld.
-    assert "start" in m.buttons
+    assert "start" in m.buttons()
     out = press(m, "b", 2.0, options())
     assert typed(out) == ["\b" * CLEAR_PRESSES]
     assert [(c.kind, c.point) for c in out if c.kind != "type"] == [("hover", b.CODE_BOX)]
     assert out[-1].size == b.CODE_BOX_SIZE  # the gold frame round the box
-    assert not m.take_taps() and not m.showing_keyboard(options()) and "start" not in m.buttons
+    assert not m.take_taps() and not m.showing_keyboard(options()) and "start" not in m.buttons()
     # Closed: B closes the book again.
     press(m, "b", 3.0, options())
     assert m.take_taps() == ["stickerBook"]
@@ -121,16 +121,17 @@ def test_lb_on_the_first_page_does_nothing():
 
 
 def test_the_book_panel_fits_the_right_page():
+    from ttcontroller import keyboard_draw as kd
     from ttcontroller import name_keyboard as nk
     from ttcontroller.hint_draw import find_sheet
-    sheet = nk.find_sheet()
+    sheet = kd.find_sheet()
     if sheet is None:
         return
     x, y = b.CODE_PANEL_TOP.to_client(1920, 1009)
     w, h = (round(v * 1009) for v in b.CODE_PANEL_SIZE)
     assert x - w // 2 > 965 and x + w // 2 < 1404  # off the seam and the page tabs
     assert y > 321 and y + h < 507  # under the code box's frame, above "SpeedChat Color"
-    image = nk.KeyboardDrawer(sheet, find_sheet()).image(CodeKeyboard(), 1009, b.CODE_PANEL_SIZE)
+    image = kd.KeyboardDrawer(sheet, find_sheet()).image(CodeKeyboard(), 1009, b.CODE_PANEL_SIZE)
     assert image.shape[:2] == (h, w)
 
 
@@ -161,11 +162,11 @@ def test_start_stays_the_books_until_let_go():
     # book) while it's still held.
     m = opened()
     m.update(frozenset({"start"}), 2.0, options())
-    assert not m.typing and "start" in m.buttons
+    assert not m.typing and "start" in m.buttons()
     m.update(frozenset({"start"}), 2.5, options())
-    assert "start" in m.buttons
+    assert "start" in m.buttons()
     m.update(frozenset(), 3.0, options())
-    assert "start" not in m.buttons
+    assert "start" not in m.buttons()
 
 
 def test_the_b_hint_moves_onto_the_cards_red_x():

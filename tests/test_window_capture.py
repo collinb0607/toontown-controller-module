@@ -131,3 +131,21 @@ def test_overlay_windows_follow_the_capture_exclusion(monkeypatch):
     finally:
         window.close()
         overlay.set_capture_exclusion(True)
+
+
+def test_a_frame_nobody_asked_for_is_kept_once_the_copy_is_old():
+    # A read that gets no newer frame in time used to return the picture from before the
+    # window's last change; now that one is at most KEEP_FRESH old.
+    now = [0.0]
+    fake = FakeSession()
+    capture = WindowCapture(1, start=fake.start, clock=lambda: now[0])
+    fake.on_frame(picture(4, 4))
+    changed = picture(4, 4)
+    changed[0, 0, 0] = 42
+    now[0] = 0.01
+    fake.on_frame(changed)  # too soon after the copy: only noted
+    assert capture.image(wait=0)[0, 0, 0] == 0
+    capture._want = False  # (as if that read hadn't left a wait behind)
+    now[0] = window_capture.KEEP_FRESH + 0.01
+    fake.on_frame(changed)  # the copy is old: kept although nobody asked
+    assert capture.image(wait=0)[0, 0, 0] == 42

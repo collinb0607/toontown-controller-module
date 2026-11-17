@@ -20,6 +20,7 @@ import threading
 import traceback
 from pathlib import Path
 
+from . import instance
 from .app_icon import app_pixmap, use_app_icon
 from .config import CONFIG_DIR, CONFIG_FILE
 from .screen import grab
@@ -41,7 +42,6 @@ LOG_FILE = CONFIG_DIR / "ttcontroller.log"  # this session's log, for bug report
 # Where the window was when it closed, and whether the log was open, so it comes back the
 # same way (the user, Nov 9). Its own file: config.json is the user's settings.
 PLACE_FILE = CONFIG_DIR / "window.json"
-_MUTEX = "Local\\ToontownControllerModule"
 _LOG_LINES = 500  # kept in the window
 
 _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -63,7 +63,6 @@ _kernel32.WaitForSingleObject.argtypes = (ctypes.c_void_p, ctypes.c_uint32)
 _kernel32.CloseHandle.argtypes = (ctypes.c_void_p,)
 EVENT_MODIFY_STATE = 0x0002
 WAIT_OBJECT_0 = 0
-ERROR_ALREADY_EXISTS = 183
 CREATE_NO_WINDOW = 0x08000000
 
 

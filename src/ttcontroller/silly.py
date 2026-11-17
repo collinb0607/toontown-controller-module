@@ -18,7 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from . import ui
-from .battle import PointerCommand
+from .commands import PointerCommand
 
 PixelReader = Callable[[int, int], ui.RGB]
 
@@ -123,6 +123,9 @@ class SillyMapper:
     """With the card open: D-pad left opens the details, B closes the top card."""
 
     BUTTONS = frozenset({"b", "dpad_left"})
+
+    def buttons(self, screen=None) -> frozenset[str]:
+        return self.BUTTONS
 
     def __init__(self):
         self._held: frozenset[str] = frozenset()

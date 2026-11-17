@@ -35,7 +35,7 @@ from pathlib import Path
 
 from . import ui
 from .bindings import Bindings, ButtonActions
-from .battle import PointerCommand
+from .commands import PointerCommand
 from .ui import RGB
 
 PixelReader = Callable[[int, int], RGB]
@@ -307,8 +307,7 @@ class GardenMapper:
             self.toon = toon
             self.last_beans = load_last_beans(self.cache_path, toon)
 
-    @property
-    def hovering(self) -> bool:
+    def hovering(self, screen=None) -> bool:
         return self.bean is not None and self._beans_shown
 
     def reset_buttons(self) -> None:
