@@ -50,7 +50,10 @@ _BUTTONS = {
 _PILL_DXS = tuple(-0.08 + 0.02 * i for i in range(9))
 _PILL_DYS = (-0.012, 0.012)  # above and below its lettering
 _PILL_MIN = 12  # of 18
-_BOARD = tuple(_center(x, y) for x in (-0.25, -0.1, 0.1, 0.25) for y in (0.05, 0.15, 0.25))
+# The board's lower half: the balls start at the top and come down as the board is pushed
+# down, so higher probes were soon covered and the game stopped being read (the user, Nov 14,
+# golf_green_pushed_down).
+_BOARD = tuple(_center(x, y) for x in (-0.25, -0.1, 0.1, 0.25) for y in (0.15, 0.22, 0.29))
 _BOARD_MIN = 10  # of 12 (a ball can cover some)
 
 
@@ -60,7 +63,8 @@ def _is_pill_yellow(c: RGB) -> bool:
 
 
 def _is_board_gray(c: RGB) -> bool:
-    return max(c) - min(c) < 25 and 40 < c[0] < 200
+    # The light gray board or a dark gray hole (as dark as 36 in shade).
+    return max(c) - min(c) < 25 and 25 < c[0] < 200
 
 
 @dataclass(frozen=True)

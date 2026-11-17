@@ -15,6 +15,11 @@ def test_reads_the_golf_green():
     assert abs(x - 996) <= 3 and abs(y - 594) <= 3
 
 
+def test_reads_the_golf_green_with_the_balls_pushed_down():
+    # The balls cover the board's upper rows; it stopped being read (the user, Nov 14).
+    assert replay("golf_green_pushed_down_1920x1009", read_golf_green).is_open
+
+
 @pytest.mark.parametrize("name", ["test_1920x1009", "mailbox_popup_1920x1009", "gardening_hud_1_1920x1009",
                                   "battle_gags_1920x1009", "shop_1920x1009"])
 def test_other_screens_arent_the_golf_green(name):
