@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "toontown-controller-module"
-version = "0.9.0b1"  # also in src/ttcontroller/__init__.py
+version = "0.9.0b2"  # also in src/ttcontroller/__init__.py
 description = "Controller support for Toontown Rewritten"
 readme = "README.md"
 requires-python = ">=3.12"

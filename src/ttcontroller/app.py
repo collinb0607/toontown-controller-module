@@ -6,6 +6,7 @@ decide which screen owns the controller (routing.route), run that screen's mappe
 overworld's, and draw the overlay (the highlight frame, the hints, the name keyboard, the
 golf aim)."""
 
+import ctypes
 import sys
 import threading
 import time
@@ -224,8 +225,14 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
     highlighter = None if dry_run else Highlighter()
     if highlighter is not None and not highlighter.excluded and not window_capture.enabled():
         # A frame the module's own screen reading could see would throw it off.
-        log("Note: this version of Windows can't keep the highlight frame out of screen captures, "
-            "so it's turned off (it needs Windows 10 version 2004 or later).")
+        build = sys.getwindowsversion().build
+        why = ("the overlay window couldn't be made" if not highlighter.hwnd
+               else "Windows refused to hide the overlay from screen captures")
+        code = f", error {highlighter.error}: {ctypes.FormatError(highlighter.error).strip()}" \
+            if highlighter.error else ""
+        log(f"Note: no hints, highlight frame or name keyboard: {why} (Windows build {build}{code}). "
+            "The module reads the screen on Windows 10, so anything it can't hide would throw it off. "
+            "It needs Windows 10 version 2004 (build 19041) or later; on a later build, please report this.")
         highlighter.close()
         highlighter = None
     # The golf green's aim line and crosshair, in a window of their own.

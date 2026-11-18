@@ -243,9 +243,18 @@ class Highlighter:
         self.hwnd = _user32.CreateWindowExW(
             WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
             _CLASS, None, WS_POPUP, 0, 0, 1, 1, None, None, _kernel32.GetModuleHandleW(None), None)
+        # Why the window couldn't be made or hidden from capture: Windows' error code, or None.
+        self.error: int | None = None if self.hwnd else ctypes.get_last_error()
         # Whether screen captures (the module's own screen copy included) leave the frame out.
         self.excluded = False
-        self.set_excluded(_exclude if exclude_from_capture is None else exclude_from_capture)
+        exclude = _exclude if exclude_from_capture is None else exclude_from_capture
+        self.set_excluded(exclude)
+        if exclude and not self.excluded and self.hwnd:
+            # Windows 10 22H2 refused it on a player's PC (Nov 18, 2026). A guess: a layered
+            # window that has never been drawn has no picture to hide yet. Draw one see-through
+            # pixel (the window stays hidden) and ask again.
+            self._blit(0, 0, np.zeros((1, 1, 4), np.uint8))
+            self.set_excluded(exclude)
         _windows.add(self)
         self._shown: tuple | None = None  # (rect, unit, color) last drawn
         self._pointers: dict[int, np.ndarray] = {}  # pointer images by length
@@ -323,8 +332,11 @@ class Highlighter:
             return
         if _user32.SetWindowDisplayAffinity(self.hwnd, WDA_EXCLUDEFROMCAPTURE if exclude else WDA_NONE):
             self.excluded = exclude
-        elif not exclude:
-            self.excluded = False
+            self.error = None
+        else:
+            self.error = ctypes.get_last_error()
+            if not exclude:
+                self.excluded = False
 
     def close(self) -> None:
         if self.hwnd:

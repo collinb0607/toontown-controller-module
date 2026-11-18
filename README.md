@@ -8,7 +8,7 @@ Toontown Rewritten's own controller support is experimental: it covers movement 
 
 ## Download
 
-Get **Toontown-Controller-0.9-beta-Windows.zip** from the [Releases page](https://github.com/collinb0607/toontown-controller-module/releases), unzip it, open the **ToontownController** folder and run **ToontownController.exe**. Nothing else to install (no Python). Keep the folder together: the exe needs the `_internal` folder beside it.
+Get **Toontown-Controller-0.9-beta-2-Windows.zip** from the [Releases page](https://github.com/collinb0607/toontown-controller-module/releases), unzip it, open the **ToontownController** folder and run **ToontownController.exe**. Nothing else to install (no Python). Keep the folder together: the exe needs the `_internal` folder beside it.
 
 Windows may show "Windows protected your PC" because the app isn't signed: click **More info**, then **Run anyway**. Then set up TTR as under [Requirements](#requirements) (windowed, TTR's own controller support off).
 
@@ -172,7 +172,7 @@ The controls are written with Xbox names. A PlayStation or Steam controller uses
 
 ## Requirements
 
-- Windows 10 or 11
+- Windows 11, or Windows 10 version 2004 or later (the hints and the name keyboard need it)
 - A controller: Xbox, PlayStation (DualShock 4, DualSense), Switch Pro (or a pair of Joy-Cons) or Steam Controller, or anything Windows sees as one of them (see [Other controllers](#other-controllers))
 - Toontown Rewritten running in **windowed** mode
 - TTR's built-in controller support turned **off** (Options > Controls), or each button will act twice
