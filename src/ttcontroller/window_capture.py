@@ -11,6 +11,11 @@ One capture session per TTR window, started when it's first read and stopped onc
 hasn't been read for a while. Frames arrive about 50 times a second; only the ones asked
 for are copied. If a session can't start, capture is off for the rest of the run and the
 module goes back to the screen copy (on_failure tells the overlay to hide again).
+
+Windows 10 too since Nov 18, 2026: there Windows can't hide a see-through overlay window from
+screen captures (SetWindowDisplayAffinity fails with error 8 on 22H2), so reading the screen
+meant no hints at all. Windows 10 can't turn off the capture's yellow border around the TTR
+window (only Windows 11 can), so it shows there while the module runs.
 """
 
 import ctypes
@@ -32,6 +37,9 @@ IDLE_STOP = 30.0  # a window not read for this long has its session stopped
 # most this much older than the window's last one, not the one from before its last change.
 KEEP_FRESH = 0.1
 BORDERLESS_BUILD = 22000  # Windows 11: a capture without the yellow border
+# Windows 10 version 2004: leaving the cursor out of the capture (Windows 10 has had window
+# capture since 1903, but the library refuses cursor_capture=False before 2004).
+MIN_BUILD = 19041
 
 _dwmapi = ctypes.WinDLL("dwmapi")
 _dwmapi.DwmGetWindowAttribute.argtypes = (wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD)
@@ -65,7 +73,9 @@ def crop_client(image: np.ndarray, bounds, client) -> Frame | None:
 def _start_session(hwnd, on_frame: Callable, on_closed: Callable):
     """Start Windows Graphics Capture on one window; returns its control (with stop())."""
     from windows_capture import WindowsCapture
-    capture = WindowsCapture(cursor_capture=False, draw_border=False, window_hwnd=hwnd)
+    # Windows 10 can't turn the border off, and the library refuses to start if asked to.
+    capture = WindowsCapture(cursor_capture=False, draw_border=False if borderless() else None,
+                             window_hwnd=hwnd)
     capture.frame_handler = lambda frame, control: on_frame(frame.frame_buffer)
     capture.closed_handler = on_closed
     return capture.start_free_threaded()
@@ -130,15 +140,22 @@ _failure_handlers: list[Callable[[str], None]] = []
 
 
 def supported() -> bool:
-    """Whether this Windows can capture a window without a border, with the package installed."""
+    """Whether this Windows can capture a window (Windows 10 version 2004 or later), with the
+    package installed."""
     global _supported
     if _supported is None:
         try:
             import windows_capture  # noqa: F401
-            _supported = sys.getwindowsversion().build >= BORDERLESS_BUILD
+            _supported = sys.getwindowsversion().build >= MIN_BUILD
         except Exception:
             _supported = False
     return _supported
+
+
+def borderless() -> bool:
+    """Whether the capture can leave out the yellow border Windows draws around the window
+    (Windows 11)."""
+    return sys.getwindowsversion().build >= BORDERLESS_BUILD
 
 
 def enabled() -> bool:

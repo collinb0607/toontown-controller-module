@@ -149,3 +149,51 @@ def test_a_frame_nobody_asked_for_is_kept_once_the_copy_is_old():
     now[0] = window_capture.KEEP_FRESH + 0.01
     fake.on_frame(changed)  # the copy is old: kept although nobody asked
     assert capture.image(wait=0)[0, 0, 0] == 42
+
+
+def test_windows_10_captures_with_its_border(monkeypatch):
+    # Windows 10 can't turn the border off, and the library refuses to start if asked to.
+    import sys
+    import types
+    made = []
+
+    class FakeCapture:
+        def __init__(self, **kwargs):
+            made.append(kwargs)
+
+        def start_free_threaded(self):
+            return "control"
+    monkeypatch.setitem(sys.modules, "windows_capture", types.SimpleNamespace(WindowsCapture=FakeCapture))
+    for build, border in ((19045, None), (22631, False)):
+        monkeypatch.setattr(sys, "getwindowsversion", lambda b=build: types.SimpleNamespace(build=b))
+        assert window_capture._start_session(5, lambda f: None, lambda: None) == "control"
+        assert made[-1]["draw_border"] is border and made[-1]["cursor_capture"] is False
+        assert window_capture.borderless() == (border is False)
+
+
+def test_windows_10_version_2004_or_later_is_supported(monkeypatch):
+    import sys
+    import types
+    monkeypatch.setitem(sys.modules, "windows_capture", types.SimpleNamespace())
+    for build, ok in ((18363, False), (19041, True), (19045, True), (22631, True)):
+        monkeypatch.setattr(window_capture, "_supported", None)
+        monkeypatch.setattr(sys, "getwindowsversion", lambda b=build: types.SimpleNamespace(build=b))
+        assert window_capture.supported() == ok
+
+
+def test_overlay_turns_off_when_it_cant_hide_from_the_screen_copy(monkeypatch):
+    monkeypatch.setattr(overlay, "_exclude", False)
+    window = overlay.Highlighter()
+    try:
+        window.show_image(0, 0, np.zeros((2, 2, 4), np.uint8), "key")
+        assert window.visible
+        # Windows 10 22H2: a see-through window can't be hidden from capture (error 8).
+        monkeypatch.setattr(overlay._user32, "SetWindowDisplayAffinity", lambda hwnd, value: 0)
+        assert not overlay.set_capture_exclusion(True)
+        window.show_image(0, 0, np.zeros((2, 2, 4), np.uint8), "key")
+        window.show((0, 0, 10, 10), 100)
+        assert not window.visible  # stays hidden, so the screen copy never sees it
+    finally:
+        monkeypatch.undo()
+        window.close()
+        overlay.set_capture_exclusion(True)

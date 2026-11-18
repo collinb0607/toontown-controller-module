@@ -225,14 +225,20 @@ def stack(windows: list, above=None) -> None:
 # (window_capture) they don't, so OBS, Discord and stream viewers see them (Nov 11, 2026).
 _exclude = True
 _windows: "weakref.WeakSet[Highlighter]" = weakref.WeakSet()
+# Every overlay window stays hidden: they had to hide from screen capture and Windows refused
+# (Windows 10 22H2 refuses see-through windows), so the module's screen copy would see them.
+_off = False
 
 
-def set_capture_exclusion(exclude: bool) -> None:
-    """Hide every overlay window, now and later, from screen capture, or show it."""
-    global _exclude
+def set_capture_exclusion(exclude: bool) -> bool:
+    """Hide every overlay window, now and later, from screen capture, or show it. Returns
+    False if a window had to hide and couldn't: then every overlay window stays hidden."""
+    global _exclude, _off
     _exclude = exclude
     for window in list(_windows):
         window.set_excluded(exclude)
+    _off = exclude and any(w.hwnd and not w.excluded for w in list(_windows))
+    return not _off
 
 
 class Highlighter:
@@ -247,14 +253,7 @@ class Highlighter:
         self.error: int | None = None if self.hwnd else ctypes.get_last_error()
         # Whether screen captures (the module's own screen copy included) leave the frame out.
         self.excluded = False
-        exclude = _exclude if exclude_from_capture is None else exclude_from_capture
-        self.set_excluded(exclude)
-        if exclude and not self.excluded and self.hwnd:
-            # Windows 10 22H2 refused it on a player's PC (Nov 18, 2026). A guess: a layered
-            # window that has never been drawn has no picture to hide yet. Draw one see-through
-            # pixel (the window stays hidden) and ask again.
-            self._blit(0, 0, np.zeros((1, 1, 4), np.uint8))
-            self.set_excluded(exclude)
+        self.set_excluded(_exclude if exclude_from_capture is None else exclude_from_capture)
         _windows.add(self)
         self._shown: tuple | None = None  # (rect, unit, color) last drawn
         self._pointers: dict[int, np.ndarray] = {}  # pointer images by length
@@ -282,6 +281,9 @@ class Highlighter:
     def show(self, rect: tuple[int, int, int, int], unit: int, color: tuple[int, int, int] = COLOR) -> None:
         """rect: the item's left, top, width and height on screen. unit: the game window's
         shorter side, which the frame's thickness scales with. color: the frame's."""
+        if _off:
+            self.hide()
+            return
         if (rect, unit, color) != self._shown:
             self._shown = (rect, unit, color)
             self._draw(rect, unit, color)
@@ -294,6 +296,9 @@ class Highlighter:
         """Show a premultiplied BGRA image with its top left at (left, top) on screen
         (the golf green's aim line and crosshair). key: redrawn only when it changes.
         raise_it=False leaves the z-order to the caller (`stack`, for the hint windows)."""
+        if _off:
+            self.hide()
+            return
         if key != self._shown:
             self._shown = key
             self._blit(left, top, image)

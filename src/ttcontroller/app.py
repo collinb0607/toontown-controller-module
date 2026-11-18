@@ -214,11 +214,21 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
     # working, the module reads the screen again and the overlay hides.
     if window_capture.supported():
         overlay.set_capture_exclusion(False)
-        window_capture.on_failure(lambda reason: (
-            overlay.set_capture_exclusion(True),
-            log(f"Note: TTR's window can't be captured ({reason}), so the screen is read instead "
-                "and the hints won't show in recordings or streams.")))
-        log("Reading TTR's own window picture: the hints show in recordings and streams.")
+
+        def capture_failed(reason: str) -> None:
+            if overlay.set_capture_exclusion(True):
+                log(f"Note: TTR's window can't be captured ({reason}), so the screen is read instead "
+                    "and the hints won't show in recordings or streams.")
+            else:
+                log(f"Note: TTR's window can't be captured ({reason}), so the screen is read instead. "
+                    "This Windows can't hide the hints, highlight frame and name keyboard from that "
+                    "screen reading, so they're turned off.")
+        window_capture.on_failure(capture_failed)
+        if window_capture.borderless():
+            log("Reading TTR's own window picture: the hints show in recordings and streams.")
+        else:
+            log("Reading TTR's own window picture, so the hints can show. Windows 10 draws a yellow "
+                "border around TTR while it's read (only Windows 11 can leave it out).")
     # The screens are read on a thread of their own (pipeline.py).
     read_worker = ReadWorker(Guard(log, debug), lambda hwnd, background: TTRView(hwnd, background).snapshot())
     generation = 0  # goes up whenever the screens start over: a read asked for before is dropped
@@ -231,8 +241,8 @@ def run(ttr_dir: Path | None = None, dry_run: bool = False, debug: bool = False,
         code = f", error {highlighter.error}: {ctypes.FormatError(highlighter.error).strip()}" \
             if highlighter.error else ""
         log(f"Note: no hints, highlight frame or name keyboard: {why} (Windows build {build}{code}). "
-            "The module reads the screen on Windows 10, so anything it can't hide would throw it off. "
-            "It needs Windows 10 version 2004 (build 19041) or later; on a later build, please report this.")
+            "The module reads the screen here, so anything it can't hide would throw it off. "
+            "It needs Windows 10 version 2004 (build 19041) or later.")
         highlighter.close()
         highlighter = None
     # The golf green's aim line and crosshair, in a window of their own.

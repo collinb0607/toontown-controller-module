@@ -1,6 +1,6 @@
 """Controller support for Toontown Rewritten."""
 
-__version__ = "0.9.0b2"  # also in pyproject.toml
+__version__ = "0.9.0b3"  # also in pyproject.toml
 
 
 def display_version(v: str = __version__) -> str:

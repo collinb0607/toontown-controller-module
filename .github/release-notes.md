@@ -3,7 +3,7 @@ are new and haven't been play-tested much yet, so expect the odd button that doe
 screen that isn't recognised. Feedback is very welcome.
 
 ### Install
-1. Download **Toontown-Controller-0.9-beta-2-Windows.zip** below and unzip it (right-click > Extract All).
+1. Download **Toontown-Controller-0.9-beta-3-Windows.zip** below and unzip it (right-click > Extract All).
 2. Open the **ToontownController** folder and run **ToontownController.exe**. Keep the whole folder
    together: the exe needs the `_internal` folder beside it.
 3. Windows may say "Windows protected your PC" because the app isn't signed: click **More info**,
@@ -11,10 +11,11 @@ screen that isn't recognised. Feedback is very welcome.
 
 No Python or anything else to install. Windows 11, or Windows 10 version 2004 or later.
 
-### New in beta 2
-- Windows 10: the hints, highlight frame and name keyboard could be turned off at start-up
-  even on a new enough Windows. The module now tries again, and if it still can't, the log
-  says why.
+### New in beta 3
+- Windows 10: the hints, highlight frame and name keyboard now show. Windows 10 couldn't hide
+  them from the module's screen reading, so they were turned off; the module now reads TTR's
+  own window picture there too, as on Windows 11. Windows 10 draws a thin yellow border around
+  the TTR window while the module runs (only Windows 11 lets the module leave it out).
 
 ### In Toontown Rewritten
 - Play in **windowed** mode.

@@ -8,7 +8,7 @@ Toontown Rewritten's own controller support is experimental: it covers movement 
 
 ## Download
 
-Get **Toontown-Controller-0.9-beta-2-Windows.zip** from the [Releases page](https://github.com/collinb0607/toontown-controller-module/releases), unzip it, open the **ToontownController** folder and run **ToontownController.exe**. Nothing else to install (no Python). Keep the folder together: the exe needs the `_internal` folder beside it.
+Get **Toontown-Controller-0.9-beta-3-Windows.zip** from the [Releases page](https://github.com/collinb0607/toontown-controller-module/releases), unzip it, open the **ToontownController** folder and run **ToontownController.exe**. Nothing else to install (no Python). Keep the folder together: the exe needs the `_internal` folder beside it.
 
 Windows may show "Windows protected your PC" because the app isn't signed: click **More info**, then **Run anyway**. Then set up TTR as under [Requirements](#requirements) (windowed, TTR's own controller support off).
 
@@ -28,7 +28,8 @@ Working now:
 - **Trunk:** SOS cards (scrolling the list as you go, and filtering them from the dropdown or with LS), pink slips, remotes and doodle tricks, all with the D-pad or stick.
 - **Remapping:** a config file lets you rebind any button.
 - **Hints:** while you use the controller, small button pictures of your controller sit on TTR's buttons to show which controller button presses them, and popup buttons (OK, Cancel, Yes, No...) are covered by theirs. A few screens get a small bar for things that have no button of their own, and pressing a button gives its picture a little bounce. If you remap a button in the config, its hint shows your button. Turn them off with `"hints": false`. The pictures match the controller plugged in (Xbox, PlayStation, Switch or Steam), or pick one under **Button pictures** in Settings. They come from the sheets in `input_sprites/`, published with the code.
-- **Recording and streaming:** on Windows 11, the hints, the highlight frame and the name keyboard show in OBS, Discord screen share and other recordings, so viewers see what you see. (The module reads TTR's own window picture, so it never sees them itself. On Windows 10 they're hidden from recordings, because there the module reads the screen.)
+- **Recording and streaming:** the hints, the highlight frame and the name keyboard show in OBS, Discord screen share and other recordings, so viewers see what you see. (The module reads TTR's own window picture, so it never sees them itself.)
+- **Windows 10:** a thin yellow border shows around the TTR window while the module runs. That's Windows showing that the module reads TTR's window picture; only Windows 11 lets the module leave it out.
 - **Highlight frame:** where it's hard to tell what's hovered with the cursor hidden (battle gags, the trunk and the which cog/toon arrows, the gag shop, and the shticker book's Gags and Trunk tabs), a glowing frame is drawn around it, like a console game.
 - **Hidden cursor:** the cursor disappears while you use the controller and comes back as soon as you move the mouse. When nothing needs hovering it waits on the window's title bar, out of the way. TTR's custom cursor can't be hidden and has no switch in TTR's Options, so set `"hide_cursor": true` in the config and the module turns it off in TTR's settings.json for you (it takes effect the next time TTR starts).
 - **Switching windows:** with several TTR windows open (not in two-toon mode), hold LB + RB and press D-pad left or right to bring the TTR window on that side to the front, in screen order, wrapping around. Works anywhere, battles included; it has no hint.
